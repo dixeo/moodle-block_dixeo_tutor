@@ -34,22 +34,23 @@ use local_dixeo\external\service_factory;
 
 /**
  * Manages per-user, per-course queued context for proactive tutor messages.
+ *
+ * Proactive lines are always queued in the DB. They are sent to the API only when:
+ * - the tutor UI loads on a page where the block would render (client flush), or
+ * - an event fires during a request where {@see \block_dixeo_tutor::is_tutor_available_on_page()} is true.
+ *
+ * Excluded pages (e.g. quiz) never trigger an immediate server flush; the queue is drained on the
+ * next course page visit where the tutor is available.
  */
 class tutor_proactive_context_service {
     /** @var string Database table owned by this block. */
     public const TABLE = 'block_dixeo_tutor_pending';
-
-    /** @var int Seconds without course activity before on-course session expires. */
-    private const SESSION_TTL = 1800;
 
     /** @var int Minimum gap between return-visit proactive lines. */
     private const RETURN_VISIT_GAP = 86400;
 
     /** @var int Maximum message length accepted by tutor send_message. */
     private const MAX_MESSAGE_LENGTH = 2000;
-
-    /** @var string Session key for users currently browsing a course. */
-    private const SESSION_KEY = 'block_dixeo_tutor_on_course';
 
     /** @var string User preference prefix: last time a course-view proactive line was queued (per course). */
     public const PREF_LAST_PROACTIVE_PREFIX = 'block_dixeo_tutor_lastproactive_';
@@ -96,9 +97,7 @@ class tutor_proactive_context_service {
 
         $this->save_record($record);
 
-        $this->mark_user_on_course($courseid);
-
-        // Always defer flush to the tutor UI so the client receives a job id and can poll.
+        // Defer flush to the tutor UI (init on pages where the block renders).
         return null;
     }
 
@@ -116,13 +115,12 @@ class tutor_proactive_context_service {
             return null;
         }
 
-        $wasoncourse = $this->is_user_on_course($courseid);
         $record = $this->get_or_create_record($userid, $courseid, time());
         $this->append_line($record, $this->proactive_string('proactive_course_completed', $userid));
         $this->save_record($record);
 
-        if ($wasoncourse) {
-            return $this->flush($userid, $courseid);
+        if ($this->should_flush_immediately($userid, $courseid)) {
+            return $this->flush($userid, $courseid, $this->current_page_url());
         }
 
         return null;
@@ -180,13 +178,12 @@ class tutor_proactive_context_service {
             'maxgrade' => format_float($maxgrade, 0),
         ]);
 
-        $wasoncourse = $this->is_user_on_course($courseid);
         $record = $this->get_or_create_record($userid, $courseid, time());
         $this->append_line($record, $line);
         $this->save_record($record);
 
-        if ($wasoncourse) {
-            return $this->flush($userid, $courseid);
+        if ($this->should_flush_immediately($userid, $courseid)) {
+            return $this->flush($userid, $courseid, $this->current_page_url());
         }
 
         return null;
@@ -198,19 +195,13 @@ class tutor_proactive_context_service {
      * @param int $userid The user id.
      * @param int $courseid The course id.
      * @param string $pageurl Optional page URL for context.
-     * @param bool $markpresence Whether to mark the user as on-course.
      * @return operation_result|null Null when queue empty or user cannot use tutor.
      */
     public function flush(
         int $userid,
         int $courseid,
-        string $pageurl = '',
-        bool $markpresence = false
+        string $pageurl = ''
     ): ?operation_result {
-        if ($markpresence) {
-            $this->mark_user_on_course($courseid);
-        }
-
         if (!$this->can_use_tutor($userid, $courseid)) {
             return null;
         }
@@ -270,32 +261,47 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Mark the current user as actively on a course page.
+     * Whether queued proactive context may be sent during this HTTP request.
+     * True only when the user is viewing a course page where the tutor block would render
+     * (not e.g. an excluded quiz attempt page).
      *
-     * @param int $courseid
-     * @return void
-     */
-    public function mark_user_on_course(int $courseid): void {
-        global $SESSION;
-        if (!isset($SESSION->{self::SESSION_KEY})) {
-            $SESSION->{self::SESSION_KEY} = [];
-        }
-        $SESSION->{self::SESSION_KEY}[$courseid] = time();
-    }
-
-    /**
-     * Whether the user was already on this course recently (before current event).
-     *
+     * @param int $userid
      * @param int $courseid
      * @return bool
      */
-    public function is_user_on_course(int $courseid): bool {
-        global $SESSION;
-        if (empty($SESSION->{self::SESSION_KEY}[$courseid])) {
+    public function should_flush_immediately(int $userid, int $courseid): bool {
+        global $PAGE;
+
+        if (CLI_SCRIPT || during_initial_install()) {
             return false;
         }
-        $last = (int) $SESSION->{self::SESSION_KEY}[$courseid];
-        return (time() - $last) < self::SESSION_TTL;
+
+        if (empty($PAGE) || !($PAGE instanceof \moodle_page)) {
+            return false;
+        }
+
+        if ((int) $PAGE->course->id !== $courseid) {
+            return false;
+        }
+
+        if (!block_load_class('dixeo_tutor')) {
+            return false;
+        }
+
+        return \block_dixeo_tutor::is_tutor_available_on_page($PAGE, $userid);
+    }
+
+    /**
+     * Current page URL for tutor API context, when available.
+     *
+     * @return string
+     */
+    private function current_page_url(): string {
+        global $PAGE;
+        if (empty($PAGE->url)) {
+            return '';
+        }
+        return $PAGE->url->out(false);
     }
 
     /**
