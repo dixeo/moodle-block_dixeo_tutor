@@ -85,6 +85,43 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
+     * Whether the tutor UI is available on this page for the given user (same rules as {@see get_content()}).
+     * Used to decide if queued proactive context may be flushed during the current request.
+     * When false, messages stay queued until the tutor AMD module loads on a qualifying page.
+     *
+     * @param \moodle_page $page Page being rendered (typically global $PAGE).
+     * @param int $userid User who will receive the proactive message.
+     * @return bool
+     */
+    public static function is_tutor_available_on_page(\moodle_page $page, int $userid): bool {
+        $courseid = (int) ($page->course->id ?? 0);
+        if ($courseid <= SITEID || $userid <= 0) {
+            return false;
+        }
+
+        try {
+            $context = \context_course::instance($courseid);
+        } catch (\Exception $e) {
+            return false;
+        }
+
+        if (!has_capability('block/dixeo_tutor:talktotutor', $context, $userid)) {
+            return false;
+        }
+
+        if (self::is_current_page_excluded($page)) {
+            return false;
+        }
+
+        if ($page->user_is_editing()) {
+            return false;
+        }
+
+        $page->blocks->load_blocks();
+        return $page->blocks->is_block_present('dixeo_tutor');
+    }
+
+    /**
      * Initialize the block with its title and basic settings.
      *
      * @return void

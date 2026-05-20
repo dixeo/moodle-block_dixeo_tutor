@@ -42,6 +42,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
     public function setUp(): void {
         parent::setUp();
         $this->resetAfterTest(true);
+        block_load_class('dixeo_tutor');
         $this->service = new tutor_proactive_context_service();
         service_factory::reset();
     }
@@ -175,6 +176,78 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->assertSame('', trim((string) $record->message));
     }
 
+    public function test_should_flush_false_on_excluded_quiz_page(): void {
+        global $PAGE;
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+
+        $this->setUser($user);
+        $context = \context_module::instance($quiz->cmid);
+        $PAGE->set_url(new \moodle_url('/mod/quiz/view.php', ['id' => $quiz->cmid]));
+        $PAGE->set_course($course);
+        $PAGE->set_context($context);
+        $PAGE->set_pagetype('mod-quiz-view');
+        $PAGE->blocks->load_blocks();
+
+        $this->assertFalse($this->service->should_flush_immediately((int) $user->id, (int) $course->id));
+        $this->assertFalse(\block_dixeo_tutor::is_tutor_available_on_page($PAGE, (int) $user->id));
+    }
+
+    public function test_quiz_graded_queues_without_flush_on_excluded_page(): void {
+        global $CFG, $PAGE;
+
+        require_once($CFG->dirroot . '/mod/quiz/lib.php');
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+
+        $gradecategory = \grade_category::fetch_course_category($course->id);
+        $gradeitem = new \grade_item([
+            'courseid' => $course->id,
+            'categoryid' => $gradecategory->id,
+            'itemname' => 'Quiz 1',
+            'itemtype' => 'mod',
+            'itemmodule' => 'quiz',
+            'iteminstance' => $quiz->id,
+            'gradetype' => GRADE_TYPE_VALUE,
+            'grademax' => 100,
+        ], false);
+        $gradeitem->insert();
+
+        $grade = new \grade_grade([
+            'itemid' => $gradeitem->id,
+            'userid' => $user->id,
+            'rawgrade' => 80,
+            'finalgrade' => 80,
+        ], false);
+        $grade->insert();
+
+        $this->setUser($user);
+        $context = \context_module::instance($quiz->cmid);
+        $PAGE->set_url(new \moodle_url('/mod/quiz/view.php', ['id' => $quiz->cmid]));
+        $PAGE->set_course($course);
+        $PAGE->set_context($context);
+        $PAGE->set_pagetype('mod-quiz-view');
+        $PAGE->blocks->load_blocks();
+
+        $mock = $this->getMockBuilder(tutor_service::class)
+            ->onlyMethods(['submit_message'])
+            ->getMock();
+        $mock->expects($this->never())->method('submit_message');
+        service_factory::set_test_tutor_service($mock);
+
+        $event = \core\event\user_graded::create_from_grade($grade);
+        $this->service->handle_user_graded($event);
+
+        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
+        $this->assertNotNull($record);
+        $this->assertStringContainsString('Quiz 1', $record->message);
+        $this->assertStringContainsString('80', $record->message);
+    }
+
     public function test_user_graded_ignores_assign_module(): void {
         global $CFG;
         require_once($CFG->dirroot . '/mod/assign/lib.php');
@@ -183,7 +256,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
         $assign = $this->getDataGenerator()->create_module('assign', ['course' => $course->id]);
 
-        $gradecategory = grade_category::fetch_course_category($course->id);
+        $gradecategory = \grade_category::fetch_course_category($course->id);
         $gradeitem = new \grade_item([
             'courseid' => $course->id,
             'categoryid' => $gradecategory->id,
