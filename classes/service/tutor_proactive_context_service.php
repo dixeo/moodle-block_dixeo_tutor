@@ -55,6 +55,11 @@ class tutor_proactive_context_service {
     /** @var string User preference prefix: last time a course-view proactive line was queued (per course). */
     public const PREF_LAST_PROACTIVE_PREFIX = 'block_dixeo_tutor_lastproactive_';
 
+    /**
+     * Wrapper tag for proactive lines sent to the tutor API (system context, not user chat).
+     */
+    public const PROACTIVE_CONTEXT_TAG = 'proactive-context';
+
     /** @var array<int, bool> Grade record ids processed in this request (debounce). */
     private static array $processedgrades = [];
 
@@ -216,9 +221,7 @@ class tutor_proactive_context_service {
             return null;
         }
 
-        if (strlen($message) > self::MAX_MESSAGE_LENGTH) {
-            $message = core_text::substr($message, 0, self::MAX_MESSAGE_LENGTH);
-        }
+        $message = $this->prepare_message_for_submit($message);
 
         try {
             $result = service_factory::get_tutor_service()->submit_message(
@@ -392,6 +395,23 @@ class tutor_proactive_context_service {
      */
     private function mark_proactive_course_view(int $userid, int $courseid, int $timestamp): void {
         set_user_preference(self::PREF_LAST_PROACTIVE_PREFIX . $courseid, $timestamp, $userid);
+    }
+
+    /**
+     * Truncate queued lines and wrap the full payload for the tutor API.
+     *
+     * @param string $message Raw concatenated proactive lines from the queue.
+     * @return string
+     */
+    private function prepare_message_for_submit(string $message): string {
+        $wrapperopen = '<' . self::PROACTIVE_CONTEXT_TAG . ' source="system">' . "\n";
+        $wrapperclose = "\n" . '</' . self::PROACTIVE_CONTEXT_TAG . '>';
+        $maxinner = self::MAX_MESSAGE_LENGTH - strlen($wrapperopen) - strlen($wrapperclose);
+        if ($maxinner > 0 && strlen($message) > $maxinner) {
+            $message = core_text::substr($message, 0, $maxinner);
+        }
+
+        return $wrapperopen . $message . $wrapperclose;
     }
 
     /**

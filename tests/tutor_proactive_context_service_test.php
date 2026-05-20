@@ -108,6 +108,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertNotNull($record);
+        $this->assertStringNotContainsString('<proactive-context', $record->message);
         $this->assertStringContainsString($user->firstname, $record->message);
         $this->assertStringContainsString('first time opening this course', $record->message);
     }
@@ -163,9 +164,12 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $mock = $this->getMockBuilder(tutor_service::class)
             ->onlyMethods(['submit_message'])
             ->getMock();
+        $expectedpayload = '<proactive-context source="system">' . "\n"
+            . 'Line one' . "\n"
+            . '</proactive-context>';
         $mock->expects($this->once())
             ->method('submit_message')
-            ->with((int) $course->id, (int) $user->id, 'Line one', '')
+            ->with((int) $course->id, (int) $user->id, $expectedpayload, '')
             ->willReturn(operation_result::pending('test-job-id', 'pending', 0));
         service_factory::set_test_tutor_service($mock);
 
@@ -244,6 +248,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertNotNull($record);
+        $this->assertStringNotContainsString('<proactive-context', $record->message);
         $this->assertStringContainsString('Quiz 1', $record->message);
         $this->assertStringContainsString('80', $record->message);
     }
