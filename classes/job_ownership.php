@@ -76,10 +76,24 @@ class job_ownership {
             return;
         }
 
-        self::ensure_session_structure();
+        // Copy + replace root key so Moodle session handlers detect a dirty write
+        // (in-place nested mutation can stay in-request-only and fail the next AJAX poll).
+        $registry = [];
+        if (isset($SESSION->{self::SESSION_KEY}) && is_array($SESSION->{self::SESSION_KEY})) {
+            $registry = $SESSION->{self::SESSION_KEY};
+        }
+        $SESSION->{self::SESSION_KEY} = $registry;
         self::prune_expired();
 
-        $SESSION->{self::SESSION_KEY}[$userid][$courseid][$jobid] = time() + self::TTL_SECONDS;
+        $registry = $SESSION->{self::SESSION_KEY};
+        if (!isset($registry[$userid]) || !is_array($registry[$userid])) {
+            $registry[$userid] = [];
+        }
+        if (!isset($registry[$userid][$courseid]) || !is_array($registry[$userid][$courseid])) {
+            $registry[$userid][$courseid] = [];
+        }
+        $registry[$userid][$courseid][$jobid] = time() + self::TTL_SECONDS;
+        $SESSION->{self::SESSION_KEY} = $registry;
     }
 
     /**

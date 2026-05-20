@@ -24,13 +24,15 @@
 
 namespace block_dixeo_tutor\external;
 
+use block_dixeo_tutor\client_response;
+use block_dixeo_tutor\job_ownership;
+use block_dixeo_tutor\page_context;
+use block_dixeo_tutor\service\tutor_proactive_context_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_dixeo\api\exception\api_exception;
-use local_dixeo\external\response_factory;
-use block_dixeo_tutor\service\tutor_proactive_context_service;
 
 /**
  * Flush pending proactive context for the current user in a course.
@@ -67,13 +69,15 @@ class flush_pending_context extends external_api {
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
 
-        $pagecontext = !empty($params['pageurl']) ? $params['pageurl'] : '';
+        $pagecontext = page_context::sanitize_pageurl($params['pageurl'] ?? '', (int) $params['courseid']);
 
         $service = new tutor_proactive_context_service();
         try {
-            $result = $service->flush($USER->id, $params['courseid'], $pagecontext, true);
+            $result = $service->flush($USER->id, $params['courseid'], $pagecontext);
         } catch (api_exception $e) {
-            return response_factory::job_error($e);
+            $error = client_response::send_message_error($e);
+            $error['flushed'] = false;
+            return $error;
         }
 
         if ($result === null) {
@@ -87,7 +91,10 @@ class flush_pending_context extends external_api {
 
         $payload = $result->to_array();
         $payload['flushed'] = true;
-        return $payload;
+        if (!empty($payload['jobid'])) {
+            job_ownership::register((int) $USER->id, (int) $params['courseid'], (string) $payload['jobid']);
+        }
+        return client_response::sanitize_send_message($payload);
     }
 
     /**
