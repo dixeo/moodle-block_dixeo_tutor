@@ -95,7 +95,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Generate the content for this block.
-     *
      * Renders the tutor interface if the user has appropriate permissions
      * and is not on an excluded page type. Returns cached content if already generated.
      *
@@ -159,7 +158,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Define where this block can be displayed.
-     *
      * Specifies that this block is only available in course contexts,
      * as it requires course content to function properly.
      *
@@ -171,7 +169,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Determine if multiple instances of this block are allowed.
-     *
      * Only one tutor instance per course is needed and recommended
      * to avoid confusion and resource duplication.
      *
@@ -192,7 +189,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Determine if the block header should be hidden.
-     *
      * The tutor interface provides its own visual identity,
      * so the standard block header is not needed.
      *
@@ -204,7 +200,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Handle the creation of a new block instance.
-     *
      * This method is called when the block is added to a course.
      * It configures the block settings (display on all pages, weight, etc.).
      *

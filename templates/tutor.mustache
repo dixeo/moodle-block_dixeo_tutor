@@ -3,26 +3,43 @@
     @template block_dixeo_tutor/tutor
 
     Example context (json):
-    {}
+    {
+        "coursename": "Course name",
+        "currentcmid": 0
+    }
 }}
-<div id="dixeo-tutor" class="card border-0 shadow d-flex flex-column">
-    <div class="card-header d-flex justify-content-between align-items-center bg-light px-3 py-2" id="dixeo-tutor-header">
+<div id="dixeo-tutor" class="card border-0 shadow d-flex flex-column"
+     data-course-name="{{coursename}}"
+     data-current-cmid="{{currentcmid}}"
+     data-generation-languages="{{generationlanguagesjson}}"
+     data-default-generation-language="{{defaultgenerationlanguage}}">
+    <div class="card-header d-flex flex-nowrap align-items-center bg-light px-3 py-2" id="dixeo-tutor-header">
         <span class="font-weight-bold dixeo-tutor-title">{{#str}}assistanttitle, block_dixeo_tutor{{/str}}</span>
+        <div class="dixeo-tutor-header__end">
+            {{#mode_selector}}
+            {{> block_dixeo_tutor/mode_selector }}
+            {{/mode_selector}}
+        </div>
     </div>
-    <div class="card-body p-2 d-flex flex-column" id="dixeo-tutor-messages">
-        <!-- Messages will be appended here. -->
-    </div>
-    <div class="card-footer p-2">
-        <div class="d-flex">
-            <textarea id="dixeo-tutor-input"
-                      class="form-control"
-                      placeholder="{{#str}}placeholder, block_dixeo_tutor{{/str}}"
-                      aria-label="{{#str}}placeholder, block_dixeo_tutor{{/str}}" {{! Added aria-label }}
-            ></textarea>
-            <button id="dixeo-tutor-send" class="btn btn-primary px-2">
-                <i class="fa fa-paper-plane" aria-hidden="true"></i>
-                <span class="sr-only">{{#str}}send, block_dixeo_tutor{{/str}}</span>
-            </button>
+    <div class="card-body p-0 d-flex flex-column flex-grow-1 dixeo-tutor-body" id="dixeo-tutor-body">
+        <div id="dixeo-tutor-quiz-pane" class="dixeo-tutor-quiz-pane d-none" aria-hidden="true"></div>
+        <div id="dixeo-tutor-teach-pane" class="dixeo-tutor-teach-pane d-none" aria-hidden="true"></div>
+        <div id="dixeo-tutor-chat-pane" class="dixeo-tutor-chat-pane d-flex flex-column flex-grow-1">
+            <div class="card-body p-2 d-flex flex-column flex-grow-1" id="dixeo-tutor-messages">
+                <!-- Messages will be appended here. -->
+            </div>
+            <div class="card-footer p-2 dixeo-tutor-composer" id="dixeo-tutor-composer">
+                <div class="d-flex">
+                    <textarea id="dixeo-tutor-input"
+                              class="form-control"
+                              placeholder="{{#str}}placeholder, block_dixeo_tutor{{/str}}"
+                              aria-label="{{#str}}placeholder, block_dixeo_tutor{{/str}}"></textarea>
+                    <button id="dixeo-tutor-send" class="btn btn-primary px-2">
+                        <i class="fa fa-paper-plane" aria-hidden="true"></i>
+                        <span class="sr-only">{{#str}}send, block_dixeo_tutor{{/str}}</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
