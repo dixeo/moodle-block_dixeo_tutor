@@ -47,4 +47,11 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_flush_pending_context' => [
+        'classname'   => '\block_dixeo_tutor\external\flush_pending_context',
+        'description' => 'Flushes queued proactive tutor context and submits to the API.',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
 ];

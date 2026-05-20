@@ -17,10 +17,10 @@
 /**
  * Privacy provider for the Dixeo Tutor block.
  *
- * Declares personal data transferred to the Dixeo API via local_dixeo.
- * This block does not create its own database tables or Moodle file areas.
- * Conversation retention, export, and deletion are therefore not performed
- * here; they depend on local_dixeo and the site's Dixeo API agreement.
+ * Declares personal data in the local pending-context table and data
+ * transferred to the Dixeo API via local_dixeo. Conversation retention,
+ * export, and deletion depend on local_dixeo and the site's Dixeo API
+ * agreement; queued proactive rows are described in metadata only here.
  *
  * @package    block_dixeo_tutor
  * @copyright  2025 Edunao SAS (contact@edunao.com)
@@ -35,18 +35,27 @@ use core_privacy\local\metadata\collection;
 /**
  * Privacy metadata provider for block_dixeo_tutor.
  *
- * Personal data is processed transiently and forwarded to the Dixeo API
- * through local_dixeo. There is no local store for Moodle Privacy API
- * export or deletion in this plugin.
+ * Queued proactive context may be stored in block_dixeo_tutor_pending.
+ * Conversation payloads are forwarded to the Dixeo API through local_dixeo.
  */
 class provider implements \core_privacy\local\metadata\provider {
     /**
-     * Describe the type of personal data stored or transmitted by this plugin.
+     * Describe stored and transmitted personal data.
      *
      * @param collection $collection The privacy metadata collection.
      * @return collection The updated collection.
      */
     public static function get_metadata(collection $collection): collection {
+        $collection->add_database_table(
+            'block_dixeo_tutor_pending',
+            [
+                'userid' => 'privacy:metadata:pending_userid',
+                'courseid' => 'privacy:metadata:pending_courseid',
+                'message' => 'privacy:metadata:pending_message',
+            ],
+            'privacy:metadata:pendingpurpose'
+        );
+
         $collection->add_external_location_link(
             'dixeo_api',
             [
