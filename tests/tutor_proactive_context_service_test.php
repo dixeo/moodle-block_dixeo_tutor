@@ -107,6 +107,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertNotNull($record);
+        $this->assertStringContainsString($user->firstname, $record->message);
         $this->assertStringContainsString('first time opening this course', $record->message);
     }
 

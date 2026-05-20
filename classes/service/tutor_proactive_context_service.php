@@ -78,7 +78,9 @@ class tutor_proactive_context_service {
         $messagelenbefore = strlen(trim((string) ($record->message ?? '')));
 
         if ($lastproactive === 0) {
-            $this->append_line($record, $this->proactive_string('proactive_first_visit', $userid));
+            $this->append_line($record, $this->proactive_string('proactive_first_visit', $userid, (object) [
+                'name' => $this->get_user_proactive_name($userid),
+            ]));
         } else if (($now - $lastproactive) >= self::RETURN_VISIT_GAP) {
             $duration = $this->format_duration_for_user($now - $lastproactive, $userid);
             $this->append_line(
@@ -297,6 +299,26 @@ class tutor_proactive_context_service {
     }
 
     /**
+     * Given name for first-person proactive lines (firstname, else full name).
+     *
+     * @param int $userid
+     * @return string
+     */
+    private function get_user_proactive_name(int $userid): string {
+        $user = \core_user::get_user($userid, '*', MUST_EXIST);
+        $firstname = trim((string) ($user->firstname ?? ''));
+        if ($firstname !== '') {
+            return $firstname;
+        }
+        $fullname = trim(fullname($user));
+        if ($fullname !== '') {
+            return $fullname;
+        }
+        $username = trim((string) ($user->username ?? ''));
+        return $username !== '' ? $username : get_string('proactive_default_name', 'block_dixeo_tutor');
+    }
+
+    /**
      * Language pack code for a user (site default when unset).
      *
      * @param int $userid
@@ -305,7 +327,7 @@ class tutor_proactive_context_service {
     private function resolve_user_language(int $userid): string {
         global $CFG;
 
-        $user = \core_user::get_user($userid, MUST_EXIST, true);
+        $user = \core_user::get_user($userid, '*', MUST_EXIST);
         if (!empty($user->lang) && $user->lang !== 'auto') {
             return $user->lang;
         }
