@@ -15,24 +15,32 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version information for the DIXEO Tutor block plugin.
- *
- * This file defines the version, dependencies, and metadata
- * for the DIXEO Tutor block plugin.
+ * Event observers for block_dixeo_tutor proactive context.
  *
  * @package    block_dixeo_tutor
- * @copyright  2025 Edunao SAS (contact@edunao.com)
- * @author     Pierre FACQ <pierre.facq@edunao.com>
+ * @copyright  2026 Edunao SAS (contact@edunao.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026073101;
-$plugin->requires  = 2024100700;
-$plugin->component = 'block_dixeo_tutor';
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '4.2.5';
-$plugin->dependencies = [
-    'local_dixeo' => 2026073100,
+$observers = [
+    [
+        'eventname' => '\core\event\course_viewed',
+        'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_viewed',
+        'internal' => false,
+        'priority' => 0,
+    ],
+    [
+        'eventname' => '\core\event\course_completed',
+        'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_completed',
+        'internal' => false,
+        'priority' => 0,
+    ],
+    [
+        'eventname' => '\core\event\user_graded',
+        'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::user_graded',
+        'internal' => false,
+        'priority' => 0,
+    ],
 ];
