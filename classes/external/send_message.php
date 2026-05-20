@@ -55,7 +55,6 @@ class send_message extends external_api {
 
     /**
      * Submit a tutor message (non-blocking).
-     *
      * Returns immediately with job_id. Use get_job_status to poll.
      *
      * @param int $courseid The course ID.
