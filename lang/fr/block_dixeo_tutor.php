@@ -85,6 +85,5 @@ $string['talktotutor'] = 'Parler au tuteur';
 $string['timeout_message'] = "La réponse prend plus de temps que prévu. L'assistant travaille peut-être encore sur votre demande.";
 $string['tooltip_hide_tutor'] = 'Fermer Ed';
 $string['tooltip_open_tutor'] = 'Demander à Ed';
-$string['tutorpresentation'] = "Salut ! Je suis Ed, votre tuteur IA. Comment puis-je vous aider avec ce cours ?";
 $string['unknownerror'] = "Une erreur inconnue s'est produite.";
 $string['yesterday'] = 'hier';
