@@ -85,6 +85,5 @@ $string['talktotutor'] = 'Mit dem Tutor sprechen';
 $string['timeout_message'] = 'Die Antwort dauert länger als erwartet. Der Assistent arbeitet möglicherweise noch an Ihrer Anfrage.';
 $string['tooltip_hide_tutor'] = 'Ed schließen';
 $string['tooltip_open_tutor'] = 'Frag Ed';
-$string['tutorpresentation'] = 'Hallo! Ich bin Ed, Ihr KI-Tutor. Wie kann ich Ihnen bei diesem Kurs helfen?';
 $string['unknownerror'] = 'Ein unbekannter Fehler ist aufgetreten.';
 $string['yesterday'] = 'gestern';
