@@ -30,6 +30,7 @@
 
 namespace block_dixeo_tutor\privacy;
 
+use block_dixeo_tutor\service\tutor_read_state_service;
 use core_privacy\local\metadata\collection;
 
 /**
@@ -65,6 +66,11 @@ class provider implements \core_privacy\local\metadata\provider {
                 'pageurl' => 'privacy:metadata:pageurl',
             ],
             'privacy:metadata:externalpurpose'
+        );
+
+        $collection->add_user_preference(
+            tutor_read_state_service::PREF_LAST_READ_PREFIX,
+            'privacy:metadata:lastread'
         );
 
         return $collection;

@@ -183,12 +183,16 @@ class block_dixeo_tutor extends block_base {
         }
         $opentooltip = get_string('tooltip_open_tutor', 'block_dixeo_tutor');
         $hidetooltip = get_string('tooltip_hide_tutor', 'block_dixeo_tutor');
+        $readservice = new \block_dixeo_tutor\service\tutor_read_state_service();
+        $readstate = $readservice->resolve_page_state((int) $USER->id, $courseid);
         $this->page->requires->js_call_amd('block_dixeo_tutor/tutor', 'init', [
             $courseid,
             $USER->id,
             $displaymode,
             $opentooltip,
             $hidetooltip,
+            !empty($readstate['hasunread']),
+            (int) ($readstate['lastread'] ?? 0),
         ]);
         return $this->content;
     }
