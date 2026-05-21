@@ -10,7 +10,9 @@ define([], function() {
      * @returns {boolean}
      */
     function isDeveloperDebugEnabled() {
-        return !!(typeof window !== 'undefined' && window.M?.cfg?.developerdebug);
+        // Hardcode to false for now.
+        // return !!(typeof window !== 'undefined' && window.M?.cfg?.developerdebug);
+        return false;
     }
 
     /**
