@@ -60,6 +60,7 @@ $string['pluginname'] = 'Dixeo Student Tutor';
 $string['privacy:metadata'] = 'The Dixeo Student Tutor block stores queued proactive context (user id, course id, message text) in the Moodle database until it is sent. Tutor conversations are processed by local_dixeo and transferred to the Dixeo API. Retention, export, and deletion of conversations are governed by local_dixeo and the site\'s agreement with the Dixeo service; queued proactive rows in this block are described under privacy:metadata:pendingpurpose.';
 $string['privacy:metadata:courseid'] = 'The ID of the course the user is enrolled in.';
 $string['privacy:metadata:externalpurpose'] = 'User messages, course context, and a minimized site page path are sent to the Dixeo API (via local_dixeo) to generate AI tutor responses. This block has no local conversation storage and therefore does not export or delete conversation data; those controls must be provided by local_dixeo and the Dixeo API contract.';
+$string['privacy:metadata:lastread'] = 'The time of the latest tutor message you have read in each course (for unread indicators).';
 $string['privacy:metadata:message'] = 'The content of the message sent by the user.';
 $string['privacy:metadata:pageurl'] = 'A Moodle site URL path for the page context when the message was sent (restricted to this site; query strings and fragments are removed).';
 $string['privacy:metadata:pending_courseid'] = 'The course the queued proactive context belongs to.';

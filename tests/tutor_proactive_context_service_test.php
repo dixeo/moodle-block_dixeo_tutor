@@ -288,4 +288,29 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertNull($record);
     }
+
+    public function test_course_completed_queues_and_defers_flush_to_client(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $mock = $this->getMockBuilder(tutor_service::class)
+            ->onlyMethods(['submit_message'])
+            ->getMock();
+        $mock->expects($this->never())->method('submit_message');
+        service_factory::set_test_tutor_service($mock);
+
+        $context = \context_course::instance((int) $course->id);
+        $event = \core\event\course_completed::create([
+            'objectid' => 1,
+            'relateduserid' => $user->id,
+            'context' => $context,
+            'courseid' => $course->id,
+            'other' => ['relateduserid' => $user->id],
+        ]);
+        $this->assertNull($this->service->handle_course_completed($event));
+
+        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
+        $this->assertNotNull($record);
+        $this->assertStringContainsString('completed the course', $record->message);
+    }
 }

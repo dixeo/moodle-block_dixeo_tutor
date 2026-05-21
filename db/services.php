@@ -54,4 +54,11 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_mark_messages_read' => [
+        'classname'   => '\block_dixeo_tutor\external\mark_messages_read',
+        'description' => 'Marks tutor incoming messages as read up to the given timestamp.',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
 ];
