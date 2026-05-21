@@ -124,10 +124,8 @@ class tutor_proactive_context_service {
         $this->append_line($record, $this->proactive_string('proactive_course_completed', $userid));
         $this->save_record($record);
 
-        if ($this->should_flush_immediately($userid, $courseid)) {
-            return $this->flush($userid, $courseid, $this->current_page_url());
-        }
-
+        // Defer flush to tutor UI (same as course_viewed). Server-side flush empties the queue
+        // before client _flushPendingContext runs, so PROACTIVE_REPLY_READY never fires.
         return null;
     }
 
