@@ -46,7 +46,8 @@ class get_conversation extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'courseid' => new external_value(PARAM_INT, 'The course ID'),
-            'sinceid' => new external_value(PARAM_ALPHANUMEXT, 'Message ID to fetch messages after', VALUE_DEFAULT, ''),
+            'sinceid' => new external_value(PARAM_ALPHANUMEXT, 'Message ID cursor for newer messages', VALUE_DEFAULT, ''),
+            'offset' => new external_value(PARAM_INT, 'Offset for loading older message pages', VALUE_DEFAULT, 0),
         ]);
     }
 
@@ -54,15 +55,17 @@ class get_conversation extends external_api {
      * Get conversation history for the current user in a course.
      *
      * @param int $courseid The course ID.
-     * @param string $sinceid Optional message ID to fetch messages after.
+     * @param string $sinceid Optional message ID cursor for newer messages.
+     * @param int $offset Optional offset for loading older message pages.
      * @return array Array with messages key containing message objects.
      */
-    public static function execute(int $courseid, string $sinceid = ''): array {
+    public static function execute(int $courseid, string $sinceid = '', int $offset = 0): array {
         global $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
             'sinceid' => $sinceid,
+            'offset' => $offset,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -74,7 +77,9 @@ class get_conversation extends external_api {
             $messages = $service->get_conversation(
                 $params['courseid'],
                 $USER->id,
-                $params['sinceid']
+                $params['sinceid'],
+                50,
+                $params['offset']
             );
 
             conversation_viewed::create_for_course(

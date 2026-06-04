@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['aria_assistant_message'] = "Messaggio dell'assistente";
 $string['aria_chat_messages'] = 'Messaggi della chat';
+$string['aria_load_older_messages'] = 'Carica messaggi precedenti';
 $string['aria_send_message'] = 'Invia messaggio';
 $string['aria_sender_assistant'] = 'Assistente';
 $string['aria_sender_you'] = 'Tu';
@@ -53,6 +54,7 @@ $string['eventjobstatusvieweddesc'] = 'L\'utente con id \'{$a->userid}\' ha visu
 $string['eventmessagesent'] = 'Messaggio del tutor Dixeo inviato';
 $string['eventmessagesentdesc'] = 'L\'utente con id \'{$a->userid}\' ha inviato un messaggio al tutor nel corso \'{$a->courseid}\' (jobid=\'{$a->jobid}\').';
 $string['filecountlimit'] = 'Il tutor IA è limitato a 150 file per corso (attualmente {$a} file). Si prega di ridurre il numero di file se necessario.';
+$string['load_older_messages'] = 'Carica messaggi precedenti';
 $string['message_too_long'] = 'Il messaggio non può superare {$a} caratteri.';
 $string['notenrolled'] = 'Devi essere iscritto a questo corso per utilizzare il tutor.';
 $string['placeholder'] = 'Scrivi il tuo messaggio...';

@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['aria_assistant_message'] = 'Assistenten-Nachricht';
 $string['aria_chat_messages'] = 'Chat-Nachrichten';
+$string['aria_load_older_messages'] = 'Ältere Nachrichten laden';
 $string['aria_send_message'] = 'Nachricht senden';
 $string['aria_sender_assistant'] = 'Assistent';
 $string['aria_sender_you'] = 'Sie';
@@ -53,6 +54,7 @@ $string['eventjobstatusvieweddesc'] = 'Der Benutzer mit der ID \'{$a->userid}\' 
 $string['eventmessagesent'] = 'Dixeo-Tutor-Nachricht gesendet';
 $string['eventmessagesentdesc'] = 'Der Benutzer mit der ID \'{$a->userid}\' hat eine Tutor-Nachricht im Kurs \'{$a->courseid}\' gesendet (jobid=\'{$a->jobid}\').';
 $string['filecountlimit'] = 'Der KI-Tutor ist auf 150 Dateien pro Kurs beschränkt (derzeit {$a} Dateien). Bitte reduzieren Sie bei Bedarf die Anzahl der Dateien.';
+$string['load_older_messages'] = 'Ältere Nachrichten laden';
 $string['message_too_long'] = 'Die Nachricht darf maximal {$a} Zeichen enthalten.';
 $string['notenrolled'] = 'Sie müssen in diesen Kurs eingeschrieben sein, um den Tutor zu nutzen.';
 $string['placeholder'] = 'Nachricht eingeben...';

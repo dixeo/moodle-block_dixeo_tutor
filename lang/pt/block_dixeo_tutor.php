@@ -27,6 +27,7 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['aria_assistant_message'] = 'Mensagem do assistente';
 $string['aria_chat_messages'] = 'Mensagens do chat';
+$string['aria_load_older_messages'] = 'Carregar mensagens anteriores';
 $string['aria_send_message'] = 'Enviar mensagem';
 $string['aria_sender_assistant'] = 'Assistente';
 $string['aria_sender_you'] = 'Você';
@@ -53,6 +54,7 @@ $string['eventjobstatusvieweddesc'] = 'O utilizador com id \'{$a->userid}\' visu
 $string['eventmessagesent'] = 'Mensagem do tutor Dixeo enviada';
 $string['eventmessagesentdesc'] = 'O utilizador com id \'{$a->userid}\' enviou uma mensagem ao tutor na disciplina \'{$a->courseid}\' (jobid=\'{$a->jobid}\').';
 $string['filecountlimit'] = 'O tutor de IA está limitado a 150 ficheiros por disciplina (atualmente {$a} ficheiros). Por favor, reduza o número de ficheiros se necessário.';
+$string['load_older_messages'] = 'Carregar mensagens anteriores';
 $string['message_too_long'] = 'A mensagem não pode exceder {$a} caracteres.';
 $string['notenrolled'] = 'Tem de estar inscrito nesta disciplina para usar o tutor.';
 $string['placeholder'] = 'Escreva a sua mensagem...';
