@@ -140,4 +140,81 @@ class client_response {
             ],
         ];
     }
+
+    /**
+     * Build a sanitized generation submit error (quiz / teach / flush).
+     *
+     * @param api_exception $exception Exception from local_dixeo.
+     * @return array
+     */
+    public static function job_submit_error(api_exception $exception): array {
+        return self::send_message_error($exception);
+    }
+
+    /**
+     * Build a sanitized practice-quiz finalize error.
+     *
+     * @param api_exception $exception Exception from local_dixeo.
+     * @return array
+     */
+    public static function finalize_practice_quiz_error(api_exception $exception): array {
+        debugging(
+            'Tutor finalize_practice_quiz failed: ' . $exception->get_error_code() . ' ' . $exception->getMessage(),
+            DEBUG_DEVELOPER
+        );
+
+        return [
+            'success' => false,
+            'error' => self::generic_error_message(),
+            'title' => '',
+            'questions' => '[]',
+        ];
+    }
+
+    /**
+     * Build a sanitized teach-lesson finalize error.
+     *
+     * @param api_exception $exception Exception from local_dixeo.
+     * @return array
+     */
+    public static function finalize_teach_lesson_error(api_exception $exception): array {
+        debugging(
+            'Tutor finalize_teach_lesson failed: ' . $exception->get_error_code() . ' ' . $exception->getMessage(),
+            DEBUG_DEVELOPER
+        );
+
+        return [
+            'success' => false,
+            'error' => self::generic_error_message(),
+            'title' => '',
+            'introhtml' => '',
+            'contenthtml' => '',
+        ];
+    }
+
+    /**
+     * Build a sanitized cancellation result for clients.
+     *
+     * @param string $jobid Job UUID.
+     * @param bool $success Whether cancel succeeded.
+     * @param api_exception|null $exception Optional failure from local_dixeo.
+     * @return array
+     */
+    public static function cancellation_result(string $jobid, bool $success, ?api_exception $exception = null): array {
+        if ($exception !== null) {
+            debugging(
+                'Tutor cancel_generation_job failed: job=' . $jobid
+                    . ' code=' . $exception->get_error_code()
+                    . ' ' . $exception->getMessage(),
+                DEBUG_DEVELOPER
+            );
+        }
+
+        return [
+            'success' => $success,
+            'jobid' => $jobid,
+            'message' => $success ? '' : self::generic_error_message(),
+            'errorcode' => $success ? '' : 'api_error',
+        ];
+    }
 }

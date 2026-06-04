@@ -76,7 +76,7 @@ class get_job_status extends external_api {
 
         try {
             $service = service_factory::get_job_service();
-            $status = $service->get_job_status($params['jobid']);
+            $status = $service->get_job_status($params['jobid'], (int) $params['courseid']);
 
             job_status_audit::maybe_emit_terminal_viewed(
                 (int) $params['courseid'],
