@@ -219,7 +219,7 @@ class tutor_proactive_context_service {
             return null;
         }
 
-        $message = $this->prepare_message_for_submit($message);
+        $message = tutor_message_helper::wrap_system_context($message);
 
         try {
             $result = service_factory::get_tutor_service()->submit_message(
@@ -393,23 +393,6 @@ class tutor_proactive_context_service {
      */
     private function mark_proactive_course_view(int $userid, int $courseid, int $timestamp): void {
         set_user_preference(self::PREF_LAST_PROACTIVE_PREFIX . $courseid, $timestamp, $userid);
-    }
-
-    /**
-     * Truncate queued lines and wrap the full payload for the tutor API.
-     *
-     * @param string $message Raw concatenated proactive lines from the queue.
-     * @return string
-     */
-    private function prepare_message_for_submit(string $message): string {
-        $wrapperopen = '<' . self::PROACTIVE_CONTEXT_TAG . ' source="system">' . "\n";
-        $wrapperclose = "\n" . '</' . self::PROACTIVE_CONTEXT_TAG . '>';
-        $maxinner = self::MAX_MESSAGE_LENGTH - strlen($wrapperopen) - strlen($wrapperclose);
-        if ($maxinner > 0 && strlen($message) > $maxinner) {
-            $message = core_text::substr($message, 0, $maxinner);
-        }
-
-        return $wrapperopen . $message . $wrapperclose;
     }
 
     /**

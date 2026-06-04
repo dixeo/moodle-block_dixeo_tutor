@@ -42,6 +42,27 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
+     * Whether an activity module type is omitted from the practice-quiz topic dropdown.
+     * Uses the block excludedmodules setting plus hardcoded types and certificate plugins.
+     *
+     * @param string $modname Activity frankenstyle name (e.g. quiz, h5pactivity).
+     * @return bool
+     */
+    public static function is_quiz_topic_excluded(string $modname): bool {
+        if ($modname === '') {
+            return false;
+        }
+        if (str_contains($modname, 'certificate')) {
+            return true;
+        }
+        // Hardcoded exclusions.
+        if (in_array($modname, ['h5pactivity'], true)) {
+            return true;
+        }
+        return in_array($modname, self::get_excluded_modules(), true);
+    }
+
+    /**
      * Resolve activity module type on a module context page when $PAGE->cm is not set yet.
      *
      * @param \moodle_page $page
@@ -172,7 +193,16 @@ class block_dixeo_tutor extends block_base {
         // No need to pre-create anything with Response API architecture.
 
         // Render the tutor interface and initialize JavaScript.
-        $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', []);
+        $currentcmid = 0;
+        if ($this->page->context->contextlevel == CONTEXT_MODULE) {
+            $currentcmid = (int) $this->page->context->instanceid;
+        }
+
+        $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', [
+            'coursename' => format_string($this->page->course->fullname, true, ['context' => \context_course::instance($courseid)]),
+            'currentcmid' => $currentcmid,
+        ]);
+        $this->page->requires->css('/mod/simplequiz2/styles.css');
         $displaymode = get_config('block_dixeo_tutor', 'displaymode');
         if ($displaymode === false) {
             $displaymode = 'popup';
@@ -237,6 +267,61 @@ class block_dixeo_tutor extends block_base {
      */
     public function hide_header(): bool {
         return !$this->page->user_is_editing();
+    }
+
+    /**
+     * Build course / section / activity hierarchy for practice quiz setup.
+     * Activity rows omit module types excluded by {@see is_quiz_topic_excluded()} (admin setting,
+     * hardcoded types such as h5pactivity, and any mod name containing "certificate").
+     * Tutor page visibility is not applied here. Sections with no included activities are omitted.
+     *
+     * @param int $courseid
+     * @param \moodle_page $page
+     * @return array{course: array, sections: array}
+     */
+    public static function build_practice_quiz_hierarchy(int $courseid, \moodle_page $page): array {
+        $course = get_course($courseid);
+        $modinfo = get_fast_modinfo($course);
+        $sectionmap = [];
+
+        foreach ($modinfo->get_section_info_all() as $section) {
+            if ((int) $section->section === 0) {
+                continue;
+            }
+            $sectionmap[(int) $section->section] = [
+                'num' => (int) $section->section,
+                'name' => get_section_name($course, $section),
+                'activities' => [],
+            ];
+        }
+
+        foreach ($modinfo->get_cms() as $cm) {
+            if (self::is_quiz_topic_excluded($cm->modname)) {
+                continue;
+            }
+            $sectionnum = (int) $cm->sectionnum;
+            if ($sectionnum === 0 || !isset($sectionmap[$sectionnum])) {
+                continue;
+            }
+            $sectionmap[$sectionnum]['activities'][] = [
+                'cmid' => (int) $cm->id,
+                'name' => $cm->get_formatted_name(),
+            ];
+        }
+
+        $sections = [];
+        foreach ($sectionmap as $section) {
+            if ($section['activities'] !== []) {
+                $sections[] = $section;
+            }
+        }
+
+        return [
+            'course' => [
+                'name' => format_string($course->fullname, true, ['context' => \context_course::instance($courseid)]),
+            ],
+            'sections' => $sections,
+        ];
     }
 
     /**
