@@ -61,4 +61,32 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_get_quiz_hierarchy' => [
+        'classname'   => '\block_dixeo_tutor\external\get_quiz_hierarchy',
+        'description' => 'Course hierarchy for practice quiz topic selection',
+        'type'        => 'read',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
+    'block_dixeo_tutor_submit_practice_quiz' => [
+        'classname'   => '\block_dixeo_tutor\external\submit_practice_quiz',
+        'description' => 'Submit ephemeral practice quiz generation job',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
+    'block_dixeo_tutor_finalize_practice_quiz' => [
+        'classname'   => '\block_dixeo_tutor\external\finalize_practice_quiz',
+        'description' => 'Finalize practice quiz job into question JSON',
+        'type'        => 'read',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
+    'block_dixeo_tutor_submit_quiz_context' => [
+        'classname'   => '\block_dixeo_tutor\external\submit_quiz_context',
+        'description' => 'Submit practice quiz lifecycle context to the tutor',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
 ];
