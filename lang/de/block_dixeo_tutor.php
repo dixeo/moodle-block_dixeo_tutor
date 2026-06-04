@@ -27,12 +27,16 @@ defined('MOODLE_INTERNAL') || die();
 
 $string['aria_assistant_message'] = 'Assistenten-Nachricht';
 $string['aria_chat_messages'] = 'Chat-Nachrichten';
+$string['aria_copy_message'] = 'Nachricht kopieren';
 $string['aria_load_older_messages'] = 'Ältere Nachrichten laden';
+$string['aria_message_copied'] = 'Kopiert';
+$string['aria_read_message'] = 'Nachricht vorlesen';
 $string['aria_send_message'] = 'Nachricht senden';
 $string['aria_sender_assistant'] = 'Assistent';
 $string['aria_sender_you'] = 'Sie';
 $string['aria_sent_at'] = 'Gesendet um {$a}';
 $string['aria_skip_to_input'] = 'Zum Nachrichteneingabefeld springen';
+$string['aria_stop_reading'] = 'Vorlesen stoppen';
 $string['aria_type_message'] = 'Nachricht eingeben';
 $string['aria_your_message'] = 'Ihre Nachricht';
 $string['assistanttitle'] = 'Fragen Sie Ed';
