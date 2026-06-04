@@ -1,0 +1,61 @@
+{{!
+    @template block_dixeo_tutor/quiz_setup_loading
+
+    Practice quiz setup panel while course hierarchy topics load.
+
+    Example context (json):
+    {
+        "coursename": "Sample course",
+        "counts": [
+            {"value": 3, "active": false},
+            {"value": 5, "active": true}
+        ],
+        "difficulty_easy_active": false,
+        "difficulty_medium_active": true,
+        "difficulty_hard_active": false,
+        "topiclabel": "Topic",
+        "loadingtext": "Loading topics…",
+        "startlabel": "Start quiz",
+        "cancellabel": "Cancel",
+        "startdisabled": true,
+        "showlanguageselector": true,
+        "languageselectid": "dixeo-quiz-setup-language",
+        "labelclass": "dixeo-tutor-setup__label dixeo-quiz-setup__label",
+        "selectclass": "dixeo-quiz-setup__language-select",
+        "languages": [
+            {"code": "en", "name": "English", "selected": true}
+        ]
+    }
+}}
+<div class="dixeo-quiz-setup dixeo-tutor-setup">
+    <h5 class="dixeo-tutor-setup__title dixeo-quiz-setup__title mb-2">{{#str}}quiz_setup_title, block_dixeo_tutor{{/str}}</h5>
+
+    <label class="dixeo-tutor-setup__label dixeo-quiz-setup__label small font-weight-bold mb-1">{{#str}}quiz_setup_count, block_dixeo_tutor{{/str}}</label>
+    <div class="dixeo-quiz-setup__count-row mb-2" data-role="count-row">
+        {{#counts}}
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary mr-1 mb-1{{#active}} active{{/active}}"
+                data-count="{{value}}">{{value}}</button>
+        {{/counts}}
+    </div>
+
+    <label class="dixeo-tutor-setup__label dixeo-quiz-setup__label small font-weight-bold mb-1">{{#str}}quiz_setup_difficulty, block_dixeo_tutor{{/str}}</label>
+    <div class="dixeo-quiz-setup__diff-row mb-2" data-role="diff-row">
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary mr-1 mb-1{{#difficulty_easy_active}} active{{/difficulty_easy_active}}"
+                data-difficulty="easy">{{#str}}quiz_difficulty_easy, block_dixeo_tutor{{/str}}</button>
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary mr-1 mb-1{{#difficulty_medium_active}} active{{/difficulty_medium_active}}"
+                data-difficulty="medium">{{#str}}quiz_difficulty_medium, block_dixeo_tutor{{/str}}</button>
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary mr-1 mb-1{{#difficulty_hard_active}} active{{/difficulty_hard_active}}"
+                data-difficulty="hard">{{#str}}quiz_difficulty_hard, block_dixeo_tutor{{/str}}</button>
+    </div>
+
+    <label class="dixeo-tutor-setup__label dixeo-quiz-setup__label small font-weight-bold mb-1">{{topiclabel}}</label>
+    {{> block_dixeo_tutor/setup_topic_loading }}
+
+    {{> block_dixeo_tutor/setup_language_field }}
+
+    {{> block_dixeo_tutor/setup_actions }}
+</div>
