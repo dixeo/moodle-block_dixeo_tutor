@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Submit practice quiz lifecycle context to the tutor API.
+ * Submit practice quiz review context to the tutor API.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
@@ -32,7 +32,7 @@ use core_external\external_single_structure;
 use core_external\external_value;
 
 /**
- * Web service for quiz context events.
+ * Web service for practice quiz review submission.
  */
 class submit_quiz_context extends external_api {
     /**
@@ -43,17 +43,12 @@ class submit_quiz_context extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'courseid' => new external_value(PARAM_INT, 'Course ID'),
-            'event' => new external_value(PARAM_ALPHA, 'Event: started, answered, completed, cancelled, restarted'),
             'pageurl' => new external_value(PARAM_URL, 'Current page URL', VALUE_DEFAULT, ''),
             'title' => new external_value(PARAM_TEXT, 'Quiz title', VALUE_DEFAULT, ''),
-            'count' => new external_value(PARAM_INT, 'Question count (started event)', VALUE_DEFAULT, 0),
-            'question' => new external_value(PARAM_RAW, 'Question text', VALUE_DEFAULT, ''),
-            'chosen' => new external_value(PARAM_RAW, 'Chosen answer', VALUE_DEFAULT, ''),
-            'correct' => new external_value(PARAM_RAW, 'Correct answer', VALUE_DEFAULT, ''),
-            'iscorrect' => new external_value(PARAM_BOOL, 'Whether answer was correct', VALUE_DEFAULT, false),
-            'index' => new external_value(PARAM_INT, 'Question index (0-based)', VALUE_DEFAULT, 0),
             'total' => new external_value(PARAM_INT, 'Total questions', VALUE_DEFAULT, 0),
-            'score' => new external_value(PARAM_INT, 'Score achieved', VALUE_DEFAULT, 0),
+            'questionsjson' => new external_value(PARAM_RAW, 'JSON array of simplequiz2 questions'),
+            'bestattemptjson' => new external_value(PARAM_RAW, 'JSON best attempt state'),
+            'exitscore' => new external_value(PARAM_INT, 'Exit attempt score', VALUE_DEFAULT, 0),
         ]);
     }
 
@@ -61,48 +56,33 @@ class submit_quiz_context extends external_api {
      * Execute the web service.
      *
      * @param int $courseid
-     * @param string $event
      * @param string $pageurl
      * @param string $title
-     * @param int $count
-     * @param string $question
-     * @param string $chosen
-     * @param string $correct
-     * @param bool $iscorrect
-     * @param int $index
      * @param int $total
-     * @param int $score
+     * @param string $questionsjson
+     * @param string $bestattemptjson
+     * @param int $exitscore
      * @return array
      */
     public static function execute(
         int $courseid,
-        string $event,
         string $pageurl = '',
         string $title = '',
-        int $count = 0,
-        string $question = '',
-        string $chosen = '',
-        string $correct = '',
-        bool $iscorrect = false,
-        int $index = 0,
         int $total = 0,
-        int $score = 0
+        string $questionsjson = '',
+        string $bestattemptjson = '',
+        int $exitscore = 0
     ): array {
         global $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
-            'event' => $event,
             'pageurl' => $pageurl,
             'title' => $title,
-            'count' => $count,
-            'question' => $question,
-            'chosen' => $chosen,
-            'correct' => $correct,
-            'iscorrect' => $iscorrect,
-            'index' => $index,
             'total' => $total,
-            'score' => $score,
+            'questionsjson' => $questionsjson,
+            'bestattemptjson' => $bestattemptjson,
+            'exitscore' => $exitscore,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -110,20 +90,15 @@ class submit_quiz_context extends external_api {
         require_capability('block/dixeo_tutor:talktotutor', $context);
 
         $service = new practice_quiz_context_service();
-        $result = $service->submit_event(
+        $result = $service->submit_review(
             (int) $params['courseid'],
             (int) $USER->id,
-            $params['event'],
             [
                 'title' => $params['title'],
-                'count' => $params['count'],
-                'question' => $params['question'],
-                'chosen' => $params['chosen'],
-                'correct' => $params['correct'],
-                'iscorrect' => $params['iscorrect'],
-                'index' => $params['index'],
                 'total' => $params['total'],
-                'score' => $params['score'],
+                'questionsjson' => $params['questionsjson'],
+                'bestattemptjson' => $params['bestattemptjson'],
+                'exitscore' => $params['exitscore'],
             ],
             $params['pageurl']
         );
