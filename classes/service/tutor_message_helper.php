@@ -31,8 +31,14 @@ class tutor_message_helper {
     /** @var int Maximum message length accepted by tutor send_message. */
     public const MAX_MESSAGE_LENGTH = 2000;
 
+    /** @var int Maximum length for practice quiz review messages. */
+    public const MAX_PRACTICE_QUIZ_REVIEW_LENGTH = 16000;
+
     /** @var string Wrapper tag (must match proactive_context.js filter). */
     public const CONTEXT_TAG = 'proactive-context';
+
+    /** @var string Wrapper tag for practice quiz review (must match practice_quiz_review.js). */
+    public const REVIEW_TAG = 'practice-quiz-review';
 
     /**
      * Wrap inner text for tutor API submission (hidden from chat UI).
@@ -49,5 +55,22 @@ class tutor_message_helper {
         }
 
         return $wrapperopen . $message . $wrapperclose;
+    }
+
+    /**
+     * Wrap a JSON practice quiz review for tutor API submission (visible in chat until rendered).
+     *
+     * @param string $json Pretty-printed or compact JSON payload.
+     * @return string
+     */
+    public static function wrap_practice_quiz_review(string $json): string {
+        $wrapperopen = '<' . self::REVIEW_TAG . ' version="1">' . "\n";
+        $wrapperclose = "\n" . '</' . self::REVIEW_TAG . '>';
+        $maxinner = self::MAX_PRACTICE_QUIZ_REVIEW_LENGTH - strlen($wrapperopen) - strlen($wrapperclose);
+        if ($maxinner > 0 && strlen($json) > $maxinner) {
+            $json = \core_text::substr($json, 0, $maxinner);
+        }
+
+        return $wrapperopen . $json . $wrapperclose;
     }
 }

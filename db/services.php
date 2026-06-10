@@ -84,7 +84,7 @@ $functions = [
     ],
     'block_dixeo_tutor_submit_quiz_context' => [
         'classname'   => '\block_dixeo_tutor\external\submit_quiz_context',
-        'description' => 'Submit practice quiz lifecycle context to the tutor',
+        'description' => 'Submit practice quiz review to the tutor',
         'type'        => 'write',
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',

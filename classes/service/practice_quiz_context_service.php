@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Practice quiz tutor context messages.
+ * Practice quiz tutor review messages.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
@@ -29,29 +29,21 @@ use local_dixeo\dto\operation_result;
 use local_dixeo\external\service_factory;
 
 /**
- * Builds and submits practice-quiz lifecycle context to the tutor API.
+ * Builds and submits practice-quiz review context to the tutor API.
  */
 class practice_quiz_context_service {
-    public const EVENT_STARTED = 'started';
-    public const EVENT_ANSWERED = 'answered';
-    public const EVENT_COMPLETED = 'completed';
-    public const EVENT_CANCELLED = 'cancelled';
-    public const EVENT_RESTARTED = 'restarted';
-
     /**
-     * Submit a practice quiz context event to the tutor.
+     * Submit a practice quiz review to the tutor.
      *
      * @param int $courseid
      * @param int $userid
-     * @param string $event started|answered|completed|cancelled|restarted
-     * @param array $payload Event-specific fields.
+     * @param array $payload title, questionsjson, bestattemptjson, exitscore, total.
      * @param string $pageurl
      * @return operation_result|null
      */
-    public function submit_event(
+    public function submit_review(
         int $courseid,
         int $userid,
-        string $event,
         array $payload,
         string $pageurl = ''
     ): ?operation_result {
@@ -60,12 +52,10 @@ class practice_quiz_context_service {
             return null;
         }
 
-        $inner = $this->build_inner_message($event, $payload);
-        if ($inner === '') {
+        $message = $this->build_review_message($payload);
+        if ($message === '') {
             return null;
         }
-
-        $message = tutor_message_helper::wrap_system_context($inner);
 
         try {
             return service_factory::get_tutor_service()->submit_message(
@@ -81,46 +71,51 @@ class practice_quiz_context_service {
     }
 
     /**
-     * Build inner system-context instruction text.
+     * Build a wrapped practice-quiz-review message from client payload.
      *
-     * @param string $event
-     * @param array $payload
+     * @param array $payload Must include title, questionsjson, bestattemptjson; optional exitscore, total.
      * @return string
      */
-    public function build_inner_message(string $event, array $payload): string {
-        switch ($event) {
-            case self::EVENT_STARTED:
-                return get_string('quiz_context_started', 'block_dixeo_tutor', (object) [
-                    'title' => $payload['title'] ?? '',
-                    'count' => (int) ($payload['count'] ?? 0),
-                ]);
-            case self::EVENT_ANSWERED:
-                return get_string('quiz_context_answered', 'block_dixeo_tutor', (object) [
-                    'question' => $payload['question'] ?? '',
-                    'chosen' => $payload['chosen'] ?? '',
-                    'correct' => $payload['correct'] ?? '',
-                    'iscorrect' => !empty($payload['iscorrect']) ? 'yes' : 'no',
-                    'index' => (int) ($payload['index'] ?? 0) + 1,
-                    'total' => (int) ($payload['total'] ?? 0),
-                ]);
-            case self::EVENT_COMPLETED:
-                return get_string('quiz_context_completed', 'block_dixeo_tutor', (object) [
-                    'title' => $payload['title'] ?? '',
-                    'score' => (int) ($payload['score'] ?? 0),
-                    'total' => (int) ($payload['total'] ?? 0),
-                ]);
-            case self::EVENT_CANCELLED:
-                return get_string('quiz_context_cancelled', 'block_dixeo_tutor', (object) [
-                    'title' => $payload['title'] ?? '',
-                ]);
-            case self::EVENT_RESTARTED:
-                return get_string('quiz_context_restarted', 'block_dixeo_tutor', (object) [
-                    'title' => $payload['title'] ?? '',
-                    'score' => (int) ($payload['score'] ?? 0),
-                    'total' => (int) ($payload['total'] ?? 0),
-                ]);
-            default:
-                return '';
+    public function build_review_message(array $payload): string {
+        $questionsjson = $payload['questionsjson'] ?? '';
+        $bestjson = $payload['bestattemptjson'] ?? '';
+
+        $questions = json_decode($questionsjson, true);
+        $bestattempt = json_decode($bestjson, true);
+
+        if (!is_array($questions) || $questions === []) {
+            return '';
         }
+        if (!is_array($bestattempt)) {
+            $bestattempt = [];
+        }
+
+        $total = (int) ($payload['total'] ?? count($questions));
+        $exitscore = (int) ($payload['exitscore'] ?? ($bestattempt['score'] ?? 0));
+        $title = (string) ($payload['title'] ?? '');
+        $bestscore = (int) ($bestattempt['score'] ?? 0);
+
+        $review = practice_quiz_review_builder::build(
+            $questions,
+            $bestattempt,
+            [
+                'score' => $exitscore,
+                'total' => $total,
+            ],
+            $title
+        );
+
+        $review['instructions'] = get_string('quiz_review_ai_instructions', 'block_dixeo_tutor', (object) [
+            'title' => $title,
+            'score' => $bestscore,
+            'total' => $total,
+        ]);
+
+        $json = json_encode($review, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        if ($json === false) {
+            return '';
+        }
+
+        return tutor_message_helper::wrap_practice_quiz_review($json);
     }
 }
