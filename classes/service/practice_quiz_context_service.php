@@ -52,7 +52,7 @@ class practice_quiz_context_service {
             return null;
         }
 
-        $message = $this->build_review_message($payload);
+        $message = $this->build_review_message($payload, $courseid);
         if ($message === '') {
             return null;
         }
@@ -74,9 +74,10 @@ class practice_quiz_context_service {
      * Build a wrapped practice-quiz-review message from client payload.
      *
      * @param array $payload Must include title, questionsjson, bestattemptjson; optional exitscore, total.
+     * @param int $courseid Course ID for feedback formatting context.
      * @return string
      */
-    public function build_review_message(array $payload): string {
+    public function build_review_message(array $payload, int $courseid = 0): string {
         $questionsjson = $payload['questionsjson'] ?? '';
         $bestjson = $payload['bestattemptjson'] ?? '';
 
@@ -95,6 +96,11 @@ class practice_quiz_context_service {
         $title = (string) ($payload['title'] ?? '');
         $bestscore = (int) ($bestattempt['score'] ?? 0);
 
+        $context = null;
+        if ($courseid > 0) {
+            $context = \context_course::instance($courseid);
+        }
+
         $review = practice_quiz_review_builder::build(
             $questions,
             $bestattempt,
@@ -102,7 +108,8 @@ class practice_quiz_context_service {
                 'score' => $exitscore,
                 'total' => $total,
             ],
-            $title
+            $title,
+            $context
         );
 
         $review['instructions'] = get_string('quiz_review_ai_instructions', 'block_dixeo_tutor', (object) [
@@ -111,11 +118,45 @@ class practice_quiz_context_service {
             'total' => $total,
         ]);
 
-        $json = json_encode($review, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        if ($json === false) {
+        $json = $this->encode_review_within_limit($review);
+        if ($json === '') {
             return '';
         }
 
         return tutor_message_helper::wrap_practice_quiz_review($json);
+    }
+
+    /**
+     * Encode the review payload, progressively shrinking it to fit the message limit.
+     * Truncating encoded JSON would corrupt it, so instead drop optional detail:
+     * pretty-printing first, then per-question feedback HTML, then the question
+     * breakdown entirely (scores and instructions always remain).
+     *
+     * @param array $review Review payload from {@see practice_quiz_review_builder::build()}.
+     * @return string Valid JSON within the limit, or '' on encoding failure.
+     */
+    private function encode_review_within_limit(array $review): string {
+        $json = json_encode($review, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        if ($json !== false && tutor_message_helper::practice_quiz_review_fits($json)) {
+            return $json;
+        }
+
+        $json = json_encode($review, JSON_UNESCAPED_UNICODE);
+        if ($json !== false && tutor_message_helper::practice_quiz_review_fits($json)) {
+            return $json;
+        }
+
+        foreach ($review['questions'] as $i => $item) {
+            unset($review['questions'][$i]['feedbackHtml']);
+        }
+        $json = json_encode($review, JSON_UNESCAPED_UNICODE);
+        if ($json !== false && tutor_message_helper::practice_quiz_review_fits($json)) {
+            return $json;
+        }
+
+        $review['questions'] = [];
+        $json = json_encode($review, JSON_UNESCAPED_UNICODE);
+
+        return $json === false ? '' : $json;
     }
 }

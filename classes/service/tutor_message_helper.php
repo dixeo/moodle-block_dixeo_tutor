@@ -58,7 +58,21 @@ class tutor_message_helper {
     }
 
     /**
+     * Whether a JSON payload fits within the review message limit once wrapped.
+     *
+     * @param string $json JSON payload candidate.
+     * @return bool
+     */
+    public static function practice_quiz_review_fits(string $json): bool {
+        $wrapperopen = '<' . self::REVIEW_TAG . ' version="1">' . "\n";
+        $wrapperclose = "\n" . '</' . self::REVIEW_TAG . '>';
+        return strlen($wrapperopen . $json . $wrapperclose) <= self::MAX_PRACTICE_QUIZ_REVIEW_LENGTH;
+    }
+
+    /**
      * Wrap a JSON practice quiz review for tutor API submission (visible in chat until rendered).
+     * Never truncates: cutting mid-JSON would corrupt the payload and break the
+     * client renderer. Callers must size the payload via {@see practice_quiz_review_fits()}.
      *
      * @param string $json Pretty-printed or compact JSON payload.
      * @return string
@@ -66,10 +80,6 @@ class tutor_message_helper {
     public static function wrap_practice_quiz_review(string $json): string {
         $wrapperopen = '<' . self::REVIEW_TAG . ' version="1">' . "\n";
         $wrapperclose = "\n" . '</' . self::REVIEW_TAG . '>';
-        $maxinner = self::MAX_PRACTICE_QUIZ_REVIEW_LENGTH - strlen($wrapperopen) - strlen($wrapperclose);
-        if ($maxinner > 0 && strlen($json) > $maxinner) {
-            $json = \core_text::substr($json, 0, $maxinner);
-        }
 
         return $wrapperopen . $json . $wrapperclose;
     }
