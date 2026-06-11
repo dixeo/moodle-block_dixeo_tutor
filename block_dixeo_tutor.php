@@ -143,6 +143,15 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
+     * Whether mod_simplequiz2 is installed (practice quiz UI dependency).
+     *
+     * @return bool
+     */
+    public static function is_simplequiz2_available(): bool {
+        return \local_dixeo\service\plugin_installation_service::is_component_installed('mod_simplequiz2');
+    }
+
+    /**
      * Initialize the block with its title and basic settings.
      *
      * @return void
@@ -198,11 +207,16 @@ class block_dixeo_tutor extends block_base {
             $currentcmid = (int) $this->page->context->instanceid;
         }
 
+        $simplequiz2available = self::is_simplequiz2_available();
+
         $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', [
             'coursename' => format_string($this->page->course->fullname, true, ['context' => \context_course::instance($courseid)]),
             'currentcmid' => $currentcmid,
+            'simplequiz2available' => $simplequiz2available,
         ]);
-        $this->page->requires->css('/mod/simplequiz2/styles.css');
+        if ($simplequiz2available) {
+            $this->page->requires->css('/mod/simplequiz2/styles.css');
+        }
         $displaymode = get_config('block_dixeo_tutor', 'displaymode');
         if ($displaymode === false) {
             $displaymode = 'popup';
@@ -223,6 +237,7 @@ class block_dixeo_tutor extends block_base {
             $hidetooltip,
             !empty($readstate['hasunread']),
             (int) ($readstate['lastread'] ?? 0),
+            $simplequiz2available,
         ]);
         return $this->content;
     }
