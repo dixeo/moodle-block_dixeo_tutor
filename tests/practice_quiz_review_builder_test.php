@@ -39,6 +39,10 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
      * Build review payload from questions and best attempt.
      */
     public function test_build_review_payload(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+
         $questions = [
             (object) [
                 'text' => '<p>What is a cell?</p>',
@@ -73,7 +77,8 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
             $questions,
             $bestattempt,
             ['score' => 0, 'total' => 2],
-            'Cell biology'
+            'Cell biology',
+            $context
         );
 
         $this->assertSame('practice_quiz_review', $review['schema']);
@@ -101,6 +106,7 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
      */
     public function test_build_review_message_includes_instructions(): void {
         $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
 
         $questions = json_encode([
             (object) [
@@ -127,7 +133,7 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
             ]),
             'exitscore' => 1,
             'total' => 1,
-        ]);
+        ], (int) $course->id);
 
         preg_match('/<practice-quiz-review[^>]*>([\s\S]*?)<\/practice-quiz-review>/', $wrapped, $matches);
         $decoded = json_decode(trim($matches[1]), true);
