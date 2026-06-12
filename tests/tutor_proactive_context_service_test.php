@@ -129,7 +129,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertEquals($firstmessage, $record->message);
-        $this->assertStringNotContainsString('returning to this course', $record->message);
+        $this->assertStringNotContainsString('continuing with this course', $record->message);
     }
 
     public function test_return_after_24h_appends_welcome_back_line(): void {
@@ -143,8 +143,22 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertStringContainsString('returning to this course', $record->message);
-        $this->assertStringContainsString('Welcome me back', $record->message);
+        $this->assertStringContainsString('continuing with this course', $record->message);
+        $this->assertStringContainsString('Do not mention time away', $record->message);
+    }
+
+    public function test_return_after_long_gap_uses_delighted_tone(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
+
+        $this->set_last_proactive_course_view((int) $user->id, (int) $course->id, time() - (31 * DAYSECS));
+
+        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
+
+        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
+        $this->assertStringContainsString('especially warm, enthusiastic welcome', $record->message);
     }
 
     public function test_flush_clears_message_and_submits(): void {

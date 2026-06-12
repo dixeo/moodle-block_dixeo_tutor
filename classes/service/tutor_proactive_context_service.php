@@ -49,6 +49,12 @@ class tutor_proactive_context_service {
     /** @var int Minimum gap between return-visit proactive lines. */
     private const RETURN_VISIT_GAP = 86400;
 
+    /** @var int Elapsed time above which return-visit tone becomes enthusiastic. */
+    private const RETURN_VISIT_ENTHUSIASTIC = 7 * DAYSECS;
+
+    /** @var int Elapsed time above which return-visit tone becomes especially warm. */
+    private const RETURN_VISIT_DELIGHTED = 30 * DAYSECS;
+
     /** @var int Maximum message length accepted by tutor send_message. */
     private const MAX_MESSAGE_LENGTH = 2000;
 
@@ -88,11 +94,9 @@ class tutor_proactive_context_service {
                 'name' => $this->get_user_proactive_name($userid),
             ]));
         } else if (($now - $lastproactive) >= self::RETURN_VISIT_GAP) {
-            $duration = $this->format_duration_for_user($now - $lastproactive, $userid);
-            $this->append_line(
-                $record,
-                $this->proactive_string('proactive_return_visit', $userid, $duration)
-            );
+            $elapsed = $now - $lastproactive;
+            $stringid = $this->get_return_visit_string_id($elapsed);
+            $this->append_line($record, $this->proactive_string($stringid, $userid));
         }
 
         $messagelenafter = strlen(trim((string) ($record->message ?? '')));
@@ -356,20 +360,20 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Human-readable duration for proactive return-visit lines (user language).
+     * Lang string id for a return visit, scaled by time since last course view.
+     * Duration is not passed to the AI — only the desired welcome tone.
      *
-     * @param int $seconds Elapsed seconds since last access.
-     * @param int $userid
+     * @param int $elapsed Seconds since last proactive course-view line.
      * @return string
      */
-    private function format_duration_for_user(int $seconds, int $userid): string {
-        $lang = $this->resolve_user_language($userid);
-        $sm = get_string_manager();
-        $str = new \stdClass();
-        foreach (['day', 'days', 'hour', 'hours', 'min', 'mins', 'sec', 'secs', 'year', 'years'] as $unit) {
-            $str->{$unit} = $sm->get_string($unit, 'moodle', null, $lang);
+    private function get_return_visit_string_id(int $elapsed): string {
+        if ($elapsed >= self::RETURN_VISIT_DELIGHTED) {
+            return 'proactive_return_visit_delighted';
         }
-        return format_time($seconds, $str);
+        if ($elapsed >= self::RETURN_VISIT_ENTHUSIASTIC) {
+            return 'proactive_return_visit_enthusiastic';
+        }
+        return 'proactive_return_visit_warm';
     }
 
     /**
