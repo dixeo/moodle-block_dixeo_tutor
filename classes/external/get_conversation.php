@@ -26,6 +26,7 @@
 namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\event\conversation_viewed;
+use block_dixeo_tutor\service\tutor_message_format_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
@@ -52,12 +53,12 @@ class get_conversation extends external_api {
     }
 
     /**
-     * Get conversation history for the current user in a course.
+     * Execute the web service.
      *
-     * @param int $courseid The course ID.
-     * @param string $sinceid Optional message ID cursor for newer messages.
-     * @param int $offset Optional offset for loading older message pages.
-     * @return array Array with messages key containing message objects.
+     * @param int $courseid
+     * @param string $sinceid
+     * @param int $offset
+     * @return array
      */
     public static function execute(int $courseid, string $sinceid = '', int $offset = 0): array {
         global $USER;
@@ -81,6 +82,8 @@ class get_conversation extends external_api {
                 50,
                 $params['offset']
             );
+
+            $messages = tutor_message_format_service::add_display_html($messages, $context);
 
             conversation_viewed::create_for_course(
                 (int) $params['courseid'],
@@ -111,6 +114,7 @@ class get_conversation extends external_api {
                     'id' => new external_value(PARAM_RAW, 'Message UUID'),
                     'role' => new external_value(PARAM_ALPHA, 'Message role (user or assistant)'),
                     'content' => new external_value(PARAM_RAW, 'Message content'),
+                    'contenthtml' => new external_value(PARAM_RAW, 'Filtered HTML for display', VALUE_DEFAULT, ''),
                     'time' => new external_value(PARAM_INT, 'Unix timestamp'),
                 ])
             ),
