@@ -89,4 +89,11 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_set_tutor_mode' => [
+        'classname'   => '\block_dixeo_tutor\external\set_tutor_mode',
+        'description' => 'Set the tutor mode preference for the current user in a course',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
 ];
