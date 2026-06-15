@@ -209,10 +209,17 @@ class block_dixeo_tutor extends block_base {
 
         $simplequiz2available = self::is_simplequiz2_available();
 
+        $modeservice = new \block_dixeo_tutor\service\tutor_mode_service();
+        $modeselector = \block_dixeo_tutor\service\tutor_mode_helper::export_mode_selector(
+            $OUTPUT,
+            $modeservice->get_mode((int) $USER->id, $courseid),
+            $simplequiz2available
+        );
+
         $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', [
             'coursename' => format_string($this->page->course->fullname, true, ['context' => \context_course::instance($courseid)]),
             'currentcmid' => $currentcmid,
-            'simplequiz2available' => $simplequiz2available,
+            'mode_selector' => $modeselector,
         ]);
         if ($simplequiz2available) {
             $this->page->requires->css('/mod/simplequiz2/styles.css');
