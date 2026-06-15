@@ -27,11 +27,15 @@ namespace block_dixeo_tutor\service;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
 use local_dixeo\external\service_factory;
+use local_dixeo\dto\tutor_message;
 
 /**
  * Builds and submits practice-quiz review context to the tutor API.
  */
 class practice_quiz_context_service {
+    /** @var int Maximum encoded JSON length for review context objects. */
+    public const MAX_CONTEXT_JSON_LENGTH = 16000;
+
     /**
      * Submit a practice quiz review to the tutor.
      *
@@ -52,17 +56,30 @@ class practice_quiz_context_service {
             return null;
         }
 
-        $message = $this->build_review_message($payload, $courseid);
-        if ($message === '') {
+        $context = $this->build_review_context($payload, $courseid);
+        if ($context === null) {
             return null;
         }
 
+        $instructions = isset($context['instructions']) ? (string) $context['instructions'] : null;
+        unset($context['instructions']);
+
+        $title = trim((string) ($payload['title'] ?? ''));
+        $visiblemessage = $title !== ''
+            ? $title
+            : get_string('practice_quiz_default_title', 'local_dixeo');
+
         try {
-            return service_factory::get_tutor_service()->submit_message(
+            return service_factory::get_tutor_service()->submit(
                 $courseid,
                 $userid,
-                $message,
-                $pageurl
+                tutor_message::system(
+                    $context,
+                    $visiblemessage,
+                    $instructions,
+                    true
+                ),
+                tutor_message::MODE_QUIZ
             );
         } catch (api_exception $e) {
             debugging('practice_quiz_context submit failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
@@ -71,13 +88,13 @@ class practice_quiz_context_service {
     }
 
     /**
-     * Build a wrapped practice-quiz-review message from client payload.
+     * Build structured review context from client payload.
      *
      * @param array $payload Must include title, questionsjson, bestattemptjson; optional exitscore, total.
      * @param int $courseid Course ID for feedback formatting context.
-     * @return string
+     * @return array|null Review context object or null when invalid.
      */
-    public function build_review_message(array $payload, int $courseid = 0): string {
+    public function build_review_context(array $payload, int $courseid = 0): ?array {
         $questionsjson = $payload['questionsjson'] ?? '';
         $bestjson = $payload['bestattemptjson'] ?? '';
 
@@ -85,7 +102,7 @@ class practice_quiz_context_service {
         $bestattempt = json_decode($bestjson, true);
 
         if (!is_array($questions) || $questions === []) {
-            return '';
+            return null;
         }
         if (!is_array($bestattempt)) {
             $bestattempt = [];
@@ -118,45 +135,47 @@ class practice_quiz_context_service {
             'total' => $total,
         ]);
 
-        $json = $this->encode_review_within_limit($review);
-        if ($json === '') {
-            return '';
-        }
-
-        return tutor_message_helper::wrap_practice_quiz_review($json);
+        return $this->shrink_review_context($review);
     }
 
     /**
-     * Encode the review payload, progressively shrinking it to fit the message limit.
-     * Truncating encoded JSON would corrupt it, so instead drop optional detail:
-     * pretty-printing first, then per-question feedback HTML, then the question
-     * breakdown entirely (scores and instructions always remain).
+     * Progressively shrink review context until encoded JSON fits the limit.
      *
      * @param array $review Review payload from {@see practice_quiz_review_builder::build()}.
-     * @return string Valid JSON within the limit, or '' on encoding failure.
+     * @return array|null
      */
-    private function encode_review_within_limit(array $review): string {
+    private function shrink_review_context(array $review): ?array {
         $json = json_encode($review, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        if ($json !== false && tutor_message_helper::practice_quiz_review_fits($json)) {
-            return $json;
+        if ($json !== false && $this->context_fits($json)) {
+            return $review;
         }
 
         $json = json_encode($review, JSON_UNESCAPED_UNICODE);
-        if ($json !== false && tutor_message_helper::practice_quiz_review_fits($json)) {
-            return $json;
+        if ($json !== false && $this->context_fits($json)) {
+            return $review;
         }
 
         foreach ($review['questions'] as $i => $item) {
             unset($review['questions'][$i]['feedbackHtml']);
         }
         $json = json_encode($review, JSON_UNESCAPED_UNICODE);
-        if ($json !== false && tutor_message_helper::practice_quiz_review_fits($json)) {
-            return $json;
+        if ($json !== false && $this->context_fits($json)) {
+            return $review;
         }
 
         $review['questions'] = [];
         $json = json_encode($review, JSON_UNESCAPED_UNICODE);
 
-        return $json === false ? '' : $json;
+        return ($json !== false && $this->context_fits($json)) ? $review : null;
+    }
+
+    /**
+     * Whether encoded context JSON fits the size limit.
+     *
+     * @param string $json Encoded context JSON.
+     * @return bool
+     */
+    private function context_fits(string $json): bool {
+        return strlen($json) <= self::MAX_CONTEXT_JSON_LENGTH;
     }
 }

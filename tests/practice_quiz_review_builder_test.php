@@ -26,13 +26,12 @@ namespace block_dixeo_tutor;
 
 use block_dixeo_tutor\service\practice_quiz_review_builder;
 use block_dixeo_tutor\service\practice_quiz_context_service;
-use block_dixeo_tutor\service\tutor_message_helper;
 
 /**
  * Tests for practice quiz review builder.
  *
  * @covers \block_dixeo_tutor\service\practice_quiz_review_builder
- * @covers \block_dixeo_tutor\service\tutor_message_helper::wrap_practice_quiz_review
+ * @covers \block_dixeo_tutor\service\practice_quiz_context_service
  */
 final class practice_quiz_review_builder_test extends \advanced_testcase {
     /**
@@ -122,7 +121,7 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
         ]);
 
         $service = new practice_quiz_context_service();
-        $wrapped = $service->build_review_message([
+        $context = $service->build_review_context([
             'title' => 'Sample quiz',
             'questionsjson' => $questions,
             'bestattemptjson' => json_encode([
@@ -135,31 +134,44 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
             'total' => 1,
         ], (int) $course->id);
 
-        preg_match('/<practice-quiz-review[^>]*>([\s\S]*?)<\/practice-quiz-review>/', $wrapped, $matches);
-        $decoded = json_decode(trim($matches[1]), true);
-
-        $this->assertArrayHasKey('instructions', $decoded);
-        $this->assertStringContainsString('Sample quiz', $decoded['instructions']);
-        $this->assertStringContainsString('1/1', $decoded['instructions']);
+        $this->assertIsArray($context);
+        $this->assertArrayHasKey('instructions', $context);
+        $this->assertStringContainsString('Sample quiz', $context['instructions']);
+        $this->assertStringContainsString('1/1', $context['instructions']);
     }
 
     /**
-     * Wrapped review message uses practice-quiz-review tag and round-trips JSON.
+     * Review context object matches the practice quiz review schema.
      */
-    public function test_wrap_practice_quiz_review(): void {
-        $json = json_encode(['schema' => 'practice_quiz_review', 'version' => 1], JSON_PRETTY_PRINT);
-        $wrapped = tutor_message_helper::wrap_practice_quiz_review($json);
+    public function test_build_review_context_schema(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
 
-        $this->assertStringStartsWith('<practice-quiz-review version="1">', $wrapped);
-        $this->assertStringEndsWith('</practice-quiz-review>', $wrapped);
-        $this->assertStringContainsString('"schema": "practice_quiz_review"', $wrapped);
+        $service = new practice_quiz_context_service();
+        $context = $service->build_review_context([
+            'title' => 'Sample quiz',
+            'questionsjson' => json_encode([
+                (object) [
+                    'text' => 'Sample question?',
+                    'correctfeedback' => '',
+                    'incorrectfeedback' => '',
+                    'partiallycorrectfeedback' => '',
+                    'answers' => [
+                        (object) ['text' => 'Yes', 'iscorrect' => 1],
+                    ],
+                ],
+            ]),
+            'bestattemptjson' => json_encode([
+                'score' => 1,
+                'total' => 1,
+                'answerResults' => [true],
+                'selectedAnswerIds' => [[0]],
+            ]),
+            'exitscore' => 1,
+            'total' => 1,
+        ], (int) $course->id);
 
-        $this->assertMatchesRegularExpression(
-            '/<practice-quiz-review version="1">\s*([\s\S]*?)\s*<\/practice-quiz-review>/',
-            $wrapped
-        );
-        preg_match('/<practice-quiz-review[^>]*>([\s\S]*?)<\/practice-quiz-review>/', $wrapped, $matches);
-        $decoded = json_decode(trim($matches[1]), true);
-        $this->assertSame('practice_quiz_review', $decoded['schema']);
+        $this->assertSame('practice_quiz_review', $context['schema']);
+        $this->assertSame(1, $context['version']);
     }
 }

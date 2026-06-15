@@ -28,14 +28,17 @@ use core\event\course_completed;
 use core\event\course_viewed;
 use core\event\user_graded;
 use grade_item;
+use block_dixeo_tutor\service\tutor_context_schema;
+use block_dixeo_tutor\service\tutor_mode_service;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
+use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
 
 /**
  * Manages per-user, per-course queued context for proactive tutor messages.
  *
- * Proactive lines are always queued in the DB. They are sent to the API only when:
+ * Proactive events are queued as JSON in the DB. They are sent to the API only when:
  * - the tutor UI loads on a page where the block would render (client flush), or
  * - an event fires during a request where {@see \block_dixeo_tutor::is_tutor_available_on_page()} is true.
  *
@@ -55,16 +58,11 @@ class tutor_proactive_context_service {
     /** @var int Elapsed time above which return-visit tone becomes especially warm. */
     private const RETURN_VISIT_DELIGHTED = 30 * DAYSECS;
 
-    /** @var int Maximum message length accepted by tutor send_message. */
-    private const MAX_MESSAGE_LENGTH = 2000;
+    /** @var int Maximum encoded queue length stored in the pending table. */
+    private const MAX_QUEUE_LENGTH = 2000;
 
     /** @var string User preference prefix: last time a course-view proactive line was queued (per course). */
     public const PREF_LAST_PROACTIVE_PREFIX = 'block_dixeo_tutor_lastproactive_';
-
-    /**
-     * Wrapper tag for proactive lines sent to the tutor API (system context, not user chat).
-     */
-    public const PROACTIVE_CONTEXT_TAG = 'proactive-context';
 
     /** @var array<int, bool> Grade record ids processed in this request (debounce). */
     private static array $processedgrades = [];
@@ -87,20 +85,23 @@ class tutor_proactive_context_service {
         // First/return timing uses user_preferences (not user_lastaccess — that is updated in require_login).
         $lastproactive = $this->get_last_proactive_course_view($userid, $courseid);
         $record = $this->get_or_create_record($userid, $courseid, $now);
-        $messagelenbefore = strlen(trim((string) ($record->message ?? '')));
+        $eventsbefore = count($this->decode_queue((string) ($record->message ?? '')));
 
         if ($lastproactive === 0) {
-            $this->append_line($record, $this->proactive_string('proactive_first_visit', $userid, (object) [
+            $this->append_event($record, [
+                'type' => 'first_visit',
+                'time' => $now,
                 'name' => $this->get_user_proactive_name($userid),
-            ]));
+            ]);
         } else if (($now - $lastproactive) >= self::RETURN_VISIT_GAP) {
-            $elapsed = $now - $lastproactive;
-            $stringid = $this->get_return_visit_string_id($elapsed);
-            $this->append_line($record, $this->proactive_string($stringid, $userid));
+            $this->append_event($record, [
+                'type' => $this->get_return_visit_event_type($now - $lastproactive),
+                'time' => $now,
+            ]);
         }
 
-        $messagelenafter = strlen(trim((string) ($record->message ?? '')));
-        if ($messagelenafter > $messagelenbefore) {
+        $eventsafter = count($this->decode_queue((string) ($record->message ?? '')));
+        if ($eventsafter > $eventsbefore) {
             $this->mark_proactive_course_view($userid, $courseid, $now);
         }
 
@@ -125,7 +126,10 @@ class tutor_proactive_context_service {
         }
 
         $record = $this->get_or_create_record($userid, $courseid, time());
-        $this->append_line($record, $this->proactive_string('proactive_course_completed', $userid));
+        $this->append_event($record, [
+            'type' => 'course_completed',
+            'time' => time(),
+        ]);
         $this->save_record($record);
 
         // Defer flush to tutor UI (same as course_viewed). Server-side flush empties the queue
@@ -179,14 +183,15 @@ class tutor_proactive_context_service {
             $maxgrade = 100;
         }
         $score = (float) $finalgrade;
-        $line = $this->proactive_string('proactive_quiz_graded', $userid, (object) [
+
+        $record = $this->get_or_create_record($userid, $courseid, time());
+        $this->append_event($record, [
+            'type' => 'quiz_graded',
+            'time' => time(),
             'quizname' => $quizname,
             'grade' => format_float($score, 0),
             'maxgrade' => format_float($maxgrade, 0),
         ]);
-
-        $record = $this->get_or_create_record($userid, $courseid, time());
-        $this->append_line($record, $line);
         $this->save_record($record);
 
         if ($this->should_flush_immediately($userid, $courseid)) {
@@ -203,6 +208,7 @@ class tutor_proactive_context_service {
      * @param int $courseid The course id.
      * @param string $pageurl Optional page URL for context.
      * @return operation_result|null Null when queue empty or user cannot use tutor.
+     * @throws api_exception When the remote tutor API rejects the submit payload.
      */
     public function flush(
         int $userid,
@@ -218,23 +224,38 @@ class tutor_proactive_context_service {
             return null;
         }
 
-        $message = trim((string) ($record->message ?? ''));
-        if ($message === '') {
+        $events = $this->decode_queue((string) ($record->message ?? ''));
+        if ($events === []) {
             return null;
         }
 
-        $message = tutor_message_helper::wrap_system_context($message);
+        $instructions = $this->build_instructions_from_events($events, $userid);
+        if ($instructions === '') {
+            return null;
+        }
+
+        if (strlen($instructions) > self::MAX_QUEUE_LENGTH) {
+            $instructions = \core_text::substr($instructions, 0, self::MAX_QUEUE_LENGTH);
+        }
+
+        $now = time();
+        $modeservice = new tutor_mode_service();
+        $mode = $modeservice->get_mode($userid, $courseid);
 
         try {
-            $result = service_factory::get_tutor_service()->submit_message(
+            $result = service_factory::get_tutor_service()->submit(
                 $courseid,
                 $userid,
-                $message,
-                $pageurl
+                tutor_message::system(
+                    tutor_context_schema::proactive_context($events, $userid, $courseid, $now),
+                    '',
+                    $instructions,
+                    true
+                ),
+                $mode
             );
         } catch (api_exception $e) {
-            debugging('tutor_proactive_context flush failed: ' . $e->getMessage(), DEBUG_DEVELOPER);
-            return null;
+            throw $e;
         }
 
         $record->message = '';
@@ -310,7 +331,7 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Given name for first-person proactive lines (firstname, else full name).
+     * Given name for proactive context (firstname, else full name).
      *
      * @param int $userid
      * @return string
@@ -347,7 +368,7 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Proactive context line in the user's preferred language.
+     * Proactive instruction line in the user's preferred language.
      *
      * @param string $identifier Lang string identifier in this block.
      * @param int $userid User receiving the proactive message.
@@ -360,20 +381,19 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Lang string id for a return visit, scaled by time since last course view.
-     * Duration is not passed to the AI — only the desired welcome tone.
+     * Event type for a return visit, scaled by time since last course view.
      *
      * @param int $elapsed Seconds since last proactive course-view line.
      * @return string
      */
-    private function get_return_visit_string_id(int $elapsed): string {
+    private function get_return_visit_event_type(int $elapsed): string {
         if ($elapsed >= self::RETURN_VISIT_DELIGHTED) {
-            return 'proactive_return_visit_delighted';
+            return 'return_visit_delighted';
         }
         if ($elapsed >= self::RETURN_VISIT_ENTHUSIASTIC) {
-            return 'proactive_return_visit_enthusiastic';
+            return 'return_visit_enthusiastic';
         }
-        return 'proactive_return_visit_warm';
+        return 'return_visit_warm';
     }
 
     /**
@@ -400,20 +420,147 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Append a line to the record message field.
+     * Decode queued proactive events from the pending record message field.
      *
-     * @param \stdClass $record
-     * @param string $line
+     * @param string $raw
+     * @return array
+     */
+    public function decode_queue(string $raw): array {
+        $raw = trim($raw);
+        if ($raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded) && $this->is_event_list($decoded)) {
+            return $decoded;
+        }
+
+        return [];
+    }
+
+    /**
+     * Whether the value is a list of proactive events.
+     *
+     * @param array $events
+     * @return bool
+     */
+    private function is_event_list(array $events): bool {
+        if ($events === []) {
+            return true;
+        }
+
+        foreach ($events as $event) {
+            if (!is_array($event)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Encode proactive events for storage in the pending table.
+     *
+     * @param array $events Queued proactive events.
+     * @return string
+     */
+    private function encode_queue(array $events): string {
+        $json = json_encode($events, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            return '[]';
+        }
+
+        if (strlen($json) <= self::MAX_QUEUE_LENGTH) {
+            return $json;
+        }
+
+        while (count($events) > 1 && strlen(json_encode($events, JSON_UNESCAPED_UNICODE)) > self::MAX_QUEUE_LENGTH) {
+            array_shift($events);
+        }
+
+        $json = json_encode($events, JSON_UNESCAPED_UNICODE);
+        if ($json === false) {
+            return '[]';
+        }
+
+        if (strlen($json) > self::MAX_QUEUE_LENGTH) {
+            return \core_text::substr($json, 0, self::MAX_QUEUE_LENGTH);
+        }
+
+        return $json;
+    }
+
+    /**
+     * Append a structured event to the pending queue.
+     *
+     * @param \stdClass $record Pending context row.
+     * @param array $event Structured proactive event.
      * @return void
      */
-    private function append_line(\stdClass $record, string $line): void {
-        $line = trim($line);
-        if ($line === '') {
+    private function append_event(\stdClass $record, array $event): void {
+        if (empty($event['type'])) {
             return;
         }
-        $existing = trim((string) ($record->message ?? ''));
-        $record->message = $existing === '' ? $line : $existing . "\n\n" . $line;
+
+        $events = $this->decode_queue((string) ($record->message ?? ''));
+        $events[] = $event;
+        $record->message = $this->encode_queue($events);
         $record->timemodified = time();
+    }
+
+    /**
+     * Build combined AI instructions from queued proactive events.
+     *
+     * @param array $events Queued proactive events.
+     * @param int $userid User id for language resolution.
+     * @return string
+     */
+    private function build_instructions_from_events(array $events, int $userid): string {
+        $lines = [];
+
+        foreach ($events as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+
+            $type = (string) ($event['type'] ?? '');
+            if ($type === '') {
+                continue;
+            }
+
+            $a = $this->instruction_placeholders($type, $event);
+            $lines[] = $this->proactive_string('proactive_' . $type, $userid, $a);
+        }
+
+        return trim(implode("\n\n", array_filter($lines, static function (string $line): bool {
+            return trim($line) !== '';
+        })));
+    }
+
+    /**
+     * Build placeholders for a proactive instruction string.
+     *
+     * @param string $type Proactive event type.
+     * @param array $event Structured proactive event.
+     * @return object|null
+     */
+    private function instruction_placeholders(string $type, array $event): ?object {
+        if ($type === 'first_visit') {
+            return (object) [
+                'name' => (string) ($event['name'] ?? get_string('proactive_default_name', 'block_dixeo_tutor')),
+            ];
+        }
+
+        if ($type === 'quiz_graded') {
+            return (object) [
+                'quizname' => (string) ($event['quizname'] ?? ''),
+                'grade' => (string) ($event['grade'] ?? ''),
+                'maxgrade' => (string) ($event['maxgrade'] ?? ''),
+            ];
+        }
+
+        return null;
     }
 
     /**

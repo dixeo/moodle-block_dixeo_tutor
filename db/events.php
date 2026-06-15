@@ -28,19 +28,19 @@ $observers = [
     [
         'eventname' => '\core\event\course_viewed',
         'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_viewed',
-        'internal' => false,
+        'internal' => true,
         'priority' => 0,
     ],
     [
         'eventname' => '\core\event\course_completed',
         'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_completed',
-        'internal' => false,
+        'internal' => true,
         'priority' => 0,
     ],
     [
         'eventname' => '\core\event\user_graded',
         'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::user_graded',
-        'internal' => false,
+        'internal' => true,
         'priority' => 0,
     ],
 ];
