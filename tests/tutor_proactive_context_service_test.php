@@ -25,6 +25,7 @@
 
 namespace block_dixeo_tutor;
 
+use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use local_dixeo\dto\operation_result;
 use local_dixeo\external\service_factory;
@@ -100,17 +101,31 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         );
     }
 
+    /**
+     * Decode pending proactive events from storage.
+     *
+     * @param int $userid
+     * @param int $courseid
+     * @return array
+     */
+    private function decode_pending_events(int $userid, int $courseid): array {
+        $record = $this->get_pending_record($userid, $courseid);
+        if ($record === null) {
+            return [];
+        }
+        return $this->service->decode_queue((string) ($record->message ?? ''));
+    }
+
     public function test_first_course_view_appends_welcome(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
         $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertNotNull($record);
-        $this->assertStringNotContainsString('<proactive-context', $record->message);
-        $this->assertStringContainsString($user->firstname, $record->message);
-        $this->assertStringContainsString('first time opening this course', $record->message);
+        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertCount(1, $events);
+        $this->assertSame('first_visit', $events[0]['type']);
+        $this->assertSame($user->firstname, $events[0]['name']);
     }
 
     public function test_second_view_within_24h_does_not_append_return_line(): void {
@@ -119,17 +134,16 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertNotNull($record);
-        $firstmessage = $record->message;
+        $firstevents = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertCount(1, $firstevents);
 
         // First view already set the preference to now; no second line within 24h.
 
         $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertEquals($firstmessage, $record->message);
-        $this->assertStringNotContainsString('continuing with this course', $record->message);
+        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertCount(1, $events);
+        $this->assertSame('first_visit', $events[0]['type']);
     }
 
     public function test_return_after_24h_appends_welcome_back_line(): void {
@@ -142,9 +156,9 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertStringContainsString('continuing with this course', $record->message);
-        $this->assertStringContainsString('Do not mention time away', $record->message);
+        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertCount(2, $events);
+        $this->assertSame('return_visit_warm', $events[1]['type']);
     }
 
     public function test_return_after_long_gap_uses_delighted_tone(): void {
@@ -157,8 +171,8 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertStringContainsString('especially warm, enthusiastic welcome', $record->message);
+        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertSame('return_visit_delighted', $events[1]['type']);
     }
 
     public function test_flush_clears_message_and_submits(): void {
@@ -168,22 +182,35 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
         $now = time();
+        $events = [['type' => 'course_completed', 'time' => $now]];
         $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
             'userid' => $user->id,
             'courseid' => $course->id,
-            'message' => 'Line one',
+            'message' => json_encode($events),
             'timemodified' => $now,
         ]);
 
         $mock = $this->getMockBuilder(tutor_service::class)
-            ->onlyMethods(['submit_message'])
+            ->onlyMethods(['submit'])
             ->getMock();
-        $expectedpayload = '<proactive-context source="system">' . "\n"
-            . 'Line one' . "\n"
-            . '</proactive-context>';
         $mock->expects($this->once())
-            ->method('submit_message')
-            ->with((int) $course->id, (int) $user->id, $expectedpayload, '')
+            ->method('submit')
+            ->with(
+                (int) $course->id,
+                (int) $user->id,
+                $this->callback(function (\local_dixeo\dto\tutor_message $msg) use ($events, $user, $course): bool {
+                    return $msg->role === \local_dixeo\dto\tutor_message::ROLE_SYSTEM
+                        && ($msg->context['schema'] ?? '') === tutor_context_schema::SCHEMA_PROACTIVE
+                        && ($msg->context['version'] ?? null) === 1
+                        && ($msg->context['events'] ?? null) === $events
+                        && ($msg->context['userid'] ?? null) === (int) $user->id
+                        && ($msg->context['courseid'] ?? null) === (int) $course->id
+                        && $msg->message === ''
+                        && str_contains((string) $msg->instructions, 'completed the course')
+                        && $msg->requireresponse === true;
+                }),
+                $this->anything()
+            )
             ->willReturn(operation_result::pending('test-job-id', 'pending', 0));
         service_factory::set_test_tutor_service($mock);
 
@@ -252,9 +279,9 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $PAGE->blocks->load_blocks();
 
         $mock = $this->getMockBuilder(tutor_service::class)
-            ->onlyMethods(['submit_message'])
+            ->onlyMethods(['submit'])
             ->getMock();
-        $mock->expects($this->never())->method('submit_message');
+        $mock->expects($this->never())->method('submit');
         service_factory::set_test_tutor_service($mock);
 
         $event = \core\event\user_graded::create_from_grade($grade);
@@ -262,9 +289,11 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertNotNull($record);
-        $this->assertStringNotContainsString('<proactive-context', $record->message);
-        $this->assertStringContainsString('Quiz 1', $record->message);
-        $this->assertStringContainsString('80', $record->message);
+        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertCount(1, $events);
+        $this->assertSame('quiz_graded', $events[0]['type']);
+        $this->assertSame('Quiz 1', $events[0]['quizname']);
+        $this->assertStringContainsString('80', $events[0]['grade']);
     }
 
     public function test_user_graded_ignores_assign_module(): void {
@@ -308,9 +337,9 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
         $mock = $this->getMockBuilder(tutor_service::class)
-            ->onlyMethods(['submit_message'])
+            ->onlyMethods(['submit'])
             ->getMock();
-        $mock->expects($this->never())->method('submit_message');
+        $mock->expects($this->never())->method('submit');
         service_factory::set_test_tutor_service($mock);
 
         $context = \context_course::instance((int) $course->id);
@@ -325,6 +354,8 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertNotNull($record);
-        $this->assertStringContainsString('completed the course', $record->message);
+        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertCount(1, $events);
+        $this->assertSame('course_completed', $events[0]['type']);
     }
 }

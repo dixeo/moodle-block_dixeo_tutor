@@ -29,11 +29,14 @@ use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\event\message_sent;
 use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\page_context;
+use block_dixeo_tutor\service\tutor_context_schema;
+use block_dixeo_tutor\service\tutor_mode_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
 use local_dixeo\api\exception\api_exception;
+use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
 
 /**
@@ -83,18 +86,23 @@ class send_message extends external_api {
         if (strlen($message) > 2000) {
             throw new \invalid_parameter_exception('Message cannot exceed 2000 characters');
         }
-        $params['message'] = $message;
 
         // Restrict page context to this Moodle site and drop query/fragment; never trust raw client URLs.
         $pagecontext = page_context::sanitize_pageurl($params['pageurl'] ?? '', (int) $params['courseid']);
+        $modeservice = new tutor_mode_service();
+        $resolvedmode = $modeservice->get_mode((int) $USER->id, $params['courseid']);
 
         try {
             $service = service_factory::get_tutor_service();
-            $result = $service->submit_message(
+            $result = $service->submit(
                 $params['courseid'],
-                $USER->id,
-                $params['message'],
-                $pagecontext
+                (int) $USER->id,
+                new tutor_message(
+                    tutor_message::ROLE_USER,
+                    $message,
+                    tutor_context_schema::page_context($pagecontext)
+                ),
+                $resolvedmode
             );
 
             $payload = $result->to_array();

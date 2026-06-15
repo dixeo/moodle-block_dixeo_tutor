@@ -26,6 +26,7 @@
 namespace block_dixeo_tutor;
 
 use block_dixeo_tutor\service\tutor_read_state_service;
+use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\tutor_service;
 
@@ -63,50 +64,48 @@ final class tutor_read_state_service_test extends \advanced_testcase {
         service_factory::set_test_tutor_service($mock);
     }
 
-    public function test_resolve_page_state_bootstraps_unset_preference_as_read(): void {
+    public function test_get_last_read_returns_zero_when_never_read(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
-        $this->mock_conversation([
-            ['id' => '1', 'role' => 'assistant', 'content' => 'Hello', 'time' => 2000],
-        ]);
-
-        $state = $this->service->resolve_page_state((int) $user->id, (int) $course->id);
-
-        $this->assertFalse($state['hasunread']);
-        $this->assertSame(2001, $state['lastread']);
-        $this->assertSame(2001, $this->service->get_last_read((int) $user->id, (int) $course->id));
+        $this->assertSame(0, $this->service->get_last_read((int) $user->id, (int) $course->id));
     }
 
-    public function test_resolve_page_state_has_unread_when_latest_incoming_is_newer(): void {
+    public function test_get_last_read_returns_stored_value(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->mock_conversation([
-            ['id' => '1', 'role' => 'assistant', 'content' => 'Hello', 'time' => 3000],
-        ]);
-
-        $this->service->set_last_read((int) $user->id, (int) $course->id, 1000);
-
-        $state = $this->service->resolve_page_state((int) $user->id, (int) $course->id);
-
-        $this->assertTrue($state['hasunread']);
-        $this->assertSame(1000, $state['lastread']);
-    }
-
-    public function test_resolve_page_state_no_unread_when_up_to_date(): void {
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->mock_conversation([
-            ['id' => '1', 'role' => 'assistant', 'content' => 'Hello', 'time' => 2000],
-        ]);
 
         $this->service->set_last_read((int) $user->id, (int) $course->id, 2001);
 
-        $state = $this->service->resolve_page_state((int) $user->id, (int) $course->id);
+        $this->assertSame(2001, $this->service->get_last_read((int) $user->id, (int) $course->id));
+    }
 
-        $this->assertFalse($state['hasunread']);
+    public function test_latest_incoming_time_from_messages_uses_last_assistant(): void {
+        $messages = [
+            ['id' => '1', 'role' => tutor_message::ROLE_ASSISTANT, 'content' => 'Hello', 'time' => 2000],
+            ['id' => '2', 'role' => tutor_message::ROLE_USER, 'content' => 'My reply', 'time' => 9000],
+        ];
+
+        $this->assertSame(2000, tutor_read_state_service::latest_incoming_time_from_messages($messages));
+    }
+
+    public function test_latest_incoming_time_from_messages_picks_newest_assistant(): void {
+        $messages = [
+            ['id' => '1', 'role' => tutor_message::ROLE_ASSISTANT, 'content' => 'First', 'time' => 2000],
+            ['id' => '2', 'role' => tutor_message::ROLE_USER, 'content' => 'Reply', 'time' => 3000],
+            ['id' => '3', 'role' => tutor_message::ROLE_ASSISTANT, 'content' => 'Second', 'time' => 4000],
+        ];
+
+        $this->assertSame(4000, tutor_read_state_service::latest_incoming_time_from_messages($messages));
+    }
+
+    public function test_latest_incoming_time_from_messages_ignores_system_messages(): void {
+        $messages = [
+            ['id' => '1', 'role' => tutor_message::ROLE_SYSTEM, 'content' => '', 'time' => 9000],
+            ['id' => '2', 'role' => tutor_message::ROLE_ASSISTANT, 'content' => 'Hello', 'time' => 2000],
+        ];
+
+        $this->assertSame(2000, tutor_read_state_service::latest_incoming_time_from_messages($messages));
     }
 
     public function test_mark_all_read_updates_preference_to_latest_incoming(): void {
@@ -114,15 +113,14 @@ final class tutor_read_state_service_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
         $this->mock_conversation([
-            ['id' => '1', 'role' => 'assistant', 'content' => 'Hello', 'time' => 4000],
+            ['id' => '1', 'role' => tutor_message::ROLE_ASSISTANT, 'content' => 'Hello', 'time' => 4000],
         ]);
 
         $this->service->set_last_read((int) $user->id, (int) $course->id, 1000);
         $stored = $this->service->mark_all_read((int) $user->id, (int) $course->id);
 
         $this->assertSame(4001, $stored);
-        $state = $this->service->resolve_page_state((int) $user->id, (int) $course->id);
-        $this->assertFalse($state['hasunread']);
+        $this->assertSame(4001, $this->service->get_last_read((int) $user->id, (int) $course->id));
     }
 
     public function test_mark_read_up_to_uses_message_time_plus_one(): void {
@@ -139,49 +137,13 @@ final class tutor_read_state_service_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
         $this->mock_conversation([
-            ['id' => '1', 'role' => 'assistant', 'content' => 'Hello', 'time' => 3500],
+            ['id' => '1', 'role' => tutor_message::ROLE_ASSISTANT, 'content' => 'Hello', 'time' => 3500],
         ]);
 
         $this->service->set_last_read((int) $user->id, (int) $course->id, 1000);
         $stored = $this->service->mark_read_up_to((int) $user->id, (int) $course->id, 0);
 
         $this->assertSame(3501, $stored);
-        $state = $this->service->resolve_page_state((int) $user->id, (int) $course->id);
-        $this->assertFalse($state['hasunread']);
-    }
-
-    public function test_user_messages_are_never_treated_as_unread(): void {
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->mock_conversation([
-            ['id' => '1', 'role' => 'assistant', 'content' => 'Hello', 'time' => 2000],
-            ['id' => '2', 'role' => 'user', 'content' => 'My reply', 'time' => 9000],
-        ]);
-
-        $this->service->set_last_read((int) $user->id, (int) $course->id, 2001);
-
-        $state = $this->service->resolve_page_state((int) $user->id, (int) $course->id);
-
-        $this->assertFalse($state['hasunread']);
-    }
-
-    public function test_proactive_context_messages_are_not_counted_as_incoming(): void {
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->mock_conversation([
-            [
-                'id' => '1',
-                'role' => 'assistant',
-                'content' => '<proactive-context source="system">ctx</proactive-context>',
-                'time' => 5000,
-            ],
-        ]);
-
-        $state = $this->service->resolve_page_state((int) $user->id, (int) $course->id);
-
-        $this->assertFalse($state['hasunread']);
-        $this->assertSame(0, $state['lastread']);
+        $this->assertSame(3501, $this->service->get_last_read((int) $user->id, (int) $course->id));
     }
 }
