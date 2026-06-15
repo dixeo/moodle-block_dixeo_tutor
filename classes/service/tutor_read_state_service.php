@@ -25,6 +25,7 @@
 namespace block_dixeo_tutor\service;
 
 use local_dixeo\api\exception\api_exception;
+use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
 
 /**
@@ -33,43 +34,6 @@ use local_dixeo\external\service_factory;
 class tutor_read_state_service {
     /** @var string User preference: Unix time of the latest incoming message the user has read. */
     public const PREF_LAST_READ_PREFIX = 'block_dixeo_tutor_lastread_';
-
-    /** Must match {@see tutor_proactive_context_service::PROACTIVE_CONTEXT_TAG}. */
-    private const PROACTIVE_CONTEXT_TAG = 'proactive-context';
-
-    /**
-     * Resolve unread state for the tutor block page load (server-side).
-     * Compares the latest incoming (assistant) message time with the stored preference.
-     * User messages are never treated as unread.
-     * When the preference has never been set, bootstraps to (latest message time + 1 second) so
-     * existing conversations are treated as already read.
-     *
-     * @param int $userid
-     * @param int $courseid
-     * @return array{hasunread: bool, lastread: int}
-     */
-    public function resolve_page_state(int $userid, int $courseid): array {
-        $latestincoming = $this->get_latest_incoming_message_time($userid, $courseid);
-
-        if (!$this->preference_is_set($userid, $courseid)) {
-            $lastread = $latestincoming > 0 ? $latestincoming + 1 : 0;
-            if ($latestincoming > 0) {
-                set_user_preference(self::PREF_LAST_READ_PREFIX . $courseid, $lastread, $userid);
-            }
-            return [
-                'hasunread' => false,
-                'lastread' => $lastread,
-            ];
-        }
-
-        $lastread = $this->get_last_read($userid, $courseid);
-        $hasunread = $latestincoming > 0 && $latestincoming > $lastread;
-
-        return [
-            'hasunread' => $hasunread,
-            'lastread' => $lastread,
-        ];
-    }
 
     /**
      * Mark all current incoming messages as read (stores latest incoming message time).
@@ -142,48 +106,23 @@ class tutor_read_state_service {
             return 0;
         }
 
-        if (!is_array($messages)) {
-            return 0;
-        }
+        return self::latest_incoming_time_from_messages(is_array($messages) ? $messages : []);
+    }
 
-        $latest = 0;
-        foreach ($messages as $msg) {
-            if (!$this->is_incoming_message($msg)) {
+    /**
+     * Latest assistant message Unix time in a chronologically sorted message batch (newest at end).
+     *
+     * @param array $messages
+     * @return int
+     */
+    public static function latest_incoming_time_from_messages(array $messages): int {
+        for ($i = count($messages) - 1; $i >= 0; $i--) {
+            if (strtolower((string) ($messages[$i]['role'] ?? '')) !== tutor_message::ROLE_ASSISTANT) {
                 continue;
             }
-            $time = self::normalize_timestamp((int) ($msg['time'] ?? 0));
-            if ($time > $latest) {
-                $latest = $time;
-            }
+            return self::normalize_timestamp((int) ($messages[$i]['time'] ?? 0));
         }
-
-        return $latest;
-    }
-
-    /**
-     * Preference is set.
-     *
-     * @param int $userid
-     * @param int $courseid
-     * @return bool
-     */
-    private function preference_is_set(int $userid, int $courseid): bool {
-        return get_user_preferences(self::PREF_LAST_READ_PREFIX . $courseid, null, $userid) !== null;
-    }
-
-    /**
-     * Whether incoming message.
-     *
-     * @param array $msg Message with role and content keys.
-     * @return bool
-     */
-    private function is_incoming_message(array $msg): bool {
-        if (strtolower((string) ($msg['role'] ?? '')) !== 'assistant') {
-            return false;
-        }
-        $content = (string) ($msg['content'] ?? '');
-        $pattern = '/<' . preg_quote(self::PROACTIVE_CONTEXT_TAG, '/') . '[\s>]/i';
-        return preg_match($pattern, $content) !== 1;
+        return 0;
     }
 
     /**

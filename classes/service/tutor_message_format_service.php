@@ -24,16 +24,13 @@
 
 namespace block_dixeo_tutor\service;
 
+use block_dixeo_tutor\service\tutor_context_schema;
+use block_dixeo_tutor\service\tutor_message_read_mapper;
+
 /**
  * Applies format_text (including activity name auto-linking) to tutor messages.
  */
 class tutor_message_format_service {
-    /** @var string Wrapper tag for practice quiz review payloads. */
-    private const REVIEW_TAG = 'practice-quiz-review';
-
-    /** @var string Wrapper tag for proactive system context. */
-    private const PROACTIVE_TAG = 'proactive-context';
-
     /**
      * Add a formatted HTML field to each message for chat display.
      *
@@ -47,7 +44,7 @@ class tutor_message_format_service {
                 continue;
             }
             $content = (string) ($msg['content'] ?? '');
-            $messages[$i]['contenthtml'] = self::format_content($content, $context);
+            $messages[$i]['contenthtml'] = self::format_message($msg, $content, $context);
         }
 
         return $messages;
@@ -56,31 +53,41 @@ class tutor_message_format_service {
     /**
      * Format one message body for display (markdown + Moodle filters).
      *
-     * @param string $content Raw message content from the API.
+     * @param array $msg Normalized message row.
+     * @param string $content Visible message text.
      * @param \context $context Course context for filters.
      * @return string Filtered HTML, or empty when formatting should be skipped.
      */
-    public static function format_content(string $content, \context $context): string {
-        if ($content === '' || self::should_skip_formatting($content)) {
+    public static function format_message(array $msg, string $content, \context $context): string {
+        if ($content === '' || self::should_skip_formatting($msg)) {
             return '';
         }
 
-        return format_text($content, FORMAT_MARKDOWN, [
+        $html = format_text($content, FORMAT_MARKDOWN, [
             'context' => $context,
             'filter' => true,
             'para' => false,
             'overflowdiv' => false,
         ]);
+
+        return $html;
     }
 
     /**
      * Whether message formatting should be skipped.
      *
-     * @param string $content Raw message content.
+     * @param array $msg Normalized message row.
      * @return bool
      */
-    private static function should_skip_formatting(string $content): bool {
-        return str_contains($content, '<' . self::REVIEW_TAG)
-            || str_contains($content, '<' . self::PROACTIVE_TAG);
+    public static function should_skip_formatting(array $msg): bool {
+        if (strtolower((string) ($msg['role'] ?? '')) !== 'system') {
+            return false;
+        }
+
+        $schema = tutor_message_read_mapper::schema_from_message($msg);
+        return in_array($schema, [
+            tutor_context_schema::SCHEMA_PROACTIVE,
+            tutor_context_schema::SCHEMA_PRACTICE_QUIZ_REVIEW,
+        ], true);
     }
 }
