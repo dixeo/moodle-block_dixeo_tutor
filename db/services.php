@@ -40,6 +40,13 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_cancel_generation_job' => [
+        'classname'   => '\block_dixeo_tutor\external\cancel_generation_job',
+        'description' => 'Cancel a running tutor generation job',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
     'block_dixeo_tutor_get_conversation' => [
         'classname'   => '\block_dixeo_tutor\external\get_conversation',
         'description' => 'Retrieves conversation history for the current user in a course.',
