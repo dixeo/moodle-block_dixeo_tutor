@@ -216,10 +216,14 @@ class block_dixeo_tutor extends block_base {
             $simplequiz2available
         );
 
+        $langoptions = \local_dixeo\service\generation_language_helper::build_options((int) $USER->id);
+
         $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', [
             'coursename' => format_string($this->page->course->fullname, true, ['context' => \context_course::instance($courseid)]),
             'currentcmid' => $currentcmid,
             'mode_selector' => $modeselector,
+            'generationlanguagesjson' => json_encode($langoptions['languages']),
+            'defaultgenerationlanguage' => $langoptions['defaultlanguage'],
         ]);
         if ($simplequiz2available) {
             $this->page->requires->css('/mod/simplequiz2/styles.css');

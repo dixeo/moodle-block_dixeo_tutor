@@ -123,6 +123,7 @@ $string['setting_displaymode_drawer'] = 'In der Block-Schublade';
 $string['setting_displaymode_popup'] = 'In einem Popup-Fenster';
 $string['setting_excludedmodules'] = 'Ausgeschlossene Modultypen';
 $string['setting_excludedmodules_desc'] = 'Kommagetrennte Liste von Aktivitätsmodultypen, auf deren Seiten der Tutor ausgeblendet werden soll (z. B. quiz, simplequiz2). Der Tutor erscheint nicht auf den Seiten dieser Aktivitätstypen.';
+$string['setup_language'] = 'Sprache';
 $string['talktotutor'] = 'Mit dem Tutor sprechen';
 $string['teach_generate_error'] = 'Die Lektion konnte nicht erstellt werden. Bitte versuchen Sie es erneut.';
 $string['teach_generating'] = 'Ihre individuelle Lektion wird erstellt…';

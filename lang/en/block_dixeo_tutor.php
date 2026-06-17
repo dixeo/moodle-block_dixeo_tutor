@@ -123,6 +123,7 @@ $string['setting_displaymode_drawer'] = 'In block drawer';
 $string['setting_displaymode_popup'] = 'In a popup window';
 $string['setting_excludedmodules'] = 'Excluded module types';
 $string['setting_excludedmodules_desc'] = 'Comma-separated list of activity module types where the tutor should be hidden (e.g. quiz,simplequiz2). The tutor will not appear on pages of these activity types.';
+$string['setup_language'] = 'Language';
 $string['talktotutor'] = 'Talk to the tutor';
 $string['teach_generate_error'] = 'Could not generate the lesson. Please try again.';
 $string['teach_generating'] = 'Generating your custom lesson…';
