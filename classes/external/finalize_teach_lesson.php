@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Web service: course hierarchy for practice quiz topic selection.
+ * Finalize a teach lesson job into formatted HTML.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
@@ -24,16 +24,19 @@
 
 namespace block_dixeo_tutor\external;
 
+use block_dixeo_tutor\client_response;
+use block_dixeo_tutor\job_ownership;
 use core_external\external_api;
 use core_external\external_function_parameters;
-use core_external\external_multiple_structure;
 use core_external\external_single_structure;
 use core_external\external_value;
+use local_dixeo\api\exception\api_exception;
+use local_dixeo\external\service_factory;
 
 /**
- * Returns course / section / activity tree for the practice quiz setup panel.
+ * Web service: transform completed job into teach lesson content.
  */
-class get_quiz_hierarchy extends external_api {
+class finalize_teach_lesson extends external_api {
     /**
      * Describe the parameters.
      *
@@ -42,6 +45,8 @@ class get_quiz_hierarchy extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'courseid' => new external_value(PARAM_INT, 'Course ID'),
+            'jobid' => new external_value(PARAM_RAW, 'Completed job UUID'),
+            'topictitle' => new external_value(PARAM_TEXT, 'Fallback topic title', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -49,29 +54,37 @@ class get_quiz_hierarchy extends external_api {
      * Execute the web service.
      *
      * @param int $courseid
+     * @param string $jobid
+     * @param string $topictitle
      * @return array
      */
-    public static function execute(int $courseid): array {
-        global $CFG, $PAGE;
+    public static function execute(int $courseid, string $jobid, string $topictitle = ''): array {
+        global $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
+            'jobid' => $jobid,
+            'topictitle' => $topictitle,
         ]);
 
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
 
-        // Block plugin classes are not autoloaded in webservice context.
-        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
-        require_once($CFG->dirroot . '/blocks/dixeo_tutor/block_dixeo_tutor.php');
+        job_ownership::require_valid_jobid($params['jobid']);
+        job_ownership::require_owned((int) $USER->id, (int) $params['courseid'], $params['jobid']);
 
-        $hierarchy = \block_dixeo_tutor::build_practice_quiz_hierarchy((int) $params['courseid'], $PAGE);
+        try {
+            $service = service_factory::get_teach_lesson_service();
 
-        return [
-            'course' => $hierarchy['course'],
-            'sections' => $hierarchy['sections'],
-        ];
+            return $service->finalize_from_job(
+                $params['jobid'],
+                $params['topictitle'],
+                (int) $params['courseid']
+            );
+        } catch (api_exception $e) {
+            return client_response::finalize_teach_lesson_error($e);
+        }
     }
 
     /**
@@ -81,21 +94,11 @@ class get_quiz_hierarchy extends external_api {
      */
     public static function execute_returns(): external_single_structure {
         return new external_single_structure([
-            'course' => new external_single_structure([
-                'name' => new external_value(PARAM_TEXT, 'Course name'),
-            ]),
-            'sections' => new external_multiple_structure(
-                new external_single_structure([
-                    'num' => new external_value(PARAM_INT, 'Section number'),
-                    'name' => new external_value(PARAM_TEXT, 'Section name'),
-                    'activities' => new external_multiple_structure(
-                        new external_single_structure([
-                            'cmid' => new external_value(PARAM_INT, 'Course module id'),
-                            'name' => new external_value(PARAM_TEXT, 'Activity name'),
-                        ])
-                    ),
-                ])
-            ),
+            'success' => new external_value(PARAM_BOOL, 'Success flag'),
+            'error' => new external_value(PARAM_TEXT, 'Error message'),
+            'title' => new external_value(PARAM_TEXT, 'Lesson title'),
+            'introhtml' => new external_value(PARAM_RAW, 'Formatted intro HTML'),
+            'contenthtml' => new external_value(PARAM_RAW, 'Formatted content HTML'),
         ]);
     }
 }
