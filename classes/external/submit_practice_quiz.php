@@ -51,6 +51,7 @@ class submit_practice_quiz extends external_api {
             'count' => new external_value(PARAM_INT, 'Number of questions (3-10)', VALUE_DEFAULT, 5),
             'difficulty' => new external_value(PARAM_ALPHA, 'Difficulty: easy, medium, hard', VALUE_DEFAULT, 'medium'),
             'topictitle' => new external_value(PARAM_TEXT, 'Human-readable topic label'),
+            'language' => new external_value(PARAM_LANG, 'Output language for generated content', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -64,6 +65,7 @@ class submit_practice_quiz extends external_api {
      * @param int $count
      * @param string $difficulty
      * @param string $topictitle
+     * @param string $language
      * @return array
      */
     public static function execute(
@@ -73,7 +75,8 @@ class submit_practice_quiz extends external_api {
         int $cmid = 0,
         int $count = 5,
         string $difficulty = 'medium',
-        string $topictitle = ''
+        string $topictitle = '',
+        string $language = ''
     ): array {
         global $USER;
 
@@ -85,6 +88,7 @@ class submit_practice_quiz extends external_api {
             'count' => $count,
             'difficulty' => $difficulty,
             'topictitle' => $topictitle,
+            'language' => $language,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -100,7 +104,8 @@ class submit_practice_quiz extends external_api {
                 (int) $params['cmid'],
                 (int) $params['count'],
                 $params['difficulty'],
-                $params['topictitle']
+                $params['topictitle'],
+                $params['language']
             );
 
             $payload = $result->to_array();
