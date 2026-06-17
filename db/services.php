@@ -61,9 +61,9 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
-    'block_dixeo_tutor_get_quiz_hierarchy' => [
-        'classname'   => '\block_dixeo_tutor\external\get_quiz_hierarchy',
-        'description' => 'Course hierarchy for practice quiz topic selection',
+    'block_dixeo_tutor_get_course_hierarchy' => [
+        'classname'   => '\block_dixeo_tutor\external\get_course_hierarchy',
+        'description' => 'Course hierarchy for tutor setup topic selection',
         'type'        => 'read',
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
@@ -93,6 +93,20 @@ $functions = [
         'classname'   => '\block_dixeo_tutor\external\set_tutor_mode',
         'description' => 'Set the tutor mode preference for the current user in a course',
         'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
+    'block_dixeo_tutor_submit_teach_lesson' => [
+        'classname'   => '\block_dixeo_tutor\external\submit_teach_lesson',
+        'description' => 'Submit ephemeral teach lesson generation job',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
+    'block_dixeo_tutor_finalize_teach_lesson' => [
+        'classname'   => '\block_dixeo_tutor\external\finalize_teach_lesson',
+        'description' => 'Finalize teach lesson job into formatted HTML',
+        'type'        => 'read',
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
