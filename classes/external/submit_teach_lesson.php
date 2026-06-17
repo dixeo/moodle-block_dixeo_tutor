@@ -50,6 +50,7 @@ class submit_teach_lesson extends external_api {
             'cmid' => new external_value(PARAM_INT, 'Course module id when scope is activity', VALUE_DEFAULT, 0),
             'topictitle' => new external_value(PARAM_TEXT, 'Human-readable topic label'),
             'learnerrequest' => new external_value(PARAM_TEXT, 'Learner free-text learning request'),
+            'language' => new external_value(PARAM_LANG, 'Output language for generated content', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -62,6 +63,7 @@ class submit_teach_lesson extends external_api {
      * @param int $cmid
      * @param string $topictitle
      * @param string $learnerrequest
+     * @param string $language
      * @return array
      */
     public static function execute(
@@ -70,7 +72,8 @@ class submit_teach_lesson extends external_api {
         int $sectionnum = 0,
         int $cmid = 0,
         string $topictitle = '',
-        string $learnerrequest = ''
+        string $learnerrequest = '',
+        string $language = ''
     ): array {
         global $USER;
 
@@ -81,6 +84,7 @@ class submit_teach_lesson extends external_api {
             'cmid' => $cmid,
             'topictitle' => $topictitle,
             'learnerrequest' => $learnerrequest,
+            'language' => $language,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -95,7 +99,8 @@ class submit_teach_lesson extends external_api {
                 (int) $params['sectionnum'],
                 (int) $params['cmid'],
                 $params['topictitle'],
-                $params['learnerrequest']
+                $params['learnerrequest'],
+                $params['language']
             );
 
             $payload = $result->to_array();

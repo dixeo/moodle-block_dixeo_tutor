@@ -123,6 +123,7 @@ $string['setting_displaymode_drawer'] = 'Na gaveta de blocos';
 $string['setting_displaymode_popup'] = 'Numa janela flutuante';
 $string['setting_excludedmodules'] = 'Tipos de módulos excluídos';
 $string['setting_excludedmodules_desc'] = 'Lista separada por vírgulas dos tipos de módulos de atividade onde o tutor deve ser ocultado (ex.: quiz, simplequiz2). O tutor não aparecerá nas páginas destes tipos de atividade.';
+$string['setup_language'] = 'Idioma';
 $string['talktotutor'] = 'Falar com o tutor';
 $string['teach_generate_error'] = 'Não foi possível gerar a lição. Tente novamente.';
 $string['teach_generating'] = 'A gerar a sua lição personalizada…';

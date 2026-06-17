@@ -123,6 +123,7 @@ $string['setting_displaymode_drawer'] = 'Nel cassetto dei blocchi';
 $string['setting_displaymode_popup'] = 'In una finestra a comparsa';
 $string['setting_excludedmodules'] = 'Tipi di moduli esclusi';
 $string['setting_excludedmodules_desc'] = 'Elenco separato da virgole dei tipi di moduli di attività in cui il tutor deve essere nascosto (es: quiz,simplequiz2). Il tutor non apparirà nelle pagine di questi tipi di attività.';
+$string['setup_language'] = 'Lingua';
 $string['talktotutor'] = 'Parla con il tutor';
 $string['teach_generate_error'] = 'Impossibile generare la lezione. Riprova.';
 $string['teach_generating'] = 'Generazione della lezione personalizzata…';
