@@ -28,9 +28,14 @@ namespace block_dixeo_tutor\service;
  * Schema constants and context object builders for block_dixeo_tutor submit paths.
  */
 class tutor_context_schema {
+    /** Page URL context schema. */
     public const SCHEMA_PAGE = 'page';
+    /** Proactive system events context schema. */
     public const SCHEMA_PROACTIVE = 'proactive';
+    /** Practice quiz review context schema. */
     public const SCHEMA_PRACTICE_QUIZ_REVIEW = 'practice_quiz_review';
+    /** Custom teach-lesson context schema. */
+    public const SCHEMA_CUSTOM_LESSON = 'custom_lesson';
 
     /**
      * Return known context schema identifiers.
@@ -42,6 +47,7 @@ class tutor_context_schema {
             self::SCHEMA_PAGE,
             self::SCHEMA_PROACTIVE,
             self::SCHEMA_PRACTICE_QUIZ_REVIEW,
+            self::SCHEMA_CUSTOM_LESSON,
         ];
     }
 
