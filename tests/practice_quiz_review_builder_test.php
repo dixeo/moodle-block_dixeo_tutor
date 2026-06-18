@@ -26,6 +26,7 @@ namespace block_dixeo_tutor;
 
 use block_dixeo_tutor\service\practice_quiz_review_builder;
 use block_dixeo_tutor\service\practice_quiz_context_service;
+use block_dixeo_tutor\service\tutor_context_size_helper;
 
 /**
  * Tests for practice quiz review builder.
@@ -72,19 +73,25 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
             'selectedAnswerIds' => [[0], [0]],
         ];
 
+        $questionsjson = json_encode($questions);
+
         $review = practice_quiz_review_builder::build(
             $questions,
             $bestattempt,
             ['score' => 0, 'total' => 2],
             'Cell biology',
-            $context
+            $context,
+            $questionsjson
         );
 
         $this->assertSame('practice_quiz_review', $review['schema']);
-        $this->assertSame(1, $review['version']);
+        $this->assertSame(2, $review['version']);
         $this->assertSame('Cell biology', $review['title']);
+        $this->assertSame($questionsjson, $review['questionsJson']);
         $this->assertSame(1, $review['bestAttempt']['score']);
         $this->assertSame(2, $review['bestAttempt']['total']);
+        $this->assertSame([true, false], $review['bestAttempt']['answerResults']);
+        $this->assertSame([[0], [0]], $review['bestAttempt']['selectedAnswerIds']);
         $this->assertSame(0, $review['exitAttempt']['score']);
         $this->assertCount(2, $review['questions']);
 
@@ -172,6 +179,85 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
         ], (int) $course->id);
 
         $this->assertSame('practice_quiz_review', $context['schema']);
-        $this->assertSame(1, $context['version']);
+        $this->assertSame(2, $context['version']);
+        $this->assertArrayHasKey('questionsJson', $context);
+        $this->assertNotEmpty($context['questionsJson']);
+        $this->assertArrayHasKey('answerResults', $context['bestAttempt']);
+        $this->assertArrayHasKey('selectedAnswerIds', $context['bestAttempt']);
+    }
+
+    /**
+     * Shrink keeps questionsJson while dropping summary feedback HTML first.
+     */
+    public function test_shrink_preserves_questions_json(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $context = \context_course::instance($course->id);
+
+        $largefeedback = str_repeat('x', 12000);
+        $questions = [
+            (object) [
+                'text' => 'Sample question?',
+                'correctfeedback' => '<p>' . $largefeedback . '</p>',
+                'incorrectfeedback' => '',
+                'partiallycorrectfeedback' => '',
+                'answers' => [
+                    (object) ['text' => 'Yes', 'iscorrect' => 1],
+                ],
+            ],
+        ];
+        $questionsjson = json_encode($questions);
+        $bestattempt = [
+            'score' => 1,
+            'total' => 1,
+            'answerResults' => [true],
+            'selectedAnswerIds' => [[0]],
+        ];
+
+        $service = new practice_quiz_context_service();
+        $built = $service->build_review_context([
+            'title' => 'Large quiz',
+            'questionsjson' => $questionsjson,
+            'bestattemptjson' => json_encode($bestattempt),
+            'exitscore' => 1,
+            'total' => 1,
+        ], (int) $course->id);
+
+        $this->assertNotNull($built);
+        $this->assertSame($questionsjson, $built['questionsJson']);
+        if (!empty($built['questions'])) {
+            $this->assertArrayNotHasKey('feedbackHtml', $built['questions'][0]);
+        }
+    }
+
+    /**
+     * Final shrink fallback removes questionsJson when payload cannot fit.
+     */
+    public function test_shrink_drops_questions_json_as_last_resort(): void {
+        $this->resetAfterTest();
+
+        $huge = str_repeat('z', tutor_context_size_helper::MAX_CONTEXT_JSON_LENGTH + 5000);
+        $review = [
+            'schema' => 'practice_quiz_review',
+            'version' => 2,
+            'title' => 'Oversized',
+            'questionsJson' => $huge,
+            'bestAttempt' => [
+                'score' => 0,
+                'total' => 1,
+                'answerResults' => [false],
+                'selectedAnswerIds' => [[]],
+            ],
+            'exitAttempt' => ['score' => 0, 'total' => 1],
+            'questions' => [],
+        ];
+
+        $service = new practice_quiz_context_service();
+        $method = new \ReflectionMethod(practice_quiz_context_service::class, 'shrink_review_context');
+        $method->setAccessible(true);
+        $shrunk = $method->invoke($service, $review);
+
+        $this->assertNotNull($shrunk);
+        $this->assertArrayNotHasKey('questionsJson', $shrunk);
     }
 }
