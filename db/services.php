@@ -117,4 +117,11 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_submit_teach_lesson_context' => [
+        'classname'   => '\block_dixeo_tutor\external\submit_teach_lesson_context',
+        'description' => 'Submit custom teach lesson context to the tutor',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
 ];

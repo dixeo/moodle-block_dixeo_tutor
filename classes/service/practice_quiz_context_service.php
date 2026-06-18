@@ -33,23 +33,18 @@ use local_dixeo\dto\tutor_message;
  * Builds and submits practice-quiz review context to the tutor API.
  */
 class practice_quiz_context_service {
-    /** @var int Maximum encoded JSON length for review context objects. */
-    public const MAX_CONTEXT_JSON_LENGTH = 16000;
-
     /**
      * Submit a practice quiz review to the tutor.
      *
      * @param int $courseid
      * @param int $userid
      * @param array $payload title, questionsjson, bestattemptjson, exitscore, total.
-     * @param string $pageurl
      * @return operation_result|null
      */
     public function submit_review(
         int $courseid,
         int $userid,
-        array $payload,
-        string $pageurl = ''
+        array $payload
     ): ?operation_result {
         $proactive = new tutor_proactive_context_service();
         if (!$proactive->can_use_tutor($userid, $courseid)) {
@@ -145,37 +140,27 @@ class practice_quiz_context_service {
      * @return array|null
      */
     private function shrink_review_context(array $review): ?array {
-        $json = json_encode($review, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-        if ($json !== false && $this->context_fits($json)) {
+        $json = tutor_context_size_helper::encode_context($review, true);
+        if ($json !== null && tutor_context_size_helper::context_fits($json)) {
             return $review;
         }
 
-        $json = json_encode($review, JSON_UNESCAPED_UNICODE);
-        if ($json !== false && $this->context_fits($json)) {
+        $json = tutor_context_size_helper::encode_context($review);
+        if ($json !== null && tutor_context_size_helper::context_fits($json)) {
             return $review;
         }
 
         foreach ($review['questions'] as $i => $item) {
             unset($review['questions'][$i]['feedbackHtml']);
         }
-        $json = json_encode($review, JSON_UNESCAPED_UNICODE);
-        if ($json !== false && $this->context_fits($json)) {
+        $json = tutor_context_size_helper::encode_context($review);
+        if ($json !== null && tutor_context_size_helper::context_fits($json)) {
             return $review;
         }
 
         $review['questions'] = [];
-        $json = json_encode($review, JSON_UNESCAPED_UNICODE);
+        $json = tutor_context_size_helper::encode_context($review);
 
-        return ($json !== false && $this->context_fits($json)) ? $review : null;
-    }
-
-    /**
-     * Whether encoded context JSON fits the size limit.
-     *
-     * @param string $json Encoded context JSON.
-     * @return bool
-     */
-    private function context_fits(string $json): bool {
-        return strlen($json) <= self::MAX_CONTEXT_JSON_LENGTH;
+        return ($json !== null && tutor_context_size_helper::context_fits($json)) ? $review : null;
     }
 }
