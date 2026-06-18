@@ -107,6 +107,7 @@ $string['quiz_review_correct_answer'] = 'Risposta corretta';
 $string['quiz_review_exit_score'] = 'Questo tentativo: {$a->score}/{$a->total} ({$a->percent} %)';
 $string['quiz_review_feedback'] = 'Feedback';
 $string['quiz_review_incorrect'] = 'Errato';
+$string['quiz_review_retake'] = 'Ripeti quiz';
 $string['quiz_review_your_answer'] = 'La tua risposta';
 $string['quiz_setup_cancel'] = 'Annulla';
 $string['quiz_setup_count'] = 'Numero di domande';

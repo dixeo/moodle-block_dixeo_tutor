@@ -90,7 +90,7 @@ class practice_quiz_context_service {
      * @return array|null Review context object or null when invalid.
      */
     public function build_review_context(array $payload, int $courseid = 0): ?array {
-        $questionsjson = $payload['questionsjson'] ?? '';
+        $questionsjson = (string) ($payload['questionsjson'] ?? '');
         $bestjson = $payload['bestattemptjson'] ?? '';
 
         $questions = json_decode($questionsjson, true);
@@ -121,7 +121,8 @@ class practice_quiz_context_service {
                 'total' => $total,
             ],
             $title,
-            $context
+            $context,
+            $questionsjson
         );
 
         $review['instructions'] = get_string('quiz_review_ai_instructions', 'block_dixeo_tutor', (object) [
@@ -135,32 +136,52 @@ class practice_quiz_context_service {
 
     /**
      * Progressively shrink review context until encoded JSON fits the limit.
+     * Order: full payload → strip feedbackHtml → drop summary questions → drop questionsJson.
      *
      * @param array $review Review payload from {@see practice_quiz_review_builder::build()}.
      * @return array|null
      */
     private function shrink_review_context(array $review): ?array {
+        if ($this->fits_context($review)) {
+            return $review;
+        }
+
+        $nofeedbackhtml = $review;
+        foreach ($nofeedbackhtml['questions'] as $i => $item) {
+            unset($nofeedbackhtml['questions'][$i]['feedbackHtml']);
+        }
+        if ($this->fits_context($nofeedbackhtml)) {
+            return $nofeedbackhtml;
+        }
+
+        $nosummary = $nofeedbackhtml;
+        $nosummary['questions'] = [];
+        if ($this->fits_context($nosummary)) {
+            return $nosummary;
+        }
+
+        $noretake = $nosummary;
+        unset($noretake['questionsJson']);
+        if ($this->fits_context($noretake)) {
+            return $noretake;
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether the review payload fits the context size limit.
+     *
+     * @param array $review Review context without instructions.
+     * @return bool
+     */
+    private function fits_context(array $review): bool {
         $json = tutor_context_size_helper::encode_context($review, true);
         if ($json !== null && tutor_context_size_helper::context_fits($json)) {
-            return $review;
+            return true;
         }
 
         $json = tutor_context_size_helper::encode_context($review);
-        if ($json !== null && tutor_context_size_helper::context_fits($json)) {
-            return $review;
-        }
-
-        foreach ($review['questions'] as $i => $item) {
-            unset($review['questions'][$i]['feedbackHtml']);
-        }
-        $json = tutor_context_size_helper::encode_context($review);
-        if ($json !== null && tutor_context_size_helper::context_fits($json)) {
-            return $review;
-        }
-
-        $review['questions'] = [];
-        $json = tutor_context_size_helper::encode_context($review);
-
-        return ($json !== null && tutor_context_size_helper::context_fits($json)) ? $review : null;
+        return $json !== null && tutor_context_size_helper::context_fits($json);
     }
 }
