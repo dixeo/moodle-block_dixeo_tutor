@@ -88,6 +88,7 @@ class tutor_message_format_service {
         return in_array($schema, [
             tutor_context_schema::SCHEMA_PROACTIVE,
             tutor_context_schema::SCHEMA_PRACTICE_QUIZ_REVIEW,
+            tutor_context_schema::SCHEMA_CUSTOM_LESSON,
         ], true);
     }
 }
