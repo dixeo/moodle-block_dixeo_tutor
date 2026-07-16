@@ -15,24 +15,21 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version information for the DIXEO Tutor block plugin.
- *
- * This file defines the version, dependencies, and metadata
- * for the DIXEO Tutor block plugin.
+ * Cache definitions for block_dixeo_tutor.
  *
  * @package    block_dixeo_tutor
  * @copyright  2025 Edunao SAS (contact@edunao.com)
- * @author     Pierre FACQ <pierre.facq@edunao.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026073108;
-$plugin->requires  = 2024100700;
-$plugin->component = 'block_dixeo_tutor';
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '4.2.5';
-$plugin->dependencies = [
-    'local_dixeo' => 2026073100,
+$definitions = [
+    // Survives mid-request session write_close() (e.g. file sync) so poll can see registered jobs.
+    'owned_jobs' => [
+        'mode' => \cache_store::MODE_APPLICATION,
+        'simplekeys' => true,
+        'simpledata' => true,
+        'ttl' => 15 * MINSECS,
+    ],
 ];
