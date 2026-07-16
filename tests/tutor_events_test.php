@@ -90,7 +90,7 @@ final class tutor_events_test extends \advanced_testcase {
         [$course, $user] = $this->create_course_and_student();
 
         $tutorservice = $this->createMock(tutor_service::class);
-        $tutorservice->method('submit_message')->willReturn(
+        $tutorservice->method('submit')->willReturn(
             operation_result::pending(self::JOB_ID)
         );
         service_factory::set_test_tutor_service($tutorservice);

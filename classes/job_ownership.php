@@ -20,6 +20,10 @@
  * Provides defense-in-depth ownership checks for get_job_status when
  * local_dixeo does not bind jobid to userid/courseid.
  *
+ * Stored in an application cache (keyed by PHP session id) rather than $SESSION
+ * so registrations survive mid-request \core\session\manager::write_close()
+ * (e.g. during file sync before send_message returns).
+ *
  * @package    block_dixeo_tutor
  * @copyright  2025 Edunao SAS (contact@edunao.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -33,9 +37,6 @@ namespace block_dixeo_tutor;
 class job_ownership {
     /** @var int How long a registered job remains valid (seconds). Aligns with client poll timeout. */
     public const TTL_SECONDS = 15 * MINSECS;
-
-    /** @var string Session property that holds the registry. */
-    private const SESSION_KEY = 'block_dixeo_tutor_owned_jobs';
 
     /**
      * Whether the string is a UUID (versions 1–5).
@@ -70,30 +71,14 @@ class job_ownership {
      * @param string $jobid Job UUID from the API.
      */
     public static function register(int $userid, int $courseid, string $jobid): void {
-        global $SESSION;
-
         if ($userid < 1 || $courseid < 1 || $jobid === '' || !self::is_valid_jobid($jobid)) {
             return;
         }
 
-        // Copy + replace root key so Moodle session handlers detect a dirty write
-        // (in-place nested mutation can stay in-request-only and fail the next AJAX poll).
-        $registry = [];
-        if (isset($SESSION->{self::SESSION_KEY}) && is_array($SESSION->{self::SESSION_KEY})) {
-            $registry = $SESSION->{self::SESSION_KEY};
-        }
-        $SESSION->{self::SESSION_KEY} = $registry;
-        self::prune_expired();
-
-        $registry = $SESSION->{self::SESSION_KEY};
-        if (!isset($registry[$userid]) || !is_array($registry[$userid])) {
-            $registry[$userid] = [];
-        }
-        if (!isset($registry[$userid][$courseid]) || !is_array($registry[$userid][$courseid])) {
-            $registry[$userid][$courseid] = [];
-        }
-        $registry[$userid][$courseid][$jobid] = time() + self::TTL_SECONDS;
-        $SESSION->{self::SESSION_KEY} = $registry;
+        self::cache()->set(
+            self::cache_key($userid, $courseid, $jobid),
+            time() + self::TTL_SECONDS
+        );
     }
 
     /**
@@ -105,12 +90,7 @@ class job_ownership {
      * @return bool
      */
     public static function is_owned(int $userid, int $courseid, string $jobid): bool {
-        global $SESSION;
-
-        self::ensure_session_structure();
-        self::prune_expired();
-
-        $expiry = $SESSION->{self::SESSION_KEY}[$userid][$courseid][$jobid] ?? null;
+        $expiry = self::cache()->get(self::cache_key($userid, $courseid, $jobid));
         return is_int($expiry) && $expiry >= time();
     }
 
@@ -129,47 +109,26 @@ class job_ownership {
     }
 
     /**
-     * Ensure the SESSION property exists as the expected nested array.
+     * Application cache for owned job markers.
+     *
+     * @return \cache
      */
-    private static function ensure_session_structure(): void {
-        global $SESSION;
-
-        if (!isset($SESSION->{self::SESSION_KEY}) || !is_array($SESSION->{self::SESSION_KEY})) {
-            $SESSION->{self::SESSION_KEY} = [];
-        }
+    private static function cache(): \cache {
+        return \cache::make('block_dixeo_tutor', 'owned_jobs');
     }
 
     /**
-     * Drop expired job registrations from the session.
+     * Cache key scoped to user, course, job, and PHP session.
+     *
+     * @param int $userid Moodle user id.
+     * @param int $courseid Course id.
+     * @param string $jobid Job UUID.
+     * @return string
      */
-    private static function prune_expired(): void {
-        global $SESSION;
-
-        $now = time();
-        $registry = &$SESSION->{self::SESSION_KEY};
-
-        foreach ($registry as $userid => $courses) {
-            if (!is_array($courses)) {
-                unset($registry[$userid]);
-                continue;
-            }
-            foreach ($courses as $courseid => $jobs) {
-                if (!is_array($jobs)) {
-                    unset($registry[$userid][$courseid]);
-                    continue;
-                }
-                foreach ($jobs as $jobid => $expiry) {
-                    if (!is_int($expiry) || $expiry < $now) {
-                        unset($registry[$userid][$courseid][$jobid]);
-                    }
-                }
-                if (empty($registry[$userid][$courseid])) {
-                    unset($registry[$userid][$courseid]);
-                }
-            }
-            if (empty($registry[$userid])) {
-                unset($registry[$userid]);
-            }
-        }
+    private static function cache_key(int $userid, int $courseid, string $jobid): string {
+        // Simplekeys allows only a-zA-Z0-9_ (no UUID hyphens).
+        $sid = preg_replace('/[^a-zA-Z0-9_]/', '', session_id() ?: 'nosess') ?: 'nosess';
+        $job = strtolower(str_replace('-', '', $jobid));
+        return $userid . '_' . $courseid . '_' . $job . '_' . $sid;
     }
 }
