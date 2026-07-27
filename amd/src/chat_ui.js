@@ -39,13 +39,15 @@ define([
                 {key: 'connection_lost', component: 'block_dixeo_tutor'},
                 {key: 'aria_your_message', component: 'block_dixeo_tutor'},
                 {key: 'aria_assistant_message', component: 'block_dixeo_tutor'},
+                {key: 'aria_sent_at', component: 'block_dixeo_tutor'},
                 {key: 'message_too_long', component: 'block_dixeo_tutor'},
-            ]).then(([senderYou, senderAssistant, connLost, yourMsg, assistantMsg, tooLong]) => {
+            ]).then(([senderYou, senderAssistant, connLost, yourMsg, assistantMsg, sentAt, tooLong]) => {
                 this.strings.senderYou = senderYou;
                 this.strings.senderAssistant = senderAssistant;
                 this.strings.connectionLost = connLost;
                 this.strings.yourMessage = yourMsg;
                 this.strings.assistantMessage = assistantMsg;
+                this.strings.sentAt = sentAt;
                 this.strings.messageTooLong = tooLong;
                 return null;
             }).catch(() => {
@@ -55,6 +57,7 @@ define([
                 this.strings.connectionLost = 'Connection lost. Attempting to reconnect...';
                 this.strings.yourMessage = 'Your message';
                 this.strings.assistantMessage = 'Assistant message';
+                this.strings.sentAt = 'Sent at {$a}';
                 this.strings.messageTooLong = 'Message cannot exceed {a} characters.';
             });
 
@@ -534,6 +537,8 @@ define([
                 ? (this.strings.yourMessage || 'Your message')
                 : (this.strings.assistantMessage || 'Assistant message');
 
+            const sentAtLabel = (this.strings.sentAt || 'Sent at {$a}').replace('{$a}', time);
+
             return this._createNodeFromHTML(`
                 <div class="${alignCls} mb-2">
                     <div class="dixeo-tutor-message dixeo-tutor-message-${msg.role}"
@@ -541,7 +546,7 @@ define([
                          aria-label="${ariaLabel}"
                          tabindex="0">
                         <div class="dixeo-tutor-message-content">${contentHtml}</div>
-                        <small class="message-time" aria-label="Sent at ${time}">${time}</small>
+                        <small class="message-time" aria-label="${sentAtLabel}">${time}</small>
                     </div>
                 </div>`);
         }

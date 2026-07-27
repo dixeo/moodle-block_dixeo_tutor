@@ -30,6 +30,7 @@ $string['aria_chat_messages'] = 'Mensajes del chat';
 $string['aria_send_message'] = 'Enviar mensaje';
 $string['aria_sender_assistant'] = 'Asistente';
 $string['aria_sender_you'] = 'Tú';
+$string['aria_sent_at'] = 'Enviado a las {$a}';
 $string['aria_skip_to_input'] = 'Ir al campo de mensaje';
 $string['aria_type_message'] = 'Escribe tu mensaje';
 $string['aria_your_message'] = 'Tu mensaje';
