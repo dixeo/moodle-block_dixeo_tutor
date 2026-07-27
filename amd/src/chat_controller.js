@@ -1,10 +1,10 @@
 define([
     'core/str',
+    'core/templates',
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/errors',
     'block_dixeo_tutor/reconciliation_service',
-    'block_dixeo_tutor/text_utils'
-], function(str, constants, errors, ReconciliationService, textUtils) {
+], function(str, Templates, constants, errors, ReconciliationService) {
     'use strict';
 
     return class ChatController {
@@ -549,22 +549,21 @@ define([
          * @private
          */
         async _showTimeoutMessage() {
-            const timeoutMsg = await str.get_string('timeout_message', 'block_dixeo_tutor');
-            const checkUpdatesText = await str.get_string('check_for_updates', 'block_dixeo_tutor');
+            const [timeoutMsg, checkUpdatesText] = await str.get_strings([
+                {key: 'timeout_message', component: 'block_dixeo_tutor'},
+                {key: 'check_for_updates', component: 'block_dixeo_tutor'},
+            ]);
+
+            const {html, js} = await Templates.renderForPromise('block_dixeo_tutor/timeout_message', {
+                message: timeoutMsg,
+                checklabel: checkUpdatesText,
+            });
 
             const wrapper = document.createElement('div');
-            wrapper.innerHTML = `
-                <div class="d-flex justify-content-center mb-2">
-                    <div class="dixeo-tutor-message dixeo-tutor-message-system alert alert-warning d-inline-flex flex-column">
-                        <div>${textUtils.escapeHtml(timeoutMsg)}</div>
-                        <button type="button" class="btn btn-sm btn-outline-primary mt-2">
-                            <i class="icon fa fa-refresh" aria-hidden="true"></i> ${textUtils.escapeHtml(checkUpdatesText)}
-                        </button>
-                    </div>
-                </div>`.trim();
+            wrapper.innerHTML = html;
             const timeoutNode = wrapper.firstChild;
 
-            timeoutNode.querySelector('button').addEventListener('click', async() => {
+            timeoutNode.querySelector('.dixeo-tutor-timeout-retry').addEventListener('click', async() => {
                 timeoutNode.remove();
 
                 try {
@@ -591,6 +590,10 @@ define([
                     this.ui.appendErrorMessage(errorMsg);
                 }
             });
+
+            if (js) {
+                Templates.runTemplateJS(js);
+            }
 
             this.ui.dom.messagesContainer.appendChild(timeoutNode);
             this.ui.scrollToBottom();
