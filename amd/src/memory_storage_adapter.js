@@ -1,3 +1,11 @@
+/**
+ * In-memory Web Storage API fallback when localStorage is unavailable.
+ *
+ * @module     block_dixeo_tutor/memory_storage_adapter
+ * @copyright  2025 Edunao SAS (contact@edunao.com)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 define([], function() {
     'use strict';
 

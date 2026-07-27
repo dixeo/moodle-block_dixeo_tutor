@@ -1,3 +1,11 @@
+/**
+ * Chat UI: message rendering, input handling, and scroll management.
+ *
+ * @module     block_dixeo_tutor/chat_ui
+ * @copyright  2025 Edunao SAS (contact@edunao.com)
+ * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ */
+
 define([
     'core/str',
     'block_dixeo_tutor/constants',
