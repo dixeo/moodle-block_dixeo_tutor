@@ -61,11 +61,15 @@ jobs:
       - name: Install moodle-plugin-ci
         run: |
           # Declared in version.php dependencies; required for caps, services, and PHPUnit mocks.
-          moodle-plugin-ci add-plugin dixeo/moodle-local_dixeo
+          # Match Dixeo sibling branch: development/main/release → same on local_dixeo.
+          moodle-plugin-ci add-plugin --branch "$DIXEO_DEP_BRANCH" dixeo/moodle-local_dixeo
+          # Soft runtime dep for practice-quiz review builder / PHPUnit (quiz mode).
+          moodle-plugin-ci add-plugin --branch "$DIXEO_DEP_BRANCH" dixeo/mod_simplequiz2
           moodle-plugin-ci install --plugin ./plugin --db-host=127.0.0.1
         env:
           DB: ${{ matrix.database }}
           MOODLE_BRANCH: ${{ matrix.moodle-branch }}
+          DIXEO_DEP_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref_name }}
           # Uncomment this to run Behat tests using the Moodle App.
           # MOODLE_APP: 'true'
 
