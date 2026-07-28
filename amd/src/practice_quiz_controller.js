@@ -199,16 +199,6 @@ define([
     };
 
     PracticeQuizController.prototype.handleQuizExit = function() {
-        const best = this.lastPlayerState && this.lastPlayerState.bestAttempt;
-        if (best && this.questionsJson) {
-            this.submitReview({
-                title: this.quizTitle,
-                questionsjson: this.questionsJson,
-                bestattemptjson: JSON.stringify(best),
-                exitscore: best.score,
-                total: best.total,
-            });
-        }
         this.clearStorage();
         this.closeQuizPane(false);
         this._lastSetupConfig = null;
