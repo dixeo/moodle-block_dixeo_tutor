@@ -26,6 +26,7 @@ namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\job_ownership;
+use block_dixeo_tutor\service\tutor_mode_policy;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -73,6 +74,7 @@ class finalize_practice_quiz extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_mode_policy::require_quiz_mode(tutor_mode_policy::is_quiz_runtime_available());
 
         job_ownership::require_valid_jobid($params['jobid']);
         job_ownership::require_owned((int) $USER->id, (int) $params['courseid'], $params['jobid']);

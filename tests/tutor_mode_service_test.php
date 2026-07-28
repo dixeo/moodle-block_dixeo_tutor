@@ -25,6 +25,7 @@
 
 namespace block_dixeo_tutor;
 
+use block_dixeo_tutor\service\tutor_mode_policy;
 use block_dixeo_tutor\service\tutor_mode_service;
 use local_dixeo\dto\tutor_message;
 
@@ -53,5 +54,33 @@ final class tutor_mode_service_test extends \advanced_testcase {
 
         $this->assertSame(tutor_message::MODE_GUIDE, $stored);
         $this->assertSame(tutor_message::MODE_GUIDE, $service->get_mode((int) $user->id, (int) $course->id));
+    }
+
+    public function test_get_mode_coerces_disabled_mode_to_normal(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        set_user_preference(
+            tutor_mode_service::PREF_MODE_PREFIX . $course->id,
+            tutor_message::MODE_GUIDE,
+            $user->id
+        );
+        set_config(tutor_mode_policy::CONFIG_ENABLED_MODES, 'quiz,teach', 'block_dixeo_tutor');
+
+        $service = new tutor_mode_service();
+        $this->assertSame(tutor_message::MODE_NORMAL, $service->get_mode((int) $user->id, (int) $course->id));
+    }
+
+    public function test_set_mode_rejects_disabled_mode(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        set_config(tutor_mode_policy::CONFIG_ENABLED_MODES, 'quiz,teach', 'block_dixeo_tutor');
+
+        $service = new tutor_mode_service();
+        $this->expectException(\invalid_parameter_exception::class);
+        $service->set_mode((int) $user->id, (int) $course->id, tutor_message::MODE_GUIDE);
     }
 }

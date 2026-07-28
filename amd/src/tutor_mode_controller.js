@@ -16,12 +16,14 @@ define([
      * @param {Object} options
      * @param {number} options.courseid
      * @param {boolean} options.quizAvailable
+     * @param {boolean} options.teachAvailable
      * @param {Object|null} options.quizController PracticeQuizController instance when ready.
      * @param {Object|null} options.teachController TeachController instance when ready.
      */
     const TutorModeController = function(options) {
         this.courseid = options.courseid;
         this.quizAvailable = !!options.quizAvailable;
+        this.teachAvailable = !!options.teachAvailable;
         this.quizController = options.quizController || null;
         this.teachController = options.teachController || null;
         this._persistCount = 0;
@@ -41,7 +43,7 @@ define([
         if (this.currentMode === MODES.QUIZ && this.quizAvailable) {
             this._openQuizWhenReady();
         }
-        if (this.currentMode === MODES.TEACH) {
+        if (this.currentMode === MODES.TEACH && this.teachAvailable) {
             this._openTeachWhenReady();
         }
     };
@@ -73,7 +75,7 @@ define([
 
     TutorModeController.prototype.setTeachController = function(controller) {
         this.teachController = controller;
-        if (this.currentMode === MODES.TEACH) {
+        if (this.currentMode === MODES.TEACH && this.teachAvailable) {
             this._openTeachWhenReady();
         }
     };
@@ -234,7 +236,7 @@ define([
             this._openQuizWhenReady();
             return;
         }
-        if (mode === MODES.TEACH) {
+        if (mode === MODES.TEACH && this.teachAvailable) {
             if (this.quizController && typeof this.quizController.closeQuizPane === 'function') {
                 this.quizController.closeQuizPane(false);
             }

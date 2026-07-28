@@ -193,15 +193,28 @@ define([
          * @param {string} [openTooltip] Tooltip for opening the tutor (popup mode).
          * @param {string} [hideTooltip] Tooltip for hiding the tutor (popup mode).
          * @param {number} [lastread] Last-read incoming watermark from server (Unix seconds).
-         * @param {boolean} [practicequizavailable] Whether mod_simplequiz2 is installed.
+         * @param {boolean} [quizmodeavailable] Whether quiz mode is policy-available.
+         * @param {boolean} [guidemodeavailable] Whether guide mode is policy-available.
+         * @param {boolean} [teachmodeavailable] Whether teach mode is policy-available.
          */
-        init: function(courseid, userid, displaymode, openTooltip, hideTooltip, lastread, practicequizavailable) {
+        init: function(
+            courseid,
+            userid,
+            displaymode,
+            openTooltip,
+            hideTooltip,
+            lastread,
+            quizmodeavailable,
+            guidemodeavailable,
+            teachmodeavailable
+        ) {
             const state = new ChatState(courseid, userid);
             const ui = new ChatUI();
 
             const modeController = new TutorModeController({
                 courseid: courseid,
-                quizAvailable: !!practicequizavailable,
+                quizAvailable: !!quizmodeavailable,
+                teachAvailable: !!teachmodeavailable,
             });
             modeController.setMessagingLockHandler((locked) => {
                 if (locked) {
@@ -232,7 +245,7 @@ define([
 
             let quizController = null;
             let teachController = null;
-            if (practicequizavailable) {
+            if (quizmodeavailable) {
                 require([
                     'block_dixeo_tutor/practice_quiz_controller',
                     'block_dixeo_tutor/practice_quiz_review',
@@ -249,20 +262,22 @@ define([
                 });
             }
 
-            require([
-                'block_dixeo_tutor/teach_controller',
-                'block_dixeo_tutor/custom_lesson_panel',
-            ], function(TeachController, customLessonPanel) {
-                teachController = new TeachController({
-                    courseid: courseid,
-                    userid: userid,
-                    ui: ui,
-                    state: state,
-                    modeController: modeController,
+            if (teachmodeavailable) {
+                require([
+                    'block_dixeo_tutor/teach_controller',
+                    'block_dixeo_tutor/custom_lesson_panel',
+                ], function(TeachController, customLessonPanel) {
+                    teachController = new TeachController({
+                        courseid: courseid,
+                        userid: userid,
+                        ui: ui,
+                        state: state,
+                        modeController: modeController,
+                    });
+                    customLessonPanel.wireActions({teachController: teachController});
+                    modeController.setTeachController(teachController);
                 });
-                customLessonPanel.wireActions({teachController: teachController});
-                modeController.setTeachController(teachController);
-            });
+            }
 
             const container = document.getElementById('dixeo-tutor');
             if (container) {
