@@ -208,6 +208,18 @@ class block_dixeo_tutor extends block_base {
         }
 
         $simplequiz2available = self::is_simplequiz2_available();
+        $quizmodeavailable = \block_dixeo_tutor\service\tutor_mode_policy::is_mode_available(
+            \local_dixeo\dto\tutor_message::MODE_QUIZ,
+            $simplequiz2available
+        );
+        $guidemodeavailable = \block_dixeo_tutor\service\tutor_mode_policy::is_mode_available(
+            \local_dixeo\dto\tutor_message::MODE_GUIDE,
+            $simplequiz2available
+        );
+        $teachmodeavailable = \block_dixeo_tutor\service\tutor_mode_policy::is_mode_available(
+            \local_dixeo\dto\tutor_message::MODE_TEACH,
+            $simplequiz2available
+        );
 
         $modeservice = new \block_dixeo_tutor\service\tutor_mode_service();
         $modeselector = \block_dixeo_tutor\service\tutor_mode_helper::export_mode_selector(
@@ -218,14 +230,18 @@ class block_dixeo_tutor extends block_base {
 
         $langoptions = \local_dixeo\service\generation_language_helper::build_options((int) $USER->id);
 
-        $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', [
+        $templatecontext = [
             'coursename' => format_string($this->page->course->fullname, true, ['context' => \context_course::instance($courseid)]),
             'currentcmid' => $currentcmid,
-            'mode_selector' => $modeselector,
             'generationlanguagesjson' => json_encode($langoptions['languages']),
             'defaultgenerationlanguage' => $langoptions['defaultlanguage'],
-        ]);
-        if ($simplequiz2available) {
+        ];
+        if ($modeselector !== null) {
+            $templatecontext['mode_selector'] = $modeselector;
+        }
+
+        $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', $templatecontext);
+        if ($simplequiz2available && $quizmodeavailable) {
             $this->page->requires->css('/mod/simplequiz2/styles.css');
         }
         $displaymode = get_config('block_dixeo_tutor', 'displaymode');
@@ -246,7 +262,9 @@ class block_dixeo_tutor extends block_base {
             $opentooltip,
             $hidetooltip,
             $readservice->get_last_read((int) $USER->id, $courseid),
-            $simplequiz2available,
+            $quizmodeavailable,
+            $guidemodeavailable,
+            $teachmodeavailable,
         ]);
         return $this->content;
     }

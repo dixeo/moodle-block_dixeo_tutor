@@ -42,7 +42,8 @@ class tutor_mode_service {
      */
     public function get_mode(int $userid, int $courseid): string {
         $raw = get_user_preferences(self::PREF_MODE_PREFIX . $courseid, tutor_message::MODE_NORMAL, $userid);
-        return tutor_message::normalize_mode((string) $raw);
+        $mode = tutor_message::normalize_mode((string) $raw);
+        return tutor_mode_policy::coerce_mode($mode, tutor_mode_policy::is_quiz_runtime_available());
     }
 
     /**
@@ -55,6 +56,7 @@ class tutor_mode_service {
      */
     public function set_mode(int $userid, int $courseid, string $mode): string {
         $mode = tutor_message::normalize_mode($mode);
+        tutor_mode_policy::require_mode_available($mode, tutor_mode_policy::is_quiz_runtime_available());
         set_user_preference(self::PREF_MODE_PREFIX . $courseid, $mode, $userid);
         return $mode;
     }
