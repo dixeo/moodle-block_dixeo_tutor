@@ -1040,6 +1040,10 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
     min-width: 14rem;
 }
 
+.tutor-mode-selector .option-select-indicator {
+    display: none;
+}
+
 .tutor-mode-selector--locked .tutor-mode-selector__toggle {
     pointer-events: none;
     cursor: not-allowed;
