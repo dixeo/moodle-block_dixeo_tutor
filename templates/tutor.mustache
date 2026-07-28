@@ -12,7 +12,9 @@
      data-course-name="{{coursename}}"
      data-current-cmid="{{currentcmid}}"
      data-generation-languages="{{generationlanguagesjson}}"
-     data-default-generation-language="{{defaultgenerationlanguage}}">
+     data-default-generation-language="{{defaultgenerationlanguage}}"
+     data-quiz-mode-available="{{#quizmodeavailable}}1{{/quizmodeavailable}}{{^quizmodeavailable}}0{{/quizmodeavailable}}"
+     data-teach-mode-available="{{#teachmodeavailable}}1{{/teachmodeavailable}}{{^teachmodeavailable}}0{{/teachmodeavailable}}">
     <div class="card-header d-flex flex-nowrap align-items-center bg-light px-3 py-2" id="dixeo-tutor-header">
         <span class="font-weight-bold dixeo-tutor-title">{{#str}}assistanttitle, block_dixeo_tutor{{/str}}</span>
         <div class="dixeo-tutor-header__end">
