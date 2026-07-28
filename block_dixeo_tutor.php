@@ -235,6 +235,8 @@ class block_dixeo_tutor extends block_base {
             'currentcmid' => $currentcmid,
             'generationlanguagesjson' => json_encode($langoptions['languages']),
             'defaultgenerationlanguage' => $langoptions['defaultlanguage'],
+            'quizmodeavailable' => $quizmodeavailable,
+            'teachmodeavailable' => $teachmodeavailable,
         ];
         if ($modeselector !== null) {
             $templatecontext['mode_selector'] = $modeselector;

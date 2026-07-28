@@ -27,6 +27,16 @@ define([
     let actionDeps = {quizController: null};
 
     /**
+     * Whether quiz mode is enabled for new quizzes/retakes.
+     *
+     * @returns {boolean}
+     */
+    function isQuizModeAvailable() {
+        const root = document.getElementById('dixeo-tutor');
+        return !!(root && root.dataset.quizModeAvailable === '1');
+    }
+
+    /**
      * Preload review panel strings and Mustache template.
      */
     function preload() {
@@ -435,7 +445,7 @@ define([
         return {
             version: data.version || 1,
             title: data.title || '',
-            canRetake: !!(data.questionsJson),
+            canRetake: !!(data.questionsJson) && isQuizModeAvailable(),
             retakeLabel: labels.quiz_review_retake || 'Retake quiz',
             bestScoreLabel: formatString(labels.quiz_review_best_score, {
                 score: bestScore,
@@ -488,7 +498,7 @@ define([
      * @param {object} data Parsed review payload.
      */
     function wireReviewActions(panelEl, data) {
-        if (!panelEl || !data || !data.questionsJson) {
+        if (!panelEl || !data || !data.questionsJson || !isQuizModeAvailable()) {
             return;
         }
         const retakeBtn = panelEl.querySelector('[data-action="retake-quiz"]');

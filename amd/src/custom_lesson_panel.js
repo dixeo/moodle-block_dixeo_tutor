@@ -3,7 +3,8 @@ define([
     'core/str',
     'block_dixeo_tutor/text_utils',
     'block_dixeo_tutor/tts_player',
-], function(Templates, str, textUtils, ttsPlayer) {
+    'block_dixeo_tutor/teach_lesson_view',
+], function(Templates, str, textUtils, ttsPlayer, teachLessonView) {
     'use strict';
 
     /** Must match {@see \block_dixeo_tutor\service\tutor_context_schema::SCHEMA_CUSTOM_LESSON}. */
@@ -188,6 +189,40 @@ define([
     }
 
     /**
+     * Open an existing lesson for read-only viewing when teach mode is disabled.
+     *
+     * @param {object} lesson
+     * @returns {Promise<void>}
+     */
+    function openLessonView(lesson) {
+        const teachPane = document.getElementById('dixeo-tutor-teach-pane');
+        const body = document.getElementById('dixeo-tutor-body');
+        if (!teachPane) {
+            return teachLessonView.openFullscreenModal(lesson);
+        }
+
+        const closeLessonView = function() {
+            teachLessonView.destroy();
+            teachPane.innerHTML = '';
+            teachPane.classList.add('d-none');
+            teachPane.setAttribute('aria-hidden', 'true');
+            if (body) {
+                body.classList.remove('dixeo-tutor-body--teach-active');
+                body.classList.remove('dixeo-tutor-body--teach-viewing');
+            }
+        };
+
+        teachPane.classList.remove('d-none');
+        teachPane.setAttribute('aria-hidden', 'false');
+        if (body) {
+            body.classList.add('dixeo-tutor-body--teach-active');
+            body.classList.add('dixeo-tutor-body--teach-viewing');
+        }
+
+        return teachLessonView.mountLesson(teachPane, lesson, closeLessonView);
+    }
+
+    /**
      * @param {HTMLElement} panelEl
      * @param {object} data Parsed lesson context.
      * @param {object} [strings]
@@ -216,14 +251,17 @@ define([
         if (viewBtn) {
             viewBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
+                const lessonPayload = {
+                    title: data.title || '',
+                    introhtml: data.introhtml || '',
+                    contenthtml: data.contenthtml || '',
+                };
                 const controller = actionDeps.teachController;
                 if (controller && typeof controller.openLessonFromContext === 'function') {
-                    controller.openLessonFromContext({
-                        title: data.title || '',
-                        introhtml: data.introhtml || '',
-                        contenthtml: data.contenthtml || '',
-                    });
+                    controller.openLessonFromContext(lessonPayload);
+                    return;
                 }
+                openLessonView(lessonPayload);
             });
         }
     }
