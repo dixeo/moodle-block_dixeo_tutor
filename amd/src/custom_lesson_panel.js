@@ -3,12 +3,13 @@ define([
     'core/str',
     'block_dixeo_tutor/text_utils',
     'block_dixeo_tutor/tts_player',
+    'block_dixeo_tutor/custom_lesson_utils',
     'block_dixeo_tutor/teach_lesson_view',
-], function(Templates, str, textUtils, ttsPlayer, teachLessonView) {
+], function(Templates, str, textUtils, ttsPlayer, customLessonUtils, teachLessonView) {
     'use strict';
 
     /** Must match {@see \block_dixeo_tutor\service\tutor_context_schema::SCHEMA_CUSTOM_LESSON}. */
-    const SCHEMA_CUSTOM_LESSON = 'custom_lesson';
+    const SCHEMA_CUSTOM_LESSON = customLessonUtils.SCHEMA_CUSTOM_LESSON;
     const OPTIMISTIC_ID_PREFIX = 'temp-custom-lesson-';
 
     const STRING_KEYS = [
@@ -110,6 +111,11 @@ define([
         return null;
     }
 
+    const lessonFromPayload = customLessonUtils.lessonFromPayload;
+    const previewText = customLessonUtils.previewText;
+    const ttsText = customLessonUtils.ttsText;
+    const lessonTtsGroupId = customLessonUtils.lessonTtsGroupId;
+
     /**
      * @param {object} message
      * @returns {{version: number, data: object}|null}
@@ -123,50 +129,6 @@ define([
             version: data.version || 1,
             data: data,
         };
-    }
-
-    /**
-     * @param {object} lesson
-     * @returns {object}
-     */
-    function lessonFromPayload(lesson) {
-        return {
-            schema: SCHEMA_CUSTOM_LESSON,
-            version: 1,
-            title: lesson.title || '',
-            introhtml: lesson.introhtml || '',
-            contenthtml: lesson.contenthtml || '',
-        };
-    }
-
-    /**
-     * @param {object} data Parsed lesson context.
-     * @returns {string}
-     */
-    function previewText(data) {
-        const plain = textUtils.htmlToPlain(data.contenthtml || '');
-        return textUtils.truncateAtWordBoundary(plain, 200);
-    }
-
-    /**
-     * @param {object} data Parsed lesson context.
-     * @returns {string}
-     */
-    function ttsText(data) {
-        const intro = textUtils.htmlToPlain(data.introhtml || '');
-        const content = textUtils.htmlToPlain(data.contenthtml || '');
-        return [intro, content].filter(Boolean).join(' ').trim();
-    }
-
-    /**
-     * Stable TTS group id so card and lesson panel share playback state.
-     *
-     * @param {object} data Parsed lesson context.
-     * @returns {string}
-     */
-    function lessonTtsGroupId(data) {
-        const text = ttsText(data);
-        return 'custom-lesson:' + text.length + ':' + text.substring(0, 200);
     }
 
     /**
