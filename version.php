@@ -34,5 +34,5 @@ $plugin->component = 'block_dixeo_tutor';
 $plugin->maturity  = MATURITY_STABLE;
 $plugin->release   = '4.2.4';
 $plugin->dependencies = [
-    'local_dixeo' => 2026072800,
+    'local_dixeo' => 2026072803,
 ];
