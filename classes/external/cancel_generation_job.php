@@ -73,7 +73,7 @@ class cancel_generation_job extends external_api {
 
         try {
             $service = service_factory::get_job_service();
-            $service->cancel_job($params['jobid'], (int) $params['courseid']);
+            $service->cancel_job($params['jobid'], (int) $params['courseid'], (int) $USER->id);
 
             return client_response::cancellation_result($params['jobid'], true);
         } catch (api_exception $e) {
