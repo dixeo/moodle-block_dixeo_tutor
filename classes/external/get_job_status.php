@@ -76,7 +76,12 @@ class get_job_status extends external_api {
 
         try {
             $service = service_factory::get_job_service();
-            $status = $service->get_job_status($params['jobid'], (int) $params['courseid']);
+            // Initiator-scoped tutor jobs require the acting userid.
+            $status = $service->get_job_status(
+                $params['jobid'],
+                (int) $params['courseid'],
+                (int) $USER->id
+            );
 
             job_status_audit::maybe_emit_terminal_viewed(
                 (int) $params['courseid'],
