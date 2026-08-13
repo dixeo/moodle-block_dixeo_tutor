@@ -53,6 +53,7 @@ class send_message extends external_api {
             'courseid' => new external_value(PARAM_INT, 'The course ID'),
             'message' => new external_value(PARAM_RAW, 'The user message'),
             'pageurl' => new external_value(PARAM_URL, 'The current page URL', VALUE_DEFAULT, ''),
+            'cmid' => new external_value(PARAM_INT, 'Course module id when on an activity page', VALUE_DEFAULT, 0),
         ]);
     }
 
@@ -63,15 +64,17 @@ class send_message extends external_api {
      * @param int $courseid The course ID.
      * @param string $message The user message.
      * @param string $pageurl The current page URL.
+     * @param int $cmid Optional course module id.
      * @return array The pending operation result with job_id.
      */
-    public static function execute(int $courseid, string $message, string $pageurl = ''): array {
+    public static function execute(int $courseid, string $message, string $pageurl = '', int $cmid = 0): array {
         global $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
             'message' => $message,
             'pageurl' => $pageurl,
+            'cmid' => $cmid,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -91,6 +94,10 @@ class send_message extends external_api {
         $pagecontext = page_context::sanitize_pageurl($params['pageurl'] ?? '', (int) $params['courseid']);
         $modeservice = new tutor_mode_service();
         $resolvedmode = $modeservice->get_mode((int) $USER->id, $params['courseid']);
+        $sanitizedcmid = \local_dixeo\service\tutor_usage_recorder::sanitize_cmid(
+            (int) $params['courseid'],
+            (int) $params['cmid']
+        );
 
         try {
             $service = service_factory::get_tutor_service();
@@ -102,7 +109,8 @@ class send_message extends external_api {
                     $message,
                     tutor_context_schema::page_context($pagecontext)
                 ),
-                $resolvedmode
+                $resolvedmode,
+                $sanitizedcmid
             );
 
             $payload = $result->to_array();

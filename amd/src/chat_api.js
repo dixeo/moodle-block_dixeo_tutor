@@ -190,9 +190,10 @@ define([
          * Flushes queued proactive context for this course (if any).
          * @param {number} courseid The ID of the course.
          * @param {string} pageurl The current page URL for context.
+         * @param {number} [cmid=0] Course module id when on an activity page.
          * @returns {Promise<object>} Flush result; flushed=true when a job was submitted.
          */
-        async flushPendingContext(courseid, pageurl = '') {
+        async flushPendingContext(courseid, pageurl = '', cmid = 0) {
             if (!courseid || courseid <= 0) {
                 throw new errors.ValidationError(
                     'Invalid course ID',
@@ -204,7 +205,7 @@ define([
             try {
                 const result = await callAjax(
                     'flush_pending_context',
-                    {courseid, pageurl},
+                    {courseid, pageurl, cmid: cmid || 0},
                     {timeout: constants.network.AJAX_TIMEOUT}
                 );
 
@@ -232,10 +233,11 @@ define([
          * @param {number} courseid The ID of the course.
          * @param {string} message The message content.
          * @param {string} pageurl The current page URL for context.
+         * @param {number} [cmid=0] Course module id when on an activity page.
          * @returns {Promise<object>} Send result with job_id.
          * @throws {NetworkError|APIError|ValidationError|TimeoutError}
          */
-        async sendMessage(courseid, message, pageurl = '') {
+        async sendMessage(courseid, message, pageurl = '', cmid = 0) {
             if (!courseid || courseid <= 0) {
                 throw new errors.ValidationError(
                     'Invalid course ID',
@@ -255,7 +257,7 @@ define([
             try {
                 const result = await callAjax(
                     'send_message',
-                    {courseid, message: message.trim(), pageurl},
+                    {courseid, message: message.trim(), pageurl, cmid: cmid || 0},
                     {timeout: constants.network.AJAX_TIMEOUT}
                 );
 
