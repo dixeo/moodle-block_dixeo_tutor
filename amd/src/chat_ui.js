@@ -522,20 +522,33 @@ define([
             messageElements.forEach(element => {
                 const id = element.dataset.mid;
                 const messageDiv = element.querySelector('.dixeo-tutor-message');
-                let role = 'user';
-
-                if (messageDiv) {
-                    if (messageDiv.classList.contains('dixeo-tutor-message-user')) {
-                        role = 'user';
-                    } else if (messageDiv.classList.contains('dixeo-tutor-message-assistant')) {
-                        role = 'assistant';
-                    }
-                }
-
-                messages.push({id, role});
+                messages.push({id, role: this._roleFromMessageBubble(messageDiv)});
             });
 
             return messages;
+        }
+
+        /**
+         * Map a rendered bubble to a conversation role.
+         * Quiz review and custom lesson cards use the user alignment class but are system rows.
+         *
+         * @param {Element|null} messageDiv
+         * @returns {string}
+         * @private
+         */
+        _roleFromMessageBubble(messageDiv) {
+            if (!messageDiv) {
+                return 'user';
+            }
+            if (messageDiv.classList.contains('dixeo-tutor-message-system')
+                    || messageDiv.classList.contains('dixeo-tutor-message--quiz-review')
+                    || messageDiv.classList.contains('dixeo-tutor-message--custom-lesson')) {
+                return 'system';
+            }
+            if (messageDiv.classList.contains('dixeo-tutor-message-assistant')) {
+                return 'assistant';
+            }
+            return 'user';
         }
 
         /**

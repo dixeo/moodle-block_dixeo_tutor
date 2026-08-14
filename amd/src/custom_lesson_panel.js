@@ -229,18 +229,44 @@ define([
     }
 
     /**
+     * Remove one optimistic custom-lesson bubble (temp ids only).
+     *
+     * Matches by lesson title when provided so concurrent lessons are not wiped.
+     *
      * @param {Object} ui ChatUI
+     * @param {object} [matchData] Optional parsed lesson with title.
      */
-    function removeOptimisticMessage(ui) {
+    function removeOptimisticMessage(ui, matchData) {
         if (!ui || !ui.dom || !ui.dom.messagesContainer) {
             return;
         }
+        const temps = [];
         ui.dom.messagesContainer.querySelectorAll('.dixeo-tutor-message-row--custom-lesson').forEach(function(row) {
             const mid = row.dataset.mid || '';
             if (mid.indexOf(OPTIMISTIC_ID_PREFIX) === 0) {
-                row.remove();
+                temps.push(row);
             }
         });
+        const matchTitle = matchData && matchData.title ? String(matchData.title).trim() : '';
+        let target = null;
+        if (matchTitle) {
+            temps.forEach(function(row) {
+                if (target) {
+                    return;
+                }
+                const titleEl = row.querySelector('.dixeo-custom-lesson-panel__title, strong');
+                const title = titleEl ? String(titleEl.textContent || '').trim() : '';
+                if (title === matchTitle) {
+                    target = row;
+                }
+            });
+        }
+        if (!target && temps.length) {
+            target = temps[0];
+        }
+        if (target) {
+            target.remove();
+        }
     }
 
     /**
@@ -253,7 +279,6 @@ define([
         if (!data.contenthtml || !ui || typeof ui.appendMessage !== 'function') {
             return null;
         }
-        removeOptimisticMessage(ui);
         const tempId = OPTIMISTIC_ID_PREFIX + Date.now();
         ui.appendMessage({
             id: tempId,

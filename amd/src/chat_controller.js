@@ -201,14 +201,15 @@ define([
          */
         _bindPageUnload() {
             this._onBeforeUnload = () => {
-                if (this.replyPollTimeoutId) {
-                    const existingState = this.state.getPollState();
-                    this.state.savePollState({
-                        isPending: true,
-                        jobId: existingState?.jobId || null,
-                        timestamp: existingState?.timestamp || Date.now()
-                    });
+                if (!this.state.isPending() || !this.replyPollTimeoutId) {
+                    return;
                 }
+                const existingState = this.state.getPollState();
+                this.state.savePollState({
+                    isPending: true,
+                    jobId: existingState?.jobId || null,
+                    timestamp: existingState?.timestamp || Date.now()
+                });
             };
 
             window.addEventListener('beforeunload', this._onBeforeUnload);
@@ -300,7 +301,12 @@ define([
 
             this._emitConversationSynced(conversationData);
 
+            const last = messages.length ? messages[messages.length - 1] : null;
+            const waitingForReply = !!(last && String(last.role).toLowerCase() === 'user');
             if (!this.state.isPending()) {
+                if (!waitingForReply) {
+                    this.state.clearPollState();
+                }
                 this.ui.enableInput();
             }
         }
@@ -501,6 +507,7 @@ define([
                                 },
                             }));
                         }
+                        this._stopPolling();
                         this.state.clearDraft();
                         this.state.clearPollState();
                         this.state.setPending(false);
@@ -515,6 +522,7 @@ define([
                             this.pendingTempId = null;
                         }
 
+                        this._stopPolling();
                         this.state.clearDraft();
                         this.state.clearPollState();
                         this.state.setPending(false);
@@ -587,6 +595,7 @@ define([
                         const lastMessage = visibleMessages[visibleMessages.length - 1];
                         if (lastMessage.role === 'assistant') {
                             this._dispatchAssistantRepliedForMessages(data);
+                            this._stopPolling();
                             this.state.clearPollState();
                             this.state.clearDraft();
                             this.state.setPending(false);
@@ -594,6 +603,17 @@ define([
                             this.ui.enableInput();
                             return;
                         }
+                    }
+
+                    const rendered = this.ui.getRenderedMessages();
+                    const lastRendered = rendered.length ? rendered[rendered.length - 1] : null;
+                    if (!lastRendered || lastRendered.role !== 'user') {
+                        this._stopPolling();
+                        this.state.clearPollState();
+                        this.state.setPending(false);
+                        this.ui.hidePendingIndicator();
+                        this.ui.enableInput();
+                        return;
                     }
 
                     this.state.savePollState({
