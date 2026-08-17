@@ -32,6 +32,7 @@ define([
             this.loadOlderSlot = null;
             this._hasMoreOlder = false;
             this._loadingOlder = false;
+            this._messagingLocked = false;
             // Tracks whether the "Today" date separator has been added this session.
             this.todaySeparatorAdded = false;
             // User scrolled up to read older messages; reset when at bottom or scrollToBottom is called.
@@ -660,13 +661,29 @@ define([
         }
 
         /**
+         * Lock the composer so pending-reply enablement cannot reopen it (quiz/teach modes).
+         *
+         * @param {boolean} locked
+         */
+        setMessagingLocked(locked) {
+            this._messagingLocked = !!locked;
+            if (this._messagingLocked) {
+                this.setInputEnabled(false);
+            }
+        }
+
+        /**
          * Enables or disables the input field and send button without clearing pending indicators.
          *
          * @param {boolean} enabled
          */
         setInputEnabled(enabled) {
-            this.dom.inputField.disabled = !enabled;
-            this.dom.sendButton.disabled = !enabled;
+            if (!this.dom.inputField || !this.dom.sendButton) {
+                return;
+            }
+            const allow = !!enabled && !this._messagingLocked;
+            this.dom.inputField.disabled = !allow;
+            this.dom.sendButton.disabled = !allow;
         }
 
         /**
@@ -933,8 +950,9 @@ define([
             this._removeConnectionLostBanner();
 
             if (this.previousInputState) {
-                this.dom.inputField.disabled = this.previousInputState.inputDisabled;
-                this.dom.sendButton.disabled = this.previousInputState.buttonDisabled;
+                const wasEnabled = !this.previousInputState.inputDisabled
+                    && !this.previousInputState.buttonDisabled;
+                this.setInputEnabled(wasEnabled);
                 this.previousInputState = null;
             }
         }

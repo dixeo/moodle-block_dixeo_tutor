@@ -389,7 +389,8 @@ define([
                 return;
             }
 
-            if (this.modeController?.isPersisting()) {
+            if (this.modeController && typeof this.modeController.isMessagingLocked === 'function'
+                    && this.modeController.isMessagingLocked()) {
                 return;
             }
 

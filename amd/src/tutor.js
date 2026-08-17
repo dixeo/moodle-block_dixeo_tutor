@@ -217,9 +217,8 @@ define([
                 teachAvailable: !!teachmodeavailable,
             });
             modeController.setMessagingLockHandler((locked) => {
-                if (locked) {
-                    ui.disableInput();
-                } else if (!state.isPending()) {
+                ui.setMessagingLocked(locked);
+                if (!locked && !state.isPending()) {
                     ui.setInputEnabled(true);
                 }
             });

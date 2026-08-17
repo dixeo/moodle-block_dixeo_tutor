@@ -60,10 +60,22 @@ define([
     };
 
     /**
-     * @param {function(boolean): void} handler Called with true while mode preference is saving.
+     * True while a mode preference is saving, or while Quiz me / Teach me is active.
+     *
+     * @return {boolean}
+     */
+    TutorModeController.prototype.isMessagingLocked = function() {
+        return this._persistCount > 0
+            || this.currentMode === MODES.QUIZ
+            || this.currentMode === MODES.TEACH;
+    };
+
+    /**
+     * @param {function(boolean): void} handler Called with true while composer messaging should stay disabled.
      */
     TutorModeController.prototype.setMessagingLockHandler = function(handler) {
         this._messagingLockHandler = typeof handler === 'function' ? handler : null;
+        this._syncMessagingLock();
     };
 
     TutorModeController.prototype.setQuizController = function(controller) {
@@ -187,6 +199,7 @@ define([
         if (this.root) {
             this.root.dataset.currentMode = mode;
         }
+        this._syncMessagingLock();
     };
 
     TutorModeController.prototype._notifyMessagingLock = function(locked) {
@@ -195,11 +208,15 @@ define([
         }
     };
 
+    TutorModeController.prototype._syncMessagingLock = function() {
+        this._notifyMessagingLock(this.isMessagingLocked());
+    };
+
     TutorModeController.prototype._beginPersist = function() {
         this._persistCount += 1;
         if (this._persistCount === 1) {
             this._syncSelectorLocked();
-            this._notifyMessagingLock(true);
+            this._syncMessagingLock();
         }
     };
 
@@ -209,7 +226,7 @@ define([
         }
         if (this._persistCount === 0) {
             this._syncSelectorLocked();
-            this._notifyMessagingLock(false);
+            this._syncMessagingLock();
         }
     };
 
