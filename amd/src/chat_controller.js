@@ -1,10 +1,11 @@
 define([
     'core/str',
-    'core/templates',
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/errors',
     'block_dixeo_tutor/reconciliation_service',
-], function(str, Templates, constants, errors, ReconciliationService) {
+    'block_dixeo_tutor/system_message_display',
+    'block_dixeo_tutor/text_utils'
+], function(str, constants, errors, ReconciliationService, systemMessageDisplay, textUtils) {
     'use strict';
 
     return class ChatController {
@@ -13,11 +14,13 @@ define([
          * @param {ChatState} state The application state manager.
          * @param {ChatUI} ui The UI manager.
          * @param {ChatAPI} api The API service.
+         * @param {Object|null} modeController Tutor mode controller.
          */
-        constructor(state, ui, api) {
+        constructor(state, ui, api, modeController = null) {
             this.state = state;
             this.ui = ui;
             this.api = api;
+            this.modeController = modeController;
             this.reconciler = new ReconciliationService(ui, state);
             this.pendingTempId = null;
             this.replyPollTimeoutId = null;
@@ -26,6 +29,8 @@ define([
             this.connectionRetryDelay = 1000;
             this.maxConnectionRetryDelay = 30000;
             this.isConnectionLost = false;
+            this._loadingOlder = false;
+            this._flushingPending = false;
             // Event handler references stored for cleanup in destroy().
             this._onOffline = null;
             this._onOnline = null;
@@ -47,7 +52,136 @@ define([
                 return;
             }
 
-            this._checkInitialState();
+            this._initSequence();
+        }
+
+        /**
+         * Flush proactive context, load conversation, restore session state.
+         * @private
+         */
+        async _initSequence() {
+            try {
+                await this._flushPendingContext();
+                await this._checkInitialState();
+                this._restoreSession();
+                this._syncPendingUi();
+            } catch (e) {
+                if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
+                    this._handleConnectionLoss();
+                } else {
+                    this.ui.appendErrorMessage('Failed to initialize chat.');
+                }
+            }
+        }
+
+        /**
+         * Messages to render in the chat (proactive context hidden unless developer debug is on).
+         * @param {Array<object>} messages Raw messages from the API.
+         * @returns {Array<object>}
+         * @private
+         */
+        _messagesForDisplay(messages) {
+            return systemMessageDisplay.filterMessagesForDisplay(messages);
+        }
+
+        /**
+         * Notify listeners when a new non-proactive assistant message arrived.
+         * @param {{lastincomingtime?: number}} conversationData Conversation API response (full or delta).
+         * @private
+         */
+        _dispatchAssistantRepliedForMessages(conversationData) {
+            const lastIncomingTime = parseInt(conversationData?.lastincomingtime, 10) || 0;
+            if (lastIncomingTime <= 0) {
+                return;
+            }
+            window.dispatchEvent(new CustomEvent(constants.events.ASSISTANT_REPLIED, {
+                detail: {lastIncomingTime},
+            }));
+        }
+
+        /**
+         * Publish latest incoming (assistant) message time for unread mark-read on tutor open.
+         * @param {{lastincomingtime?: number}} conversationData Conversation API response (full or delta).
+         * @private
+         */
+        _emitConversationSynced(conversationData) {
+            const lastIncomingTime = parseInt(conversationData?.lastincomingtime, 10) || 0;
+            window.dispatchEvent(new CustomEvent(constants.events.CONVERSATION_SYNCED, {
+                detail: {lastIncomingTime},
+            }));
+        }
+
+        /**
+         * Keep loading UI in sync when a reply job is in flight (proactive flush, restore, etc.).
+         * @private
+         */
+        _syncPendingUi() {
+            if (!this.state.isPending()) {
+                return;
+            }
+            this.ui.disableInput();
+            this.ui.showPendingIndicator();
+        }
+
+        /**
+         * Submit queued proactive context (welcome, Guide me start, etc.).
+         *
+         * @param {string} [mode] Current tutor mode after a preference save, if known.
+         */
+        flushPendingAfterModePersist(mode) {
+            if (mode !== 'guide') {
+                return;
+            }
+            this._flushPendingContext();
+        }
+
+        /**
+         * Submit queued proactive context lines when the tutor UI loads.
+         * @private
+         */
+        async _flushPendingContext() {
+            if (this._flushingPending) {
+                return;
+            }
+            if (this.modeController?.isPersisting()) {
+                return;
+            }
+            if (this.state.isPending()) {
+                return;
+            }
+
+            this._flushingPending = true;
+            try {
+                const response = await this.api.flushPendingContext(
+                    this.state.getCourseId(),
+                    window.location.href
+                );
+
+                if (!response.flushed || !response.jobid) {
+                    return;
+                }
+
+                this.state.setPending(true);
+                this.ui.disableInput();
+                this.ui.showPendingIndicator();
+                this.state.savePollState({
+                    isPending: true,
+                    jobId: response.jobid,
+                    timestamp: Date.now(),
+                    fromProactiveFlush: true,
+                });
+                this._pollForJobCompletion(response.jobid);
+            } finally {
+                this._flushingPending = false;
+            }
+        }
+
+        /**
+         * Drain leftover queued events after a reply job finishes.
+         * @private
+         */
+        _drainPendingContext() {
+            this._flushPendingContext();
         }
 
         /**
@@ -57,6 +191,7 @@ define([
         _bindEvents() {
             this.ui.on(constants.events.SEND_MESSAGE, (message) => this.handleSendMessage(message));
             this.ui.on(constants.events.RETRY_SEND_MESSAGE, (message) => this.handleSendMessage(message));
+            this.ui.on(constants.events.LOAD_OLDER_MESSAGES, () => this._handleLoadOlderMessages());
         }
 
         /**
@@ -98,14 +233,15 @@ define([
          */
         _bindPageUnload() {
             this._onBeforeUnload = () => {
-                if (this.replyPollTimeoutId) {
-                    const existingState = this.state.getPollState();
-                    this.state.savePollState({
-                        isPending: true,
-                        jobId: existingState?.jobId || null,
-                        timestamp: existingState?.timestamp || Date.now()
-                    });
+                if (!this.state.isPending() || !this.replyPollTimeoutId) {
+                    return;
                 }
+                const existingState = this.state.getPollState();
+                this.state.savePollState({
+                    isPending: true,
+                    jobId: existingState?.jobId || null,
+                    timestamp: existingState?.timestamp || Date.now()
+                });
             };
 
             window.addEventListener('beforeunload', this._onBeforeUnload);
@@ -133,6 +269,7 @@ define([
          * @private
          */
         async _onCrossTabReplyReceived() {
+            const wasAwaitingReply = this.state.isPending();
             this._stopPolling();
             this.state.setPending(false);
             this.state.clearDraft();
@@ -140,6 +277,13 @@ define([
             try {
                 const data = await this.api.loadConversation(this.state.getCourseId());
                 await this._handleInitialState(data);
+                if (wasAwaitingReply) {
+                    const messages = this._messagesForDisplay(data.messages);
+                    const last = messages.length ? messages[messages.length - 1] : null;
+                    if (last && last.role === 'assistant') {
+                        window.dispatchEvent(new CustomEvent(constants.events.ASSISTANT_REPLIED));
+                    }
+                }
             } catch (e) {
                 // Sync failed, but still restore UI so user isn't stuck.
                 this.ui.enableInput();
@@ -159,7 +303,6 @@ define([
             try {
                 const conversationData = await this.api.loadConversation(this.state.getCourseId());
                 await this._handleInitialState(conversationData);
-                this._restoreSession();
             } catch (e) {
                 if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
                     this._handleConnectionLoss();
@@ -175,17 +318,98 @@ define([
          * @private
          */
         async _handleInitialState(conversationData) {
-            const messages = Array.isArray(conversationData.messages) ? conversationData.messages : [];
+            const rawMessages = Array.isArray(conversationData.messages) ? conversationData.messages : [];
+            const messages = this._messagesForDisplay(rawMessages);
 
-            await this._ensureWelcomeMessage(messages);
+            this._updatePaginationState(rawMessages);
+
             await this.ui.renderMessageHistory(messages);
 
             if (messages.length) {
                 this.state.setLastRenderedId(messages[messages.length - 1].id);
             }
 
-            // Enable input by default after loading.
-            this.ui.enableInput();
+            this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+
+            this._emitConversationSynced(conversationData);
+
+            const last = messages.length ? messages[messages.length - 1] : null;
+            const waitingForReply = !!(last && String(last.role).toLowerCase() === 'user');
+            if (!this.state.isPending()) {
+                if (!waitingForReply) {
+                    this.state.clearPollState();
+                }
+                this.ui.enableInput();
+            }
+        }
+
+        /**
+         * Track oldest-loaded cursor and whether more older pages exist.
+         * @param {Array<object>} rawMessages Unfiltered API batch.
+         * @private
+         */
+        _updatePaginationState(rawMessages) {
+            const pageSize = constants.ui.MESSAGE_PAGE_SIZE;
+            this.state.setHistoryOffset(0);
+            if (!rawMessages.length) {
+                this.state.setOldestLoadedId(null);
+                this.state.setHasMoreOlder(false);
+                return;
+            }
+            this.state.setOldestLoadedId(rawMessages[0].id);
+            this.state.setHasMoreOlder(rawMessages.length === pageSize);
+        }
+
+        /**
+         * Loads and prepends the next page of older messages.
+         * @private
+         */
+        async _handleLoadOlderMessages() {
+            if (this._loadingOlder || !this.state.getHasMoreOlder()) {
+                return;
+            }
+
+            const oldestId = this.state.getOldestLoadedId();
+            if (!oldestId) {
+                return;
+            }
+
+            const nextOffset = this.state.getHistoryOffset() + constants.ui.MESSAGE_PAGE_SIZE;
+
+            this._loadingOlder = true;
+            this.ui.setLoadOlderLoading(true);
+
+            try {
+                const data = await this.api.loadConversation(
+                    this.state.getCourseId(),
+                    null,
+                    nextOffset
+                );
+                const rawBatch = Array.isArray(data.messages) ? data.messages : [];
+                const displayBatch = this._messagesForDisplay(rawBatch)
+                    .filter((msg) => msg.id && !this.ui.hasMessage(msg.id));
+
+                await this.ui.prependMessages(displayBatch);
+
+                if (rawBatch.length) {
+                    this.state.setHistoryOffset(nextOffset);
+                    this.state.setOldestLoadedId(rawBatch[0].id);
+                }
+                this.state.setHasMoreOlder(
+                    rawBatch.length === constants.ui.MESSAGE_PAGE_SIZE && displayBatch.length > 0
+                );
+                this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+            } catch (e) {
+                if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
+                    this.ui.appendErrorMessage(await str.get_string('error_network', 'block_dixeo_tutor'));
+                } else {
+                    this.ui.appendErrorMessage(await str.get_string('unknownerror', 'block_dixeo_tutor'));
+                }
+                this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+            } finally {
+                this._loadingOlder = false;
+                this.ui.setLoadOlderLoading(false);
+            }
         }
 
         /**
@@ -194,6 +418,11 @@ define([
          */
         async handleSendMessage(message) {
             if (!message?.trim()) {
+                return;
+            }
+
+            if (this.modeController && typeof this.modeController.isMessagingLocked === 'function'
+                    && this.modeController.isMessagingLocked()) {
                 return;
             }
 
@@ -234,6 +463,9 @@ define([
                 // Store jobid and start polling.
                 const jobId = response.jobid;
                 this.state.savePollState({isPending: true, jobId: jobId, timestamp: Date.now()});
+                if (this.modeController && typeof this.modeController.noteActivity === 'function') {
+                    this.modeController.noteActivity();
+                }
                 this._pollForJobCompletion(jobId);
 
             } catch (err) {
@@ -291,18 +523,33 @@ define([
                     const jobStatus = await this.api.pollJobStatus(jobId, this.state.getCourseId());
 
                     if (jobStatus.status === 'completed') {
+                        const pollState = this.state.getPollState();
+                        const fromProactiveFlush = !!(pollState && pollState.fromProactiveFlush);
+
                         const delta = await this.api.loadConversation(
                             this.state.getCourseId(),
                             this.state.getLastRenderedId()
                         );
+                        const rawDelta = Array.isArray(delta.messages) ? delta.messages : [];
+                        const deltaMessages = this._messagesForDisplay(rawDelta);
 
-                        this.pendingTempId = this.reconciler.reconcile(delta.messages, this.pendingTempId);
-
+                        this.pendingTempId = this.reconciler.reconcile(deltaMessages, this.pendingTempId);
+                        this._emitConversationSynced(delta);
+                        this._dispatchAssistantRepliedForMessages(delta);
+                        if (fromProactiveFlush) {
+                            window.dispatchEvent(new CustomEvent(constants.events.PROACTIVE_REPLY_READY, {
+                                detail: {
+                                    lastIncomingTime: parseInt(delta.lastincomingtime, 10) || 0,
+                                },
+                            }));
+                        }
+                        this._stopPolling();
                         this.state.clearDraft();
                         this.state.clearPollState();
                         this.state.setPending(false);
                         this.ui.hidePendingIndicator();
                         this.ui.enableInput();
+                        this._drainPendingContext();
 
                     } else if (jobStatus.status === 'failed') {
                         const errorMsg = await str.get_string('errorsendmessage', 'block_dixeo_tutor');
@@ -312,12 +559,14 @@ define([
                             this.pendingTempId = null;
                         }
 
+                        this._stopPolling();
                         this.state.clearDraft();
                         this.state.clearPollState();
                         this.state.setPending(false);
                         this.ui.hidePendingIndicator();
                         this.ui.enableInput();
                         this.ui.appendErrorMessage(errorMsg);
+                        this._drainPendingContext();
 
                     } else {
                         // Still processing — continue polling.
@@ -375,11 +624,16 @@ define([
                         this.state.getLastRenderedId()
                     );
 
-                    this.pendingTempId = this.reconciler.reconcile(data.messages, this.pendingTempId);
+                    const rawMessages = Array.isArray(data.messages) ? data.messages : [];
+                    const visibleMessages = this._messagesForDisplay(rawMessages);
+                    this.pendingTempId = this.reconciler.reconcile(visibleMessages, this.pendingTempId);
+                    this._emitConversationSynced(data);
 
-                    if (data.messages && data.messages.length > 0) {
-                        const lastMessage = data.messages[data.messages.length - 1];
+                    if (visibleMessages.length > 0) {
+                        const lastMessage = visibleMessages[visibleMessages.length - 1];
                         if (lastMessage.role === 'assistant') {
+                            this._dispatchAssistantRepliedForMessages(data);
+                            this._stopPolling();
                             this.state.clearPollState();
                             this.state.clearDraft();
                             this.state.setPending(false);
@@ -387,6 +641,17 @@ define([
                             this.ui.enableInput();
                             return;
                         }
+                    }
+
+                    const rendered = this.ui.getRenderedMessages();
+                    const lastRendered = rendered.length ? rendered[rendered.length - 1] : null;
+                    if (!lastRendered || lastRendered.role !== 'user') {
+                        this._stopPolling();
+                        this.state.clearPollState();
+                        this.state.setPending(false);
+                        this.ui.hidePendingIndicator();
+                        this.ui.enableInput();
+                        return;
                     }
 
                     this.state.savePollState({
@@ -426,34 +691,6 @@ define([
         }
 
         /**
-         * Ensures a welcome message is always the first message.
-         * @param {Array<object>} messages The array of messages (modified in place).
-         * @private
-         */
-        async _ensureWelcomeMessage(messages) {
-            if (messages.length > 0 && messages[0].id === constants.messages.WELCOME_MESSAGE_ID) {
-                return;
-            }
-
-            if (messages.some(m => m.id === constants.messages.WELCOME_MESSAGE_ID)) {
-                return;
-            }
-
-            const welcome = await str.get_string('tutorpresentation', 'block_dixeo_tutor');
-
-            const firstTimestamp = messages.length > 0
-                ? messages[0].time
-                : Math.floor(Date.now() / 1000);
-
-            messages.unshift({
-                id: constants.messages.WELCOME_MESSAGE_ID,
-                role: 'assistant',
-                content: welcome,
-                time: firstTimestamp
-            });
-        }
-
-        /**
          * Restores same-tab session state: in-memory draft (if any) and poll checkpoint.
          * @private
          */
@@ -484,8 +721,8 @@ define([
                 }
             }
 
-            // Resume polling if it was active before page reload.
-            if (savedPollState && savedPollState.isPending) {
+            // Resume polling if it was active before page reload (skip if flush already started polling).
+            if (savedPollState && savedPollState.isPending && !this.replyPollTimeoutId) {
                 const currentMessages = this.ui.getRenderedMessages();
                 const currentLastMsg = currentMessages.length ? currentMessages[currentMessages.length - 1] : null;
 
@@ -549,21 +786,22 @@ define([
          * @private
          */
         async _showTimeoutMessage() {
-            const [timeoutMsg, checkUpdatesText] = await str.get_strings([
-                {key: 'timeout_message', component: 'block_dixeo_tutor'},
-                {key: 'check_for_updates', component: 'block_dixeo_tutor'},
-            ]);
-
-            const {html, js} = await Templates.renderForPromise('block_dixeo_tutor/timeout_message', {
-                message: timeoutMsg,
-                checklabel: checkUpdatesText,
-            });
+            const timeoutMsg = await str.get_string('timeout_message', 'block_dixeo_tutor');
+            const checkUpdatesText = await str.get_string('check_for_updates', 'block_dixeo_tutor');
 
             const wrapper = document.createElement('div');
-            wrapper.innerHTML = html;
+            wrapper.innerHTML = `
+                <div class="d-flex justify-content-center mb-2">
+                    <div class="dixeo-tutor-message dixeo-tutor-message-system alert alert-warning d-inline-flex flex-column">
+                        <div>${textUtils.escapeHtml(timeoutMsg)}</div>
+                        <button type="button" class="btn btn-sm btn-outline-primary mt-2">
+                            <i class="icon fa fa-refresh" aria-hidden="true"></i> ${textUtils.escapeHtml(checkUpdatesText)}
+                        </button>
+                    </div>
+                </div>`.trim();
             const timeoutNode = wrapper.firstChild;
 
-            timeoutNode.querySelector('.dixeo-tutor-timeout-retry').addEventListener('click', async() => {
+            timeoutNode.querySelector('button').addEventListener('click', async() => {
                 timeoutNode.remove();
 
                 try {
@@ -572,8 +810,11 @@ define([
                         this.state.getLastRenderedId()
                     );
 
-                    this.pendingTempId = this.reconciler.reconcile(data.messages, this.pendingTempId);
-
+                    const rawMessages = Array.isArray(data.messages) ? data.messages : [];
+                    this.pendingTempId = this.reconciler.reconcile(
+                        this._messagesForDisplay(rawMessages),
+                        this.pendingTempId
+                    );
                     const currentMessages = this.ui.getRenderedMessages();
                     const lastMessage = currentMessages.length ? currentMessages[currentMessages.length - 1] : null;
 
@@ -590,10 +831,6 @@ define([
                     this.ui.appendErrorMessage(errorMsg);
                 }
             });
-
-            if (js) {
-                Templates.runTemplateJS(js);
-            }
 
             this.ui.dom.messagesContainer.appendChild(timeoutNode);
             this.ui.scrollToBottom();
