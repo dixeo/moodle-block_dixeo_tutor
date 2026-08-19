@@ -171,6 +171,9 @@ define([
     };
 
     TeachController.prototype.openLessonFromContext = async function(lesson) {
+        if (this.modeController && typeof this.modeController.setMode === 'function') {
+            this.modeController.setMode('teach', {skipRouting: true});
+        }
         await this.mountLesson(lesson);
     };
 

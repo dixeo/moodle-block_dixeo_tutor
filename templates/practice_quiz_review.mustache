@@ -29,9 +29,9 @@
         "retakeLabel": "Retake quiz"
     }
 }}
-<div class="dixeo-practice-quiz-review" data-review-version="{{version}}">
-    <div class="dixeo-practice-quiz-review__header">
-        <h4 class="dixeo-practice-quiz-review__title">{{title}}</h4>
+<div class="card dixeo-practice-quiz-review" data-review-version="{{version}}">
+    <div class="card-header dixeo-practice-quiz-review__header">
+        <h4 class="card-title dixeo-practice-quiz-review__title">{{title}}</h4>
         <div class="dixeo-practice-quiz-review__scores">
             <span class="dixeo-practice-quiz-review__best-score">{{bestScoreLabel}}</span>
             {{#showExitScore}}
@@ -39,6 +39,7 @@
             {{/showExitScore}}
         </div>
     </div>
+    <div class="card-body dixeo-practice-quiz-review__body">
     <ol class="dixeo-practice-quiz-review__questions">
         {{#questions}}
         <li class="dixeo-practice-quiz-review__question {{#isCorrect}}dixeo-practice-quiz-review__question--correct{{/isCorrect}}{{^isCorrect}}dixeo-practice-quiz-review__question--incorrect{{/isCorrect}}">
@@ -66,10 +67,11 @@
         </li>
         {{/questions}}
     </ol>
+    </div>
     {{#canRetake}}
-    <div class="dixeo-practice-quiz-review__actions">
+    <div class="card-footer dixeo-practice-quiz-review__footer">
         <button type="button"
-                class="btn btn-sm btn-outline-primary dixeo-practice-quiz-review__retake-btn"
+                class="btn btn-sm btn-outline-secondary dixeo-practice-quiz-review__retake-btn"
                 data-action="retake-quiz">
             {{retakeLabel}}
         </button>

@@ -15,11 +15,15 @@
         "ttsStopLabel": "Stop reading"
     }
 }}
-<div class="dixeo-custom-lesson-panel" data-custom-lesson-version="{{version}}">
-    <p class="dixeo-custom-lesson-panel__label">{{label}}</p>
-    <h4 class="dixeo-custom-lesson-panel__title">{{title}}</h4>
-    <p class="dixeo-custom-lesson-panel__preview">{{preview}}</p>
-    <div class="dixeo-custom-lesson-panel__actions">
+<div class="card dixeo-custom-lesson-panel" data-custom-lesson-version="{{version}}">
+    <div class="card-header dixeo-custom-lesson-panel__header">
+        <p class="dixeo-custom-lesson-panel__label mb-0">{{label}}</p>
+        <h4 class="card-title dixeo-custom-lesson-panel__title mb-0">{{title}}</h4>
+    </div>
+    <div class="card-body dixeo-custom-lesson-panel__body">
+        <p class="card-text dixeo-custom-lesson-panel__preview mb-0">{{preview}}</p>
+    </div>
+    <div class="card-footer dixeo-custom-lesson-panel__footer">
         {{#ttssupported}}
         <button type="button"
                 class="dixeo-custom-lesson-panel__tts-btn dixeo-tutor-tts-btn"
@@ -31,7 +35,7 @@
         </button>
         {{/ttssupported}}
         <button type="button"
-                class="btn btn-sm btn-outline-primary dixeo-custom-lesson-panel__view-btn"
+                class="btn btn-sm btn-outline-secondary dixeo-custom-lesson-panel__view-btn"
                 data-action="view-lesson">
             {{viewLabel}}
         </button>

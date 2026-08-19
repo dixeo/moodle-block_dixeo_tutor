@@ -222,9 +222,10 @@ class block_dixeo_tutor extends block_base {
         );
 
         $modeservice = new \block_dixeo_tutor\service\tutor_mode_service();
+        $selectedmode = $modeservice->get_mode((int) $USER->id, $courseid);
         $modeselector = \block_dixeo_tutor\service\tutor_mode_helper::export_mode_selector(
             $OUTPUT,
-            $modeservice->get_mode((int) $USER->id, $courseid),
+            $selectedmode,
             $simplequiz2available
         );
 
@@ -267,6 +268,7 @@ class block_dixeo_tutor extends block_base {
             $quizmodeavailable,
             $guidemodeavailable,
             $teachmodeavailable,
+            $modeservice->get_last_activity((int) $USER->id, $courseid),
         ]);
         return $this->content;
     }

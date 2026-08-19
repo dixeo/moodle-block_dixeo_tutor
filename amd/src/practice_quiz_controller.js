@@ -7,7 +7,9 @@ define([
     'block_dixeo_tutor/generation_mode_controller',
     'block_dixeo_tutor/tutor_session_storage',
     'block_dixeo_tutor/practice_quiz_review',
-], function(str, embedPlayer, quizSetup, quizApi, contextPoller, generationModeController, sessionStorage, practiceQuizReview) {
+    'block_dixeo_tutor/practice_quiz_panel',
+], function(str, embedPlayer, quizSetup, quizApi, contextPoller, generationModeController, sessionStorage, practiceQuizReview,
+        practiceQuizPanel) {
     'use strict';
 
     const STORAGE_MODE = 'quiz';
@@ -184,20 +186,6 @@ define([
         }
     };
 
-    PracticeQuizController.prototype.attachQuestionsExitButton = async function() {
-        const questionsPanel = this.quizPane && this.quizPane.querySelector('#simplequiz-questions');
-        if (!questionsPanel || questionsPanel.querySelector('.dixeo-tutor-quiz-panel-exit')) {
-            return;
-        }
-
-        const exitBtn = document.createElement('button');
-        exitBtn.type = 'button';
-        exitBtn.className = 'btn btn-sm btn-outline-secondary dixeo-tutor-quiz-panel-exit';
-        exitBtn.textContent = await str.get_string('quiz_exit', 'block_dixeo_tutor');
-        exitBtn.addEventListener('click', () => this.handleQuizExit());
-        questionsPanel.insertBefore(exitBtn, questionsPanel.firstChild);
-    };
-
     PracticeQuizController.prototype.handleQuizExit = function() {
         this.clearStorage();
         this.closeQuizPane(false);
@@ -211,6 +199,7 @@ define([
         if (wasCancelled || !this.quizInProgress) {
             this.clearStorage();
         }
+        practiceQuizPanel.destroy();
         if (this.embedInstance) {
             this.embedInstance.destroy();
             this.embedInstance = null;
@@ -251,13 +240,21 @@ define([
         this._resumeJobId = meta.jobId || this._resumeJobId || null;
         this._resumeTopicTitle = meta.topictitle || this._resumeTopicTitle || '';
 
-        const rendered = await this.api.renderEmbed(this.courseid, this.questionsJson, '');
-        this.quizPane.innerHTML = rendered.html;
+        if (this.embedInstance) {
+            practiceQuizPanel.closeFullscreen();
+            this.embedInstance.destroy();
+            this.embedInstance = null;
+        }
 
-        const root = this.quizPane.querySelector('.simplequiz2-embed') || this.quizPane;
+        const rendered = await this.api.renderEmbed(this.courseid, this.questionsJson, '');
+        const root = await practiceQuizPanel.mount(
+            this.quizPane,
+            this.quizTitle,
+            rendered.html,
+            () => this.handleQuizExit()
+        );
         this.showQuizPane();
         this.setComposerQuizMode(true);
-        await this.attachQuestionsExitButton();
 
         const playerState = savedProgress || null;
         this.lastPlayerState = playerState;
@@ -273,6 +270,9 @@ define([
             });
         }
 
+        if (!root) {
+            throw new Error('Practice quiz embed missing after panel render');
+        }
         this.embedInstance = embedPlayer.init(root, {
             courseid: this.courseid,
             questionsJson: this.questionsJson,
@@ -387,6 +387,7 @@ define([
 
     PracticeQuizController.prototype.destroy = function() {
         this.bgPoller.cancel();
+        practiceQuizPanel.destroy();
         if (this.embedInstance) {
             this.embedInstance.destroy();
             this.embedInstance = null;

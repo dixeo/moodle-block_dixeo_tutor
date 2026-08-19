@@ -196,6 +196,7 @@ define([
          * @param {boolean} [quizmodeavailable] Whether quiz mode is policy-available.
          * @param {boolean} [guidemodeavailable] Whether guide mode is policy-available.
          * @param {boolean} [teachmodeavailable] Whether teach mode is policy-available.
+         * @param {number} [lastModeActivity] Unix seconds of last special-mode message/activity.
          */
         init: function(
             courseid,
@@ -206,7 +207,8 @@ define([
             lastread,
             quizmodeavailable,
             guidemodeavailable,
-            teachmodeavailable
+            teachmodeavailable,
+            lastModeActivity
         ) {
             const state = new ChatState(courseid, userid);
             const ui = new ChatUI();
@@ -215,6 +217,7 @@ define([
                 courseid: courseid,
                 quizAvailable: !!quizmodeavailable,
                 teachAvailable: !!teachmodeavailable,
+                lastActivity: lastModeActivity || 0,
             });
             modeController.setMessagingLockHandler((locked) => {
                 ui.setMessagingLocked(locked);
@@ -224,6 +227,9 @@ define([
             });
 
             const controller = new ChatController(state, ui, new ChatAPI(), modeController);
+            modeController.setAfterPersistHandler((mode) => {
+                controller.flushPendingAfterModePersist(mode);
+            });
 
             const unreadCallbacks = {
                 onTutorOpened: function() {

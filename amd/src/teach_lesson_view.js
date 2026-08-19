@@ -19,12 +19,7 @@ define([
      * @return {string}
      */
     const buildModalBodyHtml = function(lesson) {
-        const parts = [];
-        if (lesson.introhtml) {
-            parts.push('<div class="dixeo-teach-lesson__intro">', lesson.introhtml, '</div>');
-        }
-        parts.push('<div class="dixeo-teach-lesson-modal__body">', lesson.contenthtml || '', '</div>');
-        return parts.join('');
+        return '<div class="dixeo-teach-lesson-modal__body">' + (lesson.contenthtml || '') + '</div>';
     };
 
     /**
@@ -110,9 +105,7 @@ define([
     const mountLesson = function(container, lesson, onClose) {
         const context = {
             title: lesson.title || '',
-            introhtml: lesson.introhtml || '',
             contenthtml: lesson.contenthtml || '',
-            hasintro: !!(lesson.introhtml && lesson.introhtml.trim()),
             hastts: ttsPlayer.isSupported(),
         };
 

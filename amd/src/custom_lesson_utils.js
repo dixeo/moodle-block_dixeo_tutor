@@ -33,7 +33,7 @@ define([
      * @returns {string}
      */
     function previewText(data) {
-        const plain = textUtils.htmlToPlain(data.contenthtml || '');
+        const plain = textUtils.htmlToPlain(data.introhtml || '');
         return textUtils.truncateAtWordBoundary(plain, 200);
     }
 

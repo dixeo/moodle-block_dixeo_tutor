@@ -138,6 +138,35 @@ class tutor_proactive_context_service {
     }
 
     /**
+     * Queue a Socratic opening turn when the learner enters Guide me mode.
+     *
+     * Duplicate events are ignored until the current queue is flushed.
+     *
+     * @param int $userid
+     * @param int $courseid
+     * @return void
+     */
+    public function queue_guide_started(int $userid, int $courseid): void {
+        if (!$this->can_use_tutor($userid, $courseid)) {
+            return;
+        }
+
+        $now = time();
+        $record = $this->get_or_create_record($userid, $courseid, $now);
+        foreach ($this->decode_queue((string) ($record->message ?? '')) as $event) {
+            if (is_array($event) && ($event['type'] ?? '') === 'guide_started') {
+                return;
+            }
+        }
+
+        $this->append_event($record, [
+            'type' => 'guide_started',
+            'time' => $now,
+        ]);
+        $this->save_record($record);
+    }
+
+    /**
      * Handle quiz grade events for mod_quiz only.
      *
      * @param user_graded $event The event.
@@ -258,9 +287,20 @@ class tutor_proactive_context_service {
             throw $e;
         }
 
-        $record->message = '';
-        $record->timemodified = time();
-        $this->save_record($record);
+        $fresh = $this->get_record($userid, $courseid);
+        if ($fresh) {
+            $latest = $this->decode_queue((string) ($fresh->message ?? ''));
+            foreach ($events as $flushed) {
+                foreach ($latest as $index => $queued) {
+                    if ($queued === $flushed) {
+                        unset($latest[$index]);
+                        break;
+                    }
+                }
+            }
+            $fresh->message = $this->encode_queue(array_values($latest));
+            $this->save_record($fresh);
+        }
 
         return $result;
     }
@@ -466,6 +506,10 @@ class tutor_proactive_context_service {
      * @return string
      */
     private function encode_queue(array $events): string {
+        if ($events === []) {
+            return '';
+        }
+
         $json = json_encode($events, JSON_UNESCAPED_UNICODE);
         if ($json === false) {
             return '[]';

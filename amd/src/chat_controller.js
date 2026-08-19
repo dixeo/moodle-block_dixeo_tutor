@@ -30,6 +30,7 @@ define([
             this.maxConnectionRetryDelay = 30000;
             this.isConnectionLost = false;
             this._loadingOlder = false;
+            this._flushingPending = false;
             // Event handler references stored for cleanup in destroy().
             this._onOffline = null;
             this._onOnline = null;
@@ -123,33 +124,64 @@ define([
         }
 
         /**
+         * Submit queued proactive context (welcome, Guide me start, etc.).
+         *
+         * @param {string} [mode] Current tutor mode after a preference save, if known.
+         */
+        flushPendingAfterModePersist(mode) {
+            if (mode !== 'guide') {
+                return;
+            }
+            this._flushPendingContext();
+        }
+
+        /**
          * Submit queued proactive context lines when the tutor UI loads.
          * @private
          */
         async _flushPendingContext() {
+            if (this._flushingPending) {
+                return;
+            }
             if (this.modeController?.isPersisting()) {
                 return;
             }
-
-            const response = await this.api.flushPendingContext(
-                this.state.getCourseId(),
-                window.location.href
-            );
-
-            if (!response.flushed || !response.jobid) {
+            if (this.state.isPending()) {
                 return;
             }
 
-            this.state.setPending(true);
-            this.ui.disableInput();
-            this.ui.showPendingIndicator();
-            this.state.savePollState({
-                isPending: true,
-                jobId: response.jobid,
-                timestamp: Date.now(),
-                fromProactiveFlush: true,
-            });
-            this._pollForJobCompletion(response.jobid);
+            this._flushingPending = true;
+            try {
+                const response = await this.api.flushPendingContext(
+                    this.state.getCourseId(),
+                    window.location.href
+                );
+
+                if (!response.flushed || !response.jobid) {
+                    return;
+                }
+
+                this.state.setPending(true);
+                this.ui.disableInput();
+                this.ui.showPendingIndicator();
+                this.state.savePollState({
+                    isPending: true,
+                    jobId: response.jobid,
+                    timestamp: Date.now(),
+                    fromProactiveFlush: true,
+                });
+                this._pollForJobCompletion(response.jobid);
+            } finally {
+                this._flushingPending = false;
+            }
+        }
+
+        /**
+         * Drain leftover queued events after a reply job finishes.
+         * @private
+         */
+        _drainPendingContext() {
+            this._flushPendingContext();
         }
 
         /**
@@ -431,6 +463,9 @@ define([
                 // Store jobid and start polling.
                 const jobId = response.jobid;
                 this.state.savePollState({isPending: true, jobId: jobId, timestamp: Date.now()});
+                if (this.modeController && typeof this.modeController.noteActivity === 'function') {
+                    this.modeController.noteActivity();
+                }
                 this._pollForJobCompletion(jobId);
 
             } catch (err) {
@@ -514,6 +549,7 @@ define([
                         this.state.setPending(false);
                         this.ui.hidePendingIndicator();
                         this.ui.enableInput();
+                        this._drainPendingContext();
 
                     } else if (jobStatus.status === 'failed') {
                         const errorMsg = await str.get_string('errorsendmessage', 'block_dixeo_tutor');
@@ -530,6 +566,7 @@ define([
                         this.ui.hidePendingIndicator();
                         this.ui.enableInput();
                         this.ui.appendErrorMessage(errorMsg);
+                        this._drainPendingContext();
 
                     } else {
                         // Still processing — continue polling.

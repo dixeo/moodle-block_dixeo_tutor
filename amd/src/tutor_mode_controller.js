@@ -29,6 +29,9 @@ define([
         this._persistCount = 0;
         this._externalSelectorLocked = false;
         this._messagingLockHandler = null;
+        this._afterPersistHandler = null;
+        this._expiryTimer = null;
+        this._lastActivity = parseInt(options.lastActivity, 10) || 0;
 
         this.root = document.querySelector('.tutor-mode-selector');
         this.select = document.getElementById('tutormode');
@@ -39,6 +42,8 @@ define([
         }
 
         this._applyVisualState(this.currentMode);
+        this._wireGuideBanner();
+        this._syncExpiryTimer();
 
         if (this.currentMode === MODES.QUIZ && this.quizAvailable) {
             this._openQuizWhenReady();
@@ -78,6 +83,13 @@ define([
         this._syncMessagingLock();
     };
 
+    /**
+     * @param {function(string): void} handler Called after a mode preference save finishes.
+     */
+    TutorModeController.prototype.setAfterPersistHandler = function(handler) {
+        this._afterPersistHandler = typeof handler === 'function' ? handler : null;
+    };
+
     TutorModeController.prototype.setQuizController = function(controller) {
         this.quizController = controller;
         if (this.currentMode === MODES.QUIZ && this.quizAvailable) {
@@ -100,6 +112,10 @@ define([
         }
         this.currentMode = mode;
         this._applyVisualState(mode);
+        if (this._isExpirableMode(mode)) {
+            this._lastActivity = Math.floor(Date.now() / 1000);
+        }
+        this._syncExpiryTimer();
         if (!opts.skipPersist) {
             this._persistMode(mode);
         }
@@ -159,6 +175,10 @@ define([
         this._applyVisualState(mode);
         this._persistMode(mode);
         this._routeMode(mode);
+        if (this._isExpirableMode(mode)) {
+            this._lastActivity = Math.floor(Date.now() / 1000);
+        }
+        this._syncExpiryTimer();
     };
 
     TutorModeController.prototype._isSelectorLocked = function() {
@@ -195,9 +215,21 @@ define([
         this._setSelectorLocked(locked);
     };
 
+    TutorModeController.prototype._wireGuideBanner = function() {
+        const exitBtn = document.querySelector('#dixeo-tutor [data-action="exit-guide"]');
+        if (!exitBtn) {
+            return;
+        }
+        exitBtn.addEventListener('click', () => this.resetToNormal());
+    };
+
     TutorModeController.prototype._applyVisualState = function(mode) {
         if (this.root) {
             this.root.dataset.currentMode = mode;
+        }
+        const tutorRoot = document.getElementById('dixeo-tutor');
+        if (tutorRoot) {
+            tutorRoot.setAttribute('data-tutor-mode', mode);
         }
         this._syncMessagingLock();
     };
@@ -242,6 +274,9 @@ define([
             // Preference sync failure is non-fatal; client mode still applies this session.
         }).always(() => {
             this._endPersist();
+            if (typeof this._afterPersistHandler === 'function') {
+                this._afterPersistHandler(this.currentMode);
+            }
         });
     };
 
@@ -261,6 +296,41 @@ define([
             return;
         }
         this._closeModePanes();
+    };
+
+    TutorModeController.prototype.noteActivity = function() {
+        this._lastActivity = Math.floor(Date.now() / 1000);
+        this._syncExpiryTimer();
+    };
+
+    TutorModeController.prototype._isExpirableMode = function(mode) {
+        return mode === MODES.GUIDE || mode === MODES.QUIZ || mode === MODES.TEACH;
+    };
+
+    TutorModeController.prototype._clearExpiryTimer = function() {
+        if (this._expiryTimer) {
+            clearTimeout(this._expiryTimer);
+            this._expiryTimer = null;
+        }
+    };
+
+    TutorModeController.prototype._syncExpiryTimer = function() {
+        this._clearExpiryTimer();
+        if (!this._isExpirableMode(this.currentMode)) {
+            return;
+        }
+        if (!this._lastActivity) {
+            this._lastActivity = Math.floor(Date.now() / 1000);
+        }
+        const remainingMs = (3600 - (Math.floor(Date.now() / 1000) - this._lastActivity)) * 1000;
+        if (remainingMs <= 0) {
+            this.resetToNormal();
+            return;
+        }
+        this._expiryTimer = setTimeout(() => {
+            this._expiryTimer = null;
+            this.resetToNormal();
+        }, remainingMs);
     };
 
     TutorModeController.prototype.resetToNormal = function() {

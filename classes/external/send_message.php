@@ -114,6 +114,9 @@ class send_message extends external_api {
                     (string) $payload['jobid']
                 )->trigger();
             }
+            if ($modeservice->is_expirable_mode($resolvedmode)) {
+                $modeservice->touch_activity((int) $USER->id, $params['courseid']);
+            }
 
             return client_response::sanitize_send_message($payload);
         } catch (api_exception $e) {
