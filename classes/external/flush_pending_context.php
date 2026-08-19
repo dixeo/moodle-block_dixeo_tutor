@@ -47,6 +47,7 @@ class flush_pending_context extends external_api {
         return new external_function_parameters([
             'courseid' => new external_value(PARAM_INT, 'The course ID'),
             'pageurl' => new external_value(PARAM_URL, 'The current page URL', VALUE_DEFAULT, ''),
+            'cmid' => new external_value(PARAM_INT, 'Course module id when on an activity page', VALUE_DEFAULT, 0),
         ]);
     }
 
@@ -55,14 +56,16 @@ class flush_pending_context extends external_api {
      *
      * @param int $courseid
      * @param string $pageurl
+     * @param int $cmid
      * @return array
      */
-    public static function execute(int $courseid, string $pageurl = ''): array {
+    public static function execute(int $courseid, string $pageurl = '', int $cmid = 0): array {
         global $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
             'pageurl' => $pageurl,
+            'cmid' => $cmid,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -70,10 +73,14 @@ class flush_pending_context extends external_api {
         require_capability('block/dixeo_tutor:talktotutor', $context);
 
         $pagecontext = page_context::sanitize_pageurl($params['pageurl'] ?? '', (int) $params['courseid']);
+        $sanitizedcmid = \local_dixeo\service\tutor_usage_recorder::sanitize_cmid(
+            (int) $params['courseid'],
+            (int) $params['cmid']
+        );
 
         $service = new tutor_proactive_context_service();
         try {
-            $result = $service->flush($USER->id, $params['courseid'], $pagecontext);
+            $result = $service->flush($USER->id, $params['courseid'], $pagecontext, $sanitizedcmid);
         } catch (api_exception $e) {
             $error = client_response::send_message_error($e);
             $error['flushed'] = false;

@@ -124,6 +124,19 @@ define([
         }
 
         /**
+         * Course module id from the tutor root when on an activity page.
+         * @returns {number}
+         * @private
+         */
+        _getCurrentCmid() {
+            const root = this.ui?.dom?.container || document.getElementById('dixeo-tutor');
+            if (!root) {
+                return 0;
+            }
+            return parseInt(root.dataset.currentCmid, 10) || 0;
+        }
+
+        /**
          * Submit queued proactive context (welcome, Guide me start, etc.).
          *
          * @param {string} [mode] Current tutor mode after a preference save, if known.
@@ -154,7 +167,8 @@ define([
             try {
                 const response = await this.api.flushPendingContext(
                     this.state.getCourseId(),
-                    window.location.href
+                    window.location.href,
+                    this._getCurrentCmid()
                 );
 
                 if (!response.flushed || !response.jobid) {
@@ -449,7 +463,8 @@ define([
                 const response = await this.api.sendMessage(
                     this.state.getCourseId(),
                     message,
-                    window.location.href
+                    window.location.href,
+                    this._getCurrentCmid()
                 );
 
                 if (response.errormessage) {
