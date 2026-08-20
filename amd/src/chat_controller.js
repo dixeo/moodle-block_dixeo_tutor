@@ -324,6 +324,7 @@ define([
             this._updatePaginationState(rawMessages);
 
             await this.ui.renderMessageHistory(messages);
+            this.ui.noteInitialHistoryPainted();
 
             if (messages.length) {
                 this.state.setLastRenderedId(messages[messages.length - 1].id);

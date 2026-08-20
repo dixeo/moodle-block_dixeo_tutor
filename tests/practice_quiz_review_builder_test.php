@@ -81,12 +81,14 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
             ['score' => 0, 'total' => 2],
             'Cell biology',
             $context,
-            $questionsjson
+            $questionsjson,
+            '<p>Check your knowledge of cell biology.</p>'
         );
 
         $this->assertSame('practice_quiz_review', $review['schema']);
         $this->assertSame(2, $review['version']);
         $this->assertSame('Cell biology', $review['title']);
+        $this->assertSame('<p>Check your knowledge of cell biology.</p>', $review['introhtml']);
         $this->assertSame($questionsjson, $review['questionsJson']);
         $this->assertSame(1, $review['bestAttempt']['score']);
         $this->assertSame(2, $review['bestAttempt']['total']);
@@ -176,10 +178,12 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
             ]),
             'exitscore' => 1,
             'total' => 1,
+            'introhtml' => '<p>A short practice quiz.</p>',
         ], (int) $course->id);
 
         $this->assertSame('practice_quiz_review', $context['schema']);
         $this->assertSame(2, $context['version']);
+        $this->assertSame('<p>A short practice quiz.</p>', $context['introhtml']);
         $this->assertArrayHasKey('questionsJson', $context);
         $this->assertNotEmpty($context['questionsJson']);
         $this->assertArrayHasKey('answerResults', $context['bestAttempt']);
