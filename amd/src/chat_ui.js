@@ -37,6 +37,10 @@ define([
             this.todaySeparatorAdded = false;
             // User scrolled up to read older messages; reset when at bottom or scrollToBottom is called.
             this._userScrolledUp = false;
+            // First history paint happened while quiz/teach hid the chat pane.
+            this._initialScrollPending = false;
+            // Scroll offset captured before a quiz/lesson pane hides the chat.
+            this._savedMessagesScrollTop = null;
             // Pre-fetched to avoid async race when the first message arrives quickly.
             this.todayLabel = null;
             this.strings = {};
@@ -768,6 +772,93 @@ define([
         }
 
         /**
+         * Whether quiz/teach CSS is currently hiding the chat pane.
+         * Zero height alone is not enough: the popup/drawer is often unmeasured on first paint.
+         *
+         * @returns {boolean}
+         * @private
+         */
+        _isChatPaneHiddenByMode() {
+            const el = this.dom.messagesContainer;
+            if (!el) {
+                return false;
+            }
+            const chatPane = el.closest('.dixeo-tutor-chat-pane');
+            return !!(chatPane && window.getComputedStyle(chatPane).display === 'none');
+        }
+
+        /**
+         * Whether this page loaded already in a mode that hides the chat pane.
+         *
+         * @returns {boolean}
+         * @private
+         */
+        _isBootModeHidingChat() {
+            const root = this.dom.container;
+            const mode = root && root.getAttribute('data-tutor-mode');
+            return mode === 'quiz' || mode === 'teach';
+        }
+
+        /**
+         * After the first conversation paint: defer scroll-to-bottom only when quiz/teach
+         * hid the pane (or will, because that mode is already selected).
+         */
+        noteInitialHistoryPainted() {
+            this._initialScrollPending = this._isChatPaneHiddenByMode() || this._isBootModeHidingChat();
+        }
+
+        /**
+         * Remember the message-list offset before a quiz/lesson pane hides the chat.
+         * No-op if the pane is already hidden, so nested overlays keep the original spot.
+         */
+        preserveMessagesScroll() {
+            const el = this.dom.messagesContainer;
+            if (!el || this._isChatPaneHiddenByMode()) {
+                return;
+            }
+            this._savedMessagesScrollTop = el.scrollTop;
+        }
+
+        /**
+         * Restore a saved offset after display:none would otherwise reset it.
+         *
+         * @private
+         */
+        _restoreMessagesScroll() {
+            const el = this.dom.messagesContainer;
+            if (!el || this._savedMessagesScrollTop === null) {
+                return;
+            }
+            const top = this._savedMessagesScrollTop;
+            this._savedMessagesScrollTop = null;
+            const apply = () => {
+                el.scrollTop = top;
+            };
+            apply();
+            requestAnimationFrame(apply);
+        }
+
+        /**
+         * After a quiz/lesson pane closes: scroll to bottom only for the deferred initial
+         * load. Otherwise put the message list back where it was.
+         *
+         * @returns {boolean} True when a deferred initial scroll ran.
+         */
+        consumeInitialScrollPending() {
+            if (this._isChatPaneHiddenByMode()) {
+                return false;
+            }
+            if (this._initialScrollPending) {
+                this._initialScrollPending = false;
+                this._savedMessagesScrollTop = null;
+                this.scrollToBottom();
+                return true;
+            }
+            this._restoreMessagesScroll();
+            return false;
+        }
+
+        /**
          * Automatically adjusts the height of the textarea based on its content.
          * @private
          */
@@ -821,9 +912,7 @@ define([
         _createMessageNode(msg) {
             const parsedReview = practiceQuizReview.parseReviewMessage(msg);
             if (parsedReview) {
-                const row = practiceQuizReview.createMessageNode(msg, parsedReview, this.strings);
-                this._attachMessageActions(row.querySelector('.dixeo-tutor-message'));
-                return row;
+                return practiceQuizReview.createMessageNode(msg, parsedReview, this.strings);
             }
 
             const parsedLesson = customLessonPanel.parseCustomLessonMessage(msg);

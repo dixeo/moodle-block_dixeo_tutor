@@ -54,6 +54,7 @@ define([
         this.expectedCount = 0;
         this.embedInstance = null;
         this.quizTitle = '';
+        this.introhtml = '';
         this.questions = [];
         this.questionsJson = '';
         this.lastPlayerState = null;
@@ -148,6 +149,7 @@ define([
             await this.mountPlayer(finalized.title, finalized.questions, null, {
                 jobId: jobId,
                 topictitle: topictitle,
+                introhtml: finalized.introhtml || '',
             });
         },
     });
@@ -167,6 +169,9 @@ define([
     PracticeQuizController.prototype.showQuizPane = function() {
         if (!this.quizPane) {
             return;
+        }
+        if (this.ui && typeof this.ui.preserveMessagesScroll === 'function') {
+            this.ui.preserveMessagesScroll();
         }
         this.active = true;
         this.quizPane.classList.remove('d-none');
@@ -207,6 +212,7 @@ define([
         this.active = false;
         this.expectedCount = 0;
         this.quizTitle = '';
+        this.introhtml = '';
         this.questions = [];
         this.questionsJson = '';
         this.setComposerQuizMode(false);
@@ -219,6 +225,9 @@ define([
             this.body.classList.remove('dixeo-tutor-body--quiz-active');
         }
         this._setModeSelectorLocked(false);
+        if (this.ui && typeof this.ui.consumeInitialScrollPending === 'function') {
+            this.ui.consumeInitialScrollPending();
+        }
     };
 
     PracticeQuizController.prototype._cancelQuiz = function() {
@@ -237,6 +246,7 @@ define([
         this.questions = JSON.parse(this.questionsJson);
         const self = this;
         const meta = resumeMeta || {};
+        this.introhtml = meta.introhtml !== undefined ? (meta.introhtml || '') : (this.introhtml || '');
         this._resumeJobId = meta.jobId || this._resumeJobId || null;
         this._resumeTopicTitle = meta.topictitle || this._resumeTopicTitle || '';
 
@@ -285,6 +295,7 @@ define([
                 if (result && result.bestAttempt) {
                     self.submitReview({
                         title: self.quizTitle,
+                        introhtml: self.introhtml || '',
                         questionsjson: self.questionsJson,
                         bestattemptjson: JSON.stringify(result.bestAttempt),
                         exitscore: result.score,
@@ -377,7 +388,9 @@ define([
             this.modeController.setMode('quiz', {skipRouting: true});
         }
         try {
-            await this.mountPlayer(data.title || '', data.questionsJson, freshState);
+            await this.mountPlayer(data.title || '', data.questionsJson, freshState, {
+                introhtml: data.introhtml || '',
+            });
         } catch (e) {
             if (typeof this.handleError === 'function') {
                 await this.handleError(e);

@@ -50,6 +50,7 @@ class submit_quiz_context extends external_api {
             'questionsjson' => new external_value(PARAM_RAW, 'JSON array of simplequiz2 questions'),
             'bestattemptjson' => new external_value(PARAM_RAW, 'JSON best attempt state'),
             'exitscore' => new external_value(PARAM_INT, 'Exit attempt score', VALUE_DEFAULT, 0),
+            'introhtml' => new external_value(PARAM_RAW, 'Formatted intro HTML', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -62,6 +63,7 @@ class submit_quiz_context extends external_api {
      * @param string $questionsjson
      * @param string $bestattemptjson
      * @param int $exitscore
+     * @param string $introhtml
      * @return array
      */
     public static function execute(
@@ -70,7 +72,8 @@ class submit_quiz_context extends external_api {
         int $total = 0,
         string $questionsjson = '',
         string $bestattemptjson = '',
-        int $exitscore = 0
+        int $exitscore = 0,
+        string $introhtml = ''
     ): array {
         global $USER;
 
@@ -81,6 +84,7 @@ class submit_quiz_context extends external_api {
             'questionsjson' => $questionsjson,
             'bestattemptjson' => $bestattemptjson,
             'exitscore' => $exitscore,
+            'introhtml' => $introhtml,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -98,6 +102,7 @@ class submit_quiz_context extends external_api {
                 'questionsjson' => $params['questionsjson'],
                 'bestattemptjson' => $params['bestattemptjson'],
                 'exitscore' => $params['exitscore'],
+                'introhtml' => $params['introhtml'],
             ]
         );
 

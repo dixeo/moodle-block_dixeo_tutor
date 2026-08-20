@@ -163,6 +163,7 @@ define([
             return teachLessonView.openFullscreenModal(lesson);
         }
 
+        const ui = actionDeps.teachController && actionDeps.teachController.ui;
         const closeLessonView = function() {
             teachLessonView.destroy();
             teachPane.innerHTML = '';
@@ -172,8 +173,14 @@ define([
                 body.classList.remove('dixeo-tutor-body--teach-active');
                 body.classList.remove('dixeo-tutor-body--teach-viewing');
             }
+            if (ui && typeof ui.consumeInitialScrollPending === 'function') {
+                ui.consumeInitialScrollPending();
+            }
         };
 
+        if (ui && typeof ui.preserveMessagesScroll === 'function') {
+            ui.preserveMessagesScroll();
+        }
         teachPane.classList.remove('d-none');
         teachPane.setAttribute('aria-hidden', 'false');
         if (body) {

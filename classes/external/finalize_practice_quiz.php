@@ -104,6 +104,7 @@ class finalize_practice_quiz extends external_api {
             'success' => new external_value(PARAM_BOOL, 'Success flag'),
             'error' => new external_value(PARAM_TEXT, 'Error message'),
             'title' => new external_value(PARAM_TEXT, 'Quiz title'),
+            'introhtml' => new external_value(PARAM_RAW, 'Formatted intro HTML'),
             'questions' => new external_value(PARAM_RAW, 'JSON array of simplequiz2 questions'),
         ]);
     }

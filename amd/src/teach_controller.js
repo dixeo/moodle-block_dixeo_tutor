@@ -193,6 +193,9 @@ define([
         if (!this.teachPane) {
             return;
         }
+        if (this.ui && typeof this.ui.preserveMessagesScroll === 'function') {
+            this.ui.preserveMessagesScroll();
+        }
         this.active = true;
         this.teachPane.classList.remove('d-none');
         this.teachPane.setAttribute('aria-hidden', 'false');
@@ -227,6 +230,9 @@ define([
             this.body.classList.remove('dixeo-tutor-body--teach-viewing');
         }
         this._setModeSelectorLocked(false);
+        if (this.ui && typeof this.ui.consumeInitialScrollPending === 'function') {
+            this.ui.consumeInitialScrollPending();
+        }
     };
 
     TeachController.prototype._cancelTeach = function() {

@@ -1,0 +1,60 @@
+{{!
+    @template block_dixeo_tutor/practice_quiz_review_modal
+
+    Practice quiz results detail modal body.
+
+    Example context (json):
+    {
+        "bestScoreLabel": "Best score: 1/1 (100%)",
+        "showExitScore": false,
+        "exitScoreLabel": "This attempt: 1/1 (100%)",
+        "questions": [
+            {
+                "displayIndex": 1,
+                "statusLabel": "Correct",
+                "question": "What is 2 + 2?",
+                "yourAnswerLabel": "Your answer",
+                "selectedText": "4",
+                "isCorrect": true,
+                "correctAnswerLabel": "Correct answer",
+                "correctText": "4",
+                "hasFeedback": true,
+                "feedbackLabel": "Feedback",
+                "feedbackHtml": "<p>Well done.</p>"
+            }
+        ]
+    }
+}}
+<div class="dixeo-practice-quiz-review-modal">
+    <p class="dixeo-practice-quiz-review-modal__score">{{bestScoreLabel}}</p>
+    {{#showExitScore}}
+    <p class="dixeo-practice-quiz-review-modal__exit-score">{{exitScoreLabel}}</p>
+    {{/showExitScore}}
+    <ol class="dixeo-practice-quiz-review-modal__questions">
+        {{#questions}}
+        <li class="dixeo-practice-quiz-review-modal__question {{#isCorrect}}dixeo-practice-quiz-review-modal__question--correct{{/isCorrect}}{{^isCorrect}}dixeo-practice-quiz-review-modal__question--incorrect{{/isCorrect}}">
+            <div class="dixeo-practice-quiz-review-modal__question-head">
+                <span class="dixeo-practice-quiz-review-modal__question-num">{{displayIndex}}</span>
+                <span class="dixeo-practice-quiz-review-modal__status">{{statusLabel}}</span>
+            </div>
+            <p class="dixeo-practice-quiz-review-modal__question-text">{{question}}</p>
+            <div class="dixeo-practice-quiz-review-modal__answer-row">
+                <span class="dixeo-practice-quiz-review-modal__label">{{yourAnswerLabel}}</span>
+                <span class="dixeo-practice-quiz-review-modal__value">{{selectedText}}</span>
+            </div>
+            {{^isCorrect}}
+            <div class="dixeo-practice-quiz-review-modal__answer-row">
+                <span class="dixeo-practice-quiz-review-modal__label">{{correctAnswerLabel}}</span>
+                <span class="dixeo-practice-quiz-review-modal__value">{{correctText}}</span>
+            </div>
+            {{/isCorrect}}
+            {{#hasFeedback}}
+            <div class="dixeo-practice-quiz-review-modal__feedback">
+                <span class="dixeo-practice-quiz-review-modal__label">{{feedbackLabel}}</span>
+                <div class="dixeo-practice-quiz-review-modal__feedback-body">{{{feedbackHtml}}}</div>
+            </div>
+            {{/hasFeedback}}
+        </li>
+        {{/questions}}
+    </ol>
+</div>
