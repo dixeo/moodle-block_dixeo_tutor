@@ -39,6 +39,7 @@ $functions = [
         'type'        => 'read',
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
+        'readonlysession' => true,
     ],
     'block_dixeo_tutor_cancel_generation_job' => [
         'classname'   => '\block_dixeo_tutor\external\cancel_generation_job',
@@ -53,6 +54,7 @@ $functions = [
         'type'        => 'read',
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
+        'readonlysession' => true,
     ],
     'block_dixeo_tutor_flush_pending_context' => [
         'classname'   => '\block_dixeo_tutor\external\flush_pending_context',
@@ -74,6 +76,7 @@ $functions = [
         'type'        => 'read',
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
+        'readonlysession' => true,
     ],
     'block_dixeo_tutor_submit_practice_quiz' => [
         'classname'   => '\block_dixeo_tutor\external\submit_practice_quiz',

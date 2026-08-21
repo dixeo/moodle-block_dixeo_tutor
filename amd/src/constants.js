@@ -5,6 +5,7 @@ define([], function() {
         // Polling Configuration
         polling: Object.freeze({
             BACKOFF_FACTOR: 1.5,
+            FIRST_REPLY_INTERVAL_MS: 700, // Delay before the first job status check
             REPLY_INTERVAL_MS: 3000,
             STATE_EXPIRY_MS: 10 * 60 * 1000, // 10 minutes (aligned with TIMEOUT_MS)
             TIMEOUT_MS: 10 * 60 * 1000, // 10 minutes timeout for polling
@@ -19,8 +20,8 @@ define([], function() {
             SCROLL_BOTTOM_THRESHOLD: 20,
             /** Px from top to show the load-older control. */
             SCROLL_TOP_THRESHOLD: 20,
-            /** Conversation page size (must match tutor_service default limit). */
-            MESSAGE_PAGE_SIZE: 50,
+            /** Conversation page size (must match the limit passed by get_conversation). */
+            MESSAGE_PAGE_SIZE: 15,
         }),
 
         // DOM Selectors

@@ -359,7 +359,7 @@ define([
             this._loadingOlder = false;
             this.todaySeparatorAdded = false;
 
-            const [todayLabel] = await str.get_strings([{key: 'today'}]);
+            const todayLabel = this.todayLabel || (await str.get_strings([{key: 'today'}]))[0];
             let lastDateLabel = null;
             const today = new Date();
             today.setHours(0, 0, 0, 0);

@@ -24,6 +24,8 @@ define([
             this.reconciler = new ReconciliationService(ui, state);
             this.pendingTempId = null;
             this.replyPollTimeoutId = null;
+            this.replyPollJobId = null;
+            this.replyPollAttempt = 0;
             this.tempIdCounter = 0;
             this.connectionRetryTimeoutId = null;
             this.connectionRetryDelay = 1000;
@@ -56,13 +58,15 @@ define([
         }
 
         /**
-         * Flush proactive context, load conversation, restore session state.
+         * Load the conversation, then flush proactive context and restore session state.
          * @private
          */
         async _initSequence() {
             try {
-                await this._flushPendingContext();
                 await this._checkInitialState();
+                this._flushPendingContext().catch(() => {
+                    // A failed proactive flush must not leave the tutor unusable.
+                });
                 this._restoreSession();
                 this._syncPendingUi();
             } catch (e) {
@@ -519,6 +523,19 @@ define([
                 this.replyPollTimeoutId = null;
             }
 
+            if (this.replyPollJobId !== jobId) {
+                this.replyPollJobId = jobId;
+                this.replyPollAttempt = 0;
+            }
+            const pollDelay = Math.min(
+                constants.polling.REPLY_INTERVAL_MS,
+                Math.round(
+                    constants.polling.FIRST_REPLY_INTERVAL_MS
+                    * Math.pow(constants.polling.BACKOFF_FACTOR, this.replyPollAttempt)
+                )
+            );
+            this.replyPollAttempt++;
+
             const pollState = this.state.getPollState();
             if (pollState && pollState.timestamp) {
                 const pollAge = Date.now() - pollState.timestamp;
@@ -585,7 +602,7 @@ define([
                         this._drainPendingContext();
 
                     } else {
-                        // Still processing — continue polling.
+                        // Still processing — keep polling with a widening interval.
                         this._pollForJobCompletion(jobId);
                     }
 
@@ -604,7 +621,7 @@ define([
                         });
                     }
                 }
-            }, constants.polling.REPLY_INTERVAL_MS);
+            }, pollDelay);
         }
 
         /**
@@ -704,6 +721,8 @@ define([
                 clearTimeout(this.replyPollTimeoutId);
                 this.replyPollTimeoutId = null;
             }
+            this.replyPollJobId = null;
+            this.replyPollAttempt = 0;
         }
 
         /**
