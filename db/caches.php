@@ -32,4 +32,12 @@ $definitions = [
         'simpledata' => true,
         'ttl' => 15 * MINSECS,
     ],
+
+    // Keyed by PHP session id and kept out of $SESSION, like job_ownership, so get_job_status can skip the session lock.
+    'terminal_status_audit' => [
+        'mode' => \cache_store::MODE_APPLICATION,
+        'simplekeys' => true,
+        'simpledata' => true,
+        'ttl' => 15 * MINSECS,
+    ],
 ];

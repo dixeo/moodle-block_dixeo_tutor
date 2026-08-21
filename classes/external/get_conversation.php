@@ -42,6 +42,14 @@ use local_dixeo\external\service_factory;
  */
 class get_conversation extends external_api {
     /**
+     * Messages returned per request.
+     *
+     * Must match block_dixeo_tutor/constants ui.MESSAGE_PAGE_SIZE, which the client uses to
+     * decide whether an older page exists.
+     */
+    private const MESSAGE_PAGE_SIZE = 15;
+
+    /**
      * Define parameters for the web service.
      *
      * @return external_function_parameters
@@ -81,7 +89,7 @@ class get_conversation extends external_api {
                 $params['courseid'],
                 $USER->id,
                 $params['sinceid'],
-                50,
+                self::MESSAGE_PAGE_SIZE,
                 $params['offset']
             );
 
