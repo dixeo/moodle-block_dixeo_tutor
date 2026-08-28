@@ -8,6 +8,7 @@
 
 define([
     'core/str',
+    'core/notification',
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/event_emitter',
     'block_dixeo_tutor/a11y',
@@ -15,7 +16,7 @@ define([
     'block_dixeo_tutor/message_actions',
     'block_dixeo_tutor/practice_quiz_review',
     'block_dixeo_tutor/custom_lesson_panel',
-], function(str, constants, EventEmitter, a11y, textUtils, messageActions, practiceQuizReview, customLessonPanel) {
+], function(str, Notification, constants, EventEmitter, a11y, textUtils, messageActions, practiceQuizReview, customLessonPanel) {
     'use strict';
 
     return class ChatUI extends EventEmitter {
@@ -27,6 +28,7 @@ define([
                 messagesContainer: document.getElementById('dixeo-tutor-messages'),
                 inputField: document.getElementById('dixeo-tutor-input'),
                 sendButton: document.getElementById('dixeo-tutor-send'),
+                deleteButton: document.getElementById('dixeo-tutor-delete'),
             };
             this.pendingIndicator = null;
             this.loadOlderSlot = null;
@@ -139,6 +141,13 @@ define([
             });
 
             this.dom.sendButton.addEventListener('click', () => this._handleSendClick());
+            if (this.dom.deleteButton) {
+                this.dom.deleteButton.addEventListener('click', (e) => {
+                    // The card header doubles as a collapse toggle; keep the click here.
+                    e.stopPropagation();
+                    this._handleDeleteClick();
+                });
+            }
             this.dom.inputField.addEventListener('keypress', (e) => this._handleKeyPress(e));
             this.dom.inputField.addEventListener('input', () => {
                 this._adjustTextareaHeight();
@@ -279,6 +288,52 @@ define([
         }
 
         /**
+         * Handles the click event on the erase conversation button.
+         *
+         * Emits the intent only once the user has confirmed, mirroring _handleSendClick:
+         * the controller reacts to decisions, not to raw clicks.
+         * @private
+         */
+        _handleDeleteClick() {
+            Notification.deleteCancelPromise(
+                str.get_string('deleteconversation', 'block_dixeo_tutor'),
+                str.get_string('deleteconversationconfirm', 'block_dixeo_tutor'),
+                str.get_string('delete', 'moodle'),
+                {triggerElement: this.dom.deleteButton}
+            ).then(() => {
+                this.emit(constants.events.DELETE_CONVERSATION);
+                return null;
+            }).catch(() => {
+                // Cancelled — nothing to do.
+            });
+        }
+
+        /**
+         * Enables the erase button only when there is a stored conversation to erase.
+         * @param {boolean} available Whether erasable messages are rendered.
+         * @private
+         */
+        _setDeleteAvailable(available) {
+            if (this.dom.deleteButton) {
+                this.dom.deleteButton.disabled = !available;
+            }
+        }
+
+        /**
+         * Moves focus to the message input.
+         *
+         * Called once an erasure has rebuilt an empty transcript: the modal returns focus
+         * to the erase button, which is disabled by then, so focus would land on the body
+         * and strand keyboard and screen reader users outside the drawer. Focusing a
+         * disabled element is a no-op, so a late focus restore cannot take it back.
+         */
+        focusInput() {
+            if (this.dom.inputField) {
+                this.dom.inputField.focus({preventScroll: true});
+            }
+        }
+
+        /**
          * Move focus to the message list so the keyboard can dismiss without leaving the
          * drawer (Boost closes block drawers on resize when focus is outside drawercontent).
          * @private
@@ -325,6 +380,9 @@ define([
             if (messageNode) {
                 messageNode.remove();
             }
+            // Dropping the optimistic bubble of a failed send can empty the transcript again,
+            // and the erase button must not outlive what it erases.
+            this._setDeleteAvailable(!!this.dom.messagesContainer.querySelector('[data-mid]'));
         }
 
         /**
@@ -353,11 +411,16 @@ define([
          * @param {Array<object>} messages A sorted list of message objects.
          */
         async renderMessageHistory(messages) {
+            // Rebuilding from scratch: every state derived from the rendered transcript
+            // resets here, including the detached pending indicator (a stale reference
+            // makes showPendingIndicator() a no-op forever).
             this.hidePendingIndicator();
             this.dom.messagesContainer.innerHTML = '';
             this.loadOlderSlot = null;
             this._loadingOlder = false;
             this.todaySeparatorAdded = false;
+            this.pendingIndicator = null;
+            this._setDeleteAvailable(false);
 
             const todayLabel = this.todayLabel || (await str.get_strings([{key: 'today'}]))[0];
             let lastDateLabel = null;
@@ -608,6 +671,8 @@ define([
             const messageNode = this._createMessageNode(msg);
             if (msg.id) {
                 messageNode.dataset.mid = msg.id;
+                // The welcome message carries id 0 and is generated locally: nothing to erase.
+                this._setDeleteAvailable(true);
             }
 
             this.dom.messagesContainer.appendChild(messageNode);

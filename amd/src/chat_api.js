@@ -152,7 +152,33 @@ define([
             });
         }
 
-        /*
+        /**
+         * Erases the current user's conversation in a course.
+         * @param {number} courseid The ID of the course.
+         * @returns {Promise<object>} Result with the number of conversations deleted.
+         * @throws {NetworkError|APIError|ValidationError}
+         */
+        async deleteConversation(courseid) {
+            if (!courseid || courseid <= 0) {
+                throw new errors.ValidationError(
+                    'Invalid course ID',
+                    'courseid',
+                    {courseid}
+                );
+            }
+
+            try {
+                return await callAjax('delete_conversation', {courseid});
+            } catch (error) {
+                log.error('Failed to delete conversation', {
+                    error: error.message,
+                    code: error.code
+                });
+                throw error;
+            }
+        }
+
+        /**
          * Polls the status of a tutor job.
          * @param {string} jobId The job UUID.
          * @param {number} courseid The ID of the course.

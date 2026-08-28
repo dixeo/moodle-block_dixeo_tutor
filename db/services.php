@@ -127,4 +127,11 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_delete_conversation' => [
+        'classname'   => '\block_dixeo_tutor\external\delete_conversation',
+        'description' => 'Erases the current user\'s conversation in a course, locally and at the AI provider.',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
 ];

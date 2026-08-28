@@ -15,10 +15,11 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Event observers for block_dixeo_tutor proactive context.
+ * Event observers for the Dixeo Student Tutor block.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
+ * @author     Pierre FACQ <pierre.facq@edunao.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
@@ -42,5 +43,21 @@ $observers = [
         'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::user_graded',
         'internal' => true,
         'priority' => 0,
+    ],
+    // Conversations outlive the course they belong to unless the API is told to drop them.
+    // Internal: the observer only queues a task, so it belongs in the deletion transaction
+    // and must be rolled back with it. The remote call happens later, from the task.
+    [
+        'eventname' => '\core\event\course_deleted',
+        'callback' => '\block_dixeo_tutor\observer\conversation_cleanup_observer::course_deleted',
+        'internal' => true,
+    ],
+    // A user deleted outside a GDPR request never reaches the privacy provider, so
+    // nothing else would tell the API to drop their conversations.
+    // Internal: same reason as above, the observer only queues a task.
+    [
+        'eventname' => '\core\event\user_deleted',
+        'callback' => '\block_dixeo_tutor\observer\conversation_cleanup_observer::user_deleted',
+        'internal' => true,
     ],
 ];

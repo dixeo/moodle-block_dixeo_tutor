@@ -46,6 +46,7 @@ define([], function() {
             SEND_MESSAGE: 'sendMessage',
             RETRY_SEND_MESSAGE: 'retrySendMessage',
             LOAD_OLDER_MESSAGES: 'loadOlderMessages',
+            DELETE_CONVERSATION: 'deleteConversation',
             /** Window CustomEvent: new assistant message while tutor may be closed. */
             ASSISTANT_REPLIED: 'dixeo-tutor-assistant-replied',
             /** Window CustomEvent: proactive context flush completed with an assistant reply. */
