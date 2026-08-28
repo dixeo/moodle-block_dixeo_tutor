@@ -97,6 +97,12 @@ The interface includes accessibility support including:
 - screen reader support
 - accessible chat controls
 
+# Privacy
+
+Tutor conversations are held by the Dixeo service, so GDPR export and erasure requests are served through the Dixeo API rather than from the Moodle database. If the API is unreachable while an export runs, Moodle still marks the request complete and the archive simply carries no tutor conversation: site administrators receive a notification, and the request has to be submitted again once the API is back.
+
+Erasure requests need no manual replay. An unreachable API queues a retry that Moodle keeps re-attempting for roughly twenty days.
+
 # Support
 
 For support, documentation, or licensing information, contact the Dixeo Team: support@dixeo.com

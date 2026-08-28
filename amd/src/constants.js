@@ -45,6 +45,7 @@ define([], function() {
         events: Object.freeze({
             SEND_MESSAGE: 'sendMessage',
             RETRY_SEND_MESSAGE: 'retrySendMessage',
+            DELETE_CONVERSATION: 'deleteConversation',
         }),
     });
 });
