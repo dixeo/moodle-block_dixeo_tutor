@@ -416,7 +416,7 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
         $service = $this->mock_tutor_service();
         $service->expects($this->exactly(2))
             ->method('delete_conversations')
-            ->willReturnCallback(function(?int $courseid, ?int $userid) use (&$scopes): int {
+            ->willReturnCallback(function (?int $courseid, ?int $userid) use (&$scopes): int {
                 $scopes[] = [$courseid, $userid];
                 return 1;
             });
