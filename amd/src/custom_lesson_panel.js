@@ -164,7 +164,7 @@ define([
         }
 
         const ui = actionDeps.teachController && actionDeps.teachController.ui;
-        const closeLessonView = function() {
+        const closeLessonView = async function() {
             teachLessonView.destroy();
             teachPane.innerHTML = '';
             teachPane.classList.add('d-none');
@@ -173,8 +173,11 @@ define([
                 body.classList.remove('dixeo-tutor-body--teach-active');
                 body.classList.remove('dixeo-tutor-body--teach-viewing');
             }
+            const chatController = actionDeps.teachController
+                ? actionDeps.teachController.chatController
+                : null;
             if (ui && typeof ui.consumeInitialScrollPending === 'function') {
-                ui.consumeInitialScrollPending();
+                await ui.consumeInitialScrollPending(chatController);
             }
         };
 
@@ -225,10 +228,15 @@ define([
                     introhtml: data.introhtml || '',
                     contenthtml: data.contenthtml || '',
                 };
+                const sourceRow = panelEl.closest('.dixeo-tutor-message-row');
                 const controller = actionDeps.teachController;
                 if (controller && typeof controller.openLessonFromContext === 'function') {
-                    controller.openLessonFromContext(lessonPayload);
+                    controller.openLessonFromContext(lessonPayload, sourceRow);
                     return;
+                }
+                const ui = controller && controller.ui;
+                if (ui && typeof ui.setReturnToMessageRow === 'function') {
+                    ui.setReturnToMessageRow(sourceRow);
                 }
                 openLessonView(lessonPayload);
             });

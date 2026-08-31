@@ -26,17 +26,12 @@
     </div>
     <div class="card-body p-0 d-flex flex-column flex-grow-1 dixeo-tutor-body" id="dixeo-tutor-body">
         <div class="dixeo-guide-banner" role="region" aria-label="{{#str}}guide_banner_title, block_dixeo_tutor{{/str}}">
-            <div class="dixeo-guide-banner__title-wrap">
-                <h5 class="dixeo-guide-banner__title mb-0">{{#str}}guide_banner_title, block_dixeo_tutor{{/str}}</h5>
-                <button type="button"
-                        class="dixeo-guide-banner__help"
-                        aria-describedby="dixeo-guide-help-tip"
-                        aria-label="{{#str}}guide_banner_help_label, block_dixeo_tutor{{/str}}">
-                    <i class="fa fa-question-circle" aria-hidden="true"></i>
-                </button>
-                <span id="dixeo-guide-help-tip" class="dixeo-guide-banner__help-tip" role="tooltip">
-                    {{#str}}guide_banner_help, block_dixeo_tutor{{/str}}
-                </span>
+            <div class="dixeo-guide-banner__content">
+                <span class="dixeo-guide-banner__label">{{#str}}guide_banner_title, block_dixeo_tutor{{/str}}</span>
+                <div class="dixeo-guide-banner__topic">
+                    <span class="dixeo-guide-banner__topic-title d-none" data-role="guide-topic-title"></span>
+                    <span class="dixeo-guide-banner__topic-description d-none" data-role="guide-topic-description"></span>
+                </div>
             </div>
             <div class="dixeo-guide-banner__actions">
                 <button type="button"
@@ -50,6 +45,7 @@
         </div>
         <div id="dixeo-tutor-quiz-pane" class="dixeo-tutor-quiz-pane d-none" aria-hidden="true"></div>
         <div id="dixeo-tutor-teach-pane" class="dixeo-tutor-teach-pane d-none" aria-hidden="true"></div>
+        <div id="dixeo-tutor-guide-pane" class="dixeo-tutor-guide-pane d-none" aria-hidden="true"></div>
         <div id="dixeo-tutor-chat-pane" class="dixeo-tutor-chat-pane d-flex flex-column flex-grow-1">
             <div class="card-body p-2 d-flex flex-column flex-grow-1" id="dixeo-tutor-messages">
                 <!-- Messages will be appended here. -->

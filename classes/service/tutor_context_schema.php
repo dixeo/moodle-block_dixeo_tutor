@@ -36,6 +36,10 @@ class tutor_context_schema {
     public const SCHEMA_PRACTICE_QUIZ_REVIEW = 'practice_quiz_review';
     /** Custom teach-lesson context schema. */
     public const SCHEMA_CUSTOM_LESSON = 'custom_lesson';
+    /** Active guide session context attached to user messages. */
+    public const SCHEMA_GUIDE_SESSION = 'guide_session';
+    /** Guide metadata on assistant replies during Socratic mode (API-written). */
+    public const SCHEMA_GUIDE_ASSISTANT = 'guide_assistant';
 
     /**
      * Return known context schema identifiers.
@@ -48,6 +52,8 @@ class tutor_context_schema {
             self::SCHEMA_PROACTIVE,
             self::SCHEMA_PRACTICE_QUIZ_REVIEW,
             self::SCHEMA_CUSTOM_LESSON,
+            self::SCHEMA_GUIDE_SESSION,
+            self::SCHEMA_GUIDE_ASSISTANT,
         ];
     }
 
@@ -94,6 +100,33 @@ class tutor_context_schema {
         }
         if ($time !== null && $time > 0) {
             $context['time'] = $time;
+        }
+
+        return $context;
+    }
+
+    /**
+     * Build guide session context for user messages during Socratic mode.
+     *
+     * @param string $title Sanitized topic title.
+     * @param string $description Sanitized topic summary.
+     * @param string $pageurl Optional page URL.
+     * @return array
+     */
+    public static function guide_session_context(
+        string $title,
+        string $description,
+        string $pageurl = ''
+    ): array {
+        $context = [
+            'schema' => self::SCHEMA_GUIDE_SESSION,
+            'version' => 1,
+            'title' => $title,
+            'description' => $description,
+        ];
+
+        if ($pageurl !== '') {
+            $context['url'] = $pageurl;
         }
 
         return $context;

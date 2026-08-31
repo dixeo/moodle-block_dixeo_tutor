@@ -138,15 +138,16 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Queue a Socratic opening turn when the learner enters Guide me mode.
+     * Queue a Socratic opening turn when the learner submits Guide me setup.
      *
      * Duplicate events are ignored until the current queue is flushed.
      *
      * @param int $userid
      * @param int $courseid
+     * @param string $userprompt Learner's stated guidance need from setup.
      * @return void
      */
-    public function queue_guide_started(int $userid, int $courseid): void {
+    public function queue_guide_started(int $userid, int $courseid, string $userprompt = ''): void {
         if (!$this->can_use_tutor($userid, $courseid)) {
             return;
         }
@@ -159,10 +160,20 @@ class tutor_proactive_context_service {
             }
         }
 
-        $this->append_event($record, [
+        $prompt = trim($userprompt);
+        if ($prompt !== '') {
+            $prompt = \core_text::substr($prompt, 0, 500);
+        }
+
+        $event = [
             'type' => 'guide_started',
             'time' => $now,
-        ]);
+        ];
+        if ($prompt !== '') {
+            $event['userPrompt'] = $prompt;
+        }
+
+        $this->append_event($record, $event);
         $this->save_record($record);
     }
 
@@ -601,6 +612,12 @@ class tutor_proactive_context_service {
                 'quizname' => (string) ($event['quizname'] ?? ''),
                 'grade' => (string) ($event['grade'] ?? ''),
                 'maxgrade' => (string) ($event['maxgrade'] ?? ''),
+            ];
+        }
+
+        if ($type === 'guide_started') {
+            return (object) [
+                'userprompt' => (string) ($event['userPrompt'] ?? ''),
             ];
         }
 

@@ -29,6 +29,7 @@ define([
         this.userid = options.userid;
         this.ui = options.ui;
         this.state = options.state;
+        this.chatController = options.chatController || null;
         this.modeController = options.modeController || null;
         this.api = quizApi;
         this.bgPoller = contextPoller.createBackgroundPoller({
@@ -133,7 +134,7 @@ define([
         beforeReopenSetup: function() {
             this._setModeSelectorLocked(false);
         },
-        finalizeAndMount: async function(jobId, topictitle, generationToken) {
+        finalizeAndMount: async function(jobId, topictitle, generationToken, savedProgress) {
             const finalized = await this.api.finalizePracticeQuiz(
                 this.courseid,
                 jobId,
@@ -146,7 +147,7 @@ define([
             if (!finalized.success) {
                 throw new Error(finalized.error || 'Finalize failed');
             }
-            await this.mountPlayer(finalized.title, finalized.questions, null, {
+            await this.mountPlayer(finalized.title, finalized.questions, savedProgress || null, {
                 jobId: jobId,
                 topictitle: topictitle,
                 introhtml: finalized.introhtml || '',
@@ -200,8 +201,10 @@ define([
         }
     };
 
-    PracticeQuizController.prototype.closeQuizPane = function(wasCancelled) {
-        if (wasCancelled || !this.quizInProgress) {
+    PracticeQuizController.prototype.closeQuizPane = async function(wasCancelled) {
+        // Never clear resume storage on a plain close (mode switch / pane hide).
+        // Explicit cancel/exit/finish paths call clearStorage themselves.
+        if (wasCancelled) {
             this.clearStorage();
         }
         practiceQuizPanel.destroy();
@@ -226,17 +229,41 @@ define([
         }
         this._setModeSelectorLocked(false);
         if (this.ui && typeof this.ui.consumeInitialScrollPending === 'function') {
-            this.ui.consumeInitialScrollPending();
+            await this.ui.consumeInitialScrollPending(this.chatController);
         }
     };
 
     PracticeQuizController.prototype._cancelQuiz = function() {
         this._openSetupToken++;
         this._lastSetupConfig = null;
+        this.clearStorage();
         this.closeQuizPane(false);
         if (this.modeController) {
             this.modeController.resetToNormal();
         }
+    };
+
+    /**
+     * Persist playing phase + optional in-progress answer pointer.
+     *
+     * @param {Object|null} [playerState]
+     * @private
+     */
+    PracticeQuizController.prototype._persistPlayingState = function(playerState) {
+        if (!this._resumeJobId) {
+            return;
+        }
+        const payload = {
+            phase: 'playing',
+            jobId: this._resumeJobId,
+            title: this.quizTitle,
+            topictitle: this._resumeTopicTitle,
+            expectedCount: this.expectedCount,
+        };
+        if (playerState) {
+            payload.playerState = playerState;
+        }
+        this.persistState(payload);
     };
 
     PracticeQuizController.prototype.mountPlayer = async function(title, questionsJson, savedProgress, resumeMeta) {
@@ -269,16 +296,8 @@ define([
         const playerState = savedProgress || null;
         this.lastPlayerState = playerState;
 
-        // Technical resume fields only — re-finalize from jobId after reload.
-        if (this._resumeJobId) {
-            this.persistState({
-                phase: 'playing',
-                jobId: this._resumeJobId,
-                title: this.quizTitle,
-                topictitle: this._resumeTopicTitle,
-                expectedCount: this.expectedCount,
-            });
-        }
+        // Re-finalize questions from jobId after reload; playerState holds answer progress.
+        this._persistPlayingState(playerState);
 
         if (!root) {
             throw new Error('Practice quiz embed missing after panel render');
@@ -290,6 +309,7 @@ define([
             initialState: playerState,
             onStateChange: function(state) {
                 self.lastPlayerState = state;
+                self._persistPlayingState(state);
             },
             onFinish: function(result) {
                 if (result && result.bestAttempt) {
@@ -312,6 +332,7 @@ define([
             },
             onRestart: function() {
                 self.setComposerQuizMode(true);
+                self._persistPlayingState(self.lastPlayerState);
             },
         });
     };
@@ -329,11 +350,17 @@ define([
         this.showQuizPane();
 
         if (saved.phase === 'generating' && saved.jobId) {
+            if (this.modeController && typeof this.modeController.setMode === 'function') {
+                this.modeController.setMode('quiz', {skipRouting: true});
+            }
             await this.tryResumeGenerating(saved);
             return;
         }
 
         if (saved.phase === 'playing' && saved.jobId) {
+            if (this.modeController && typeof this.modeController.setMode === 'function') {
+                this.modeController.setMode('quiz', {skipRouting: true});
+            }
             this.expectedCount = saved.expectedCount || 0;
             this._resumeJobId = saved.jobId;
             this._resumeTopicTitle = saved.topictitle || saved.title || '';
@@ -343,7 +370,8 @@ define([
                 await this.finalizeAndMount(
                     saved.jobId,
                     this._resumeTopicTitle,
-                    generationToken
+                    generationToken,
+                    saved.playerState || null
                 );
             } catch (e) {
                 await this.handleError(e);
@@ -364,7 +392,7 @@ define([
         }
     };
 
-    PracticeQuizController.prototype.retakeQuizFromContext = async function(data) {
+    PracticeQuizController.prototype.retakeQuizFromContext = async function(data, sourceRow) {
         if (!data || !data.questionsJson) {
             return;
         }
@@ -374,6 +402,9 @@ define([
                 || JSON.parse(data.questionsJson).length;
         } catch (e) {
             return;
+        }
+        if (this.ui && typeof this.ui.setReturnToMessageRow === 'function') {
+            this.ui.setReturnToMessageRow(sourceRow || null);
         }
         const freshState = {
             answerResults: [],

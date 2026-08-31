@@ -302,12 +302,13 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
-        $this->service->queue_guide_started((int) $user->id, (int) $course->id);
-        $this->service->queue_guide_started((int) $user->id, (int) $course->id);
+        $this->service->queue_guide_started((int) $user->id, (int) $course->id, 'Help with algebra');
+        $this->service->queue_guide_started((int) $user->id, (int) $course->id, 'Duplicate');
 
         $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
         $this->assertCount(1, $events);
         $this->assertSame('guide_started', $events[0]['type']);
+        $this->assertSame('Help with algebra', $events[0]['userPrompt']);
     }
 
     public function test_flush_guide_started_submits_in_guide_mode(): void {
@@ -316,7 +317,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->setUser($user);
 
         (new tutor_mode_service())->set_mode((int) $user->id, (int) $course->id, tutor_message::MODE_GUIDE);
-        $this->service->queue_guide_started((int) $user->id, (int) $course->id);
+        $this->service->queue_guide_started((int) $user->id, (int) $course->id, 'Explain mitosis');
 
         $mock = $this->getMockBuilder(tutor_service::class)
             ->onlyMethods(['submit'])

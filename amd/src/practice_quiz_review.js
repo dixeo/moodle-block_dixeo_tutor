@@ -578,7 +578,8 @@ define([
             e.stopPropagation();
             const controller = actionDeps.quizController;
             if (controller && typeof controller.retakeQuizFromContext === 'function') {
-                controller.retakeQuizFromContext(data);
+                const sourceRow = panelEl.closest('.dixeo-tutor-message-row');
+                controller.retakeQuizFromContext(data, sourceRow);
             }
         });
     }
