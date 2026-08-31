@@ -26,8 +26,10 @@
 namespace block_dixeo_tutor;
 
 use block_dixeo_tutor\service\tutor_context_schema;
+use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use local_dixeo\dto\operation_result;
+use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\tutor_service;
 
@@ -294,6 +296,52 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->assertSame('quiz_graded', $events[0]['type']);
         $this->assertSame('Quiz 1', $events[0]['quizname']);
         $this->assertStringContainsString('80', $events[0]['grade']);
+    }
+
+    public function test_queue_guide_started_appends_once(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $this->service->queue_guide_started((int) $user->id, (int) $course->id, 'Help with algebra');
+        $this->service->queue_guide_started((int) $user->id, (int) $course->id, 'Duplicate');
+
+        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
+        $this->assertCount(1, $events);
+        $this->assertSame('guide_started', $events[0]['type']);
+        $this->assertSame('Help with algebra', $events[0]['userPrompt']);
+    }
+
+    public function test_flush_guide_started_submits_in_guide_mode(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($user);
+
+        (new tutor_mode_service())->set_mode((int) $user->id, (int) $course->id, tutor_message::MODE_GUIDE);
+        $this->service->queue_guide_started((int) $user->id, (int) $course->id, 'Explain mitosis');
+
+        $mock = $this->getMockBuilder(tutor_service::class)
+            ->onlyMethods(['submit'])
+            ->getMock();
+        $mock->expects($this->once())
+            ->method('submit')
+            ->with(
+                (int) $course->id,
+                (int) $user->id,
+                $this->callback(function (tutor_message $msg): bool {
+                    return $msg->role === tutor_message::ROLE_SYSTEM
+                        && ($msg->context['schema'] ?? '') === tutor_context_schema::SCHEMA_PROACTIVE
+                        && $msg->requireresponse === true
+                        && str_contains((string) $msg->instructions, 'Socratic');
+                }),
+                tutor_message::MODE_GUIDE,
+                $this->anything()
+            )
+            ->willReturn(operation_result::pending('guide-job-id', 'pending', 0));
+        service_factory::set_test_tutor_service($mock);
+
+        $result = $this->service->flush((int) $user->id, (int) $course->id);
+        $this->assertNotNull($result);
+        $this->assertSame('', trim((string) $this->get_pending_record((int) $user->id, (int) $course->id)->message));
     }
 
     public function test_user_graded_ignores_assign_module(): void {

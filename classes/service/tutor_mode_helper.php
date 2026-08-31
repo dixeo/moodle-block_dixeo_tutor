@@ -71,10 +71,11 @@ class tutor_mode_helper {
      */
     public static function build_mode_choicelist(string $selectedmode, bool $quizavailable = true): choicelist {
         $selectedmode = tutor_message::normalize_mode($selectedmode);
+        $availablemodes = array_flip(tutor_mode_policy::get_available_modes($quizavailable));
         $choicelist = new choicelist();
 
         foreach (self::mode_definitions() as $mode) {
-            if ($mode['id'] === tutor_message::MODE_QUIZ && !$quizavailable) {
+            if (!isset($availablemodes[$mode['id']])) {
                 continue;
             }
             $definition = [
@@ -99,17 +100,18 @@ class tutor_mode_helper {
      * @param \core\output\renderer_base $output Output renderer.
      * @param string $selectedmode Currently selected tutor mode.
      * @param bool $quizavailable Whether quiz mode may be offered.
-     * @return array
+     * @return array|null Null when only Standard mode is available.
      */
     public static function export_mode_selector(
         \core\output\renderer_base $output,
         string $selectedmode,
         bool $quizavailable = true
-    ): array {
-        $selectedmode = tutor_message::normalize_mode($selectedmode);
-        if (!$quizavailable && $selectedmode === tutor_message::MODE_QUIZ) {
-            $selectedmode = tutor_message::MODE_NORMAL;
+    ): ?array {
+        if (!tutor_mode_policy::should_show_mode_selector($quizavailable)) {
+            return null;
         }
+
+        $selectedmode = tutor_mode_policy::coerce_mode($selectedmode, $quizavailable);
         $choicelist = self::build_mode_choicelist($selectedmode, $quizavailable);
 
         $dialog = new status(

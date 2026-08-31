@@ -4,10 +4,12 @@ define([], function() {
     const PREFIX = 'block_dixeo_tutor_';
 
     /**
-     * Content keys must not be persisted (audit: technical state only).
+     * Lesson/quiz *bodies* must not be persisted (audit: technical state only).
+     * Progress pointers (playerState) and small lesson snapshots for viewing
+     * resume are allowed — see save()/hasActiveSession.
      * @type {string[]}
      */
-    const CONTENT_KEYS = ['questionsJson', 'contenthtml', 'introhtml', 'playerState'];
+    const CONTENT_KEYS = ['questionsJson', 'contenthtml', 'introhtml', 'userprompt'];
 
     /**
      * @param {string} mode quiz|teach
@@ -92,7 +94,8 @@ define([], function() {
     };
 
     /**
-     * Persist technical resume fields only (phase, jobId, titles/counts).
+     * Persist technical resume fields (phase, jobId, titles/counts, playerState,
+     * lessonSnapshot for context viewing).
      *
      * @param {string} mode
      * @param {number} userid
@@ -128,7 +131,7 @@ define([], function() {
     /**
      * Whether local storage holds a session that should resume instead of opening setup.
      *
-     * @param {string} mode quiz|teach
+     * @param {string} mode quiz|teach|guide
      * @param {number} userid
      * @param {number} courseid
      * @return {boolean}
@@ -138,8 +141,17 @@ define([], function() {
         if (!saved || !saved.phase) {
             return false;
         }
-        if (saved.phase === 'generating' || saved.phase === 'playing' || saved.phase === 'viewing') {
+        if (saved.phase === 'generating' || saved.phase === 'playing') {
             return !!saved.jobId;
+        }
+        if (saved.phase === 'viewing') {
+            return !!(saved.jobId || saved.lessonSnapshot);
+        }
+        if (saved.phase === 'active') {
+            return !!(saved.title && saved.description && !saved.timeEnded);
+        }
+        if (saved.phase === 'reviewing') {
+            return !!(saved.title && saved.description);
         }
         return false;
     };

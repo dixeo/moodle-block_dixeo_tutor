@@ -34,6 +34,7 @@ define([
         this.userid = options.userid;
         this.ui = options.ui;
         this.state = options.state;
+        this.chatController = options.chatController || null;
         this.modeController = options.modeController || null;
         this.api = teachApi;
         this.bgPoller = contextPoller.createBackgroundPoller({
@@ -170,8 +171,14 @@ define([
         }
     };
 
-    TeachController.prototype.openLessonFromContext = async function(lesson) {
-        await this.mountLesson(lesson);
+    TeachController.prototype.openLessonFromContext = async function(lesson, sourceRow) {
+        if (this.ui && typeof this.ui.setReturnToMessageRow === 'function') {
+            this.ui.setReturnToMessageRow(sourceRow || null);
+        }
+        if (this.modeController && typeof this.modeController.setMode === 'function') {
+            this.modeController.setMode('teach', {skipRouting: true});
+        }
+        await this.mountLesson(lesson, {fromContext: true});
     };
 
     TeachController.prototype.persistState = function(data) {
@@ -189,6 +196,9 @@ define([
     TeachController.prototype.showTeachPane = function() {
         if (!this.teachPane) {
             return;
+        }
+        if (this.ui && typeof this.ui.preserveMessagesScroll === 'function') {
+            this.ui.preserveMessagesScroll();
         }
         this.active = true;
         this.teachPane.classList.remove('d-none');
@@ -208,7 +218,7 @@ define([
         }
     };
 
-    TeachController.prototype.closeTeachPane = function() {
+    TeachController.prototype.closeTeachPane = async function() {
         teachLessonView.destroy();
         this.active = false;
         this.lessonViewing = false;
@@ -224,6 +234,9 @@ define([
             this.body.classList.remove('dixeo-tutor-body--teach-viewing');
         }
         this._setModeSelectorLocked(false);
+        if (this.ui && typeof this.ui.consumeInitialScrollPending === 'function') {
+            await this.ui.consumeInitialScrollPending(this.chatController);
+        }
     };
 
     TeachController.prototype._cancelTeach = function() {
@@ -246,6 +259,42 @@ define([
         }
     };
 
+    /**
+     * Persist viewing phase (jobId re-fetch and/or lessonSnapshot for context view).
+     *
+     * @param {Object} lesson
+     * @param {Object} [meta]
+     * @private
+     */
+    TeachController.prototype._persistViewingState = function(lesson, meta) {
+        const opts = meta || {};
+        const snapshot = {
+            title: (lesson && lesson.title) || '',
+            introhtml: (lesson && lesson.introhtml) || '',
+            contenthtml: (lesson && lesson.contenthtml) || '',
+        };
+        const payload = {
+            phase: 'viewing',
+            title: snapshot.title,
+            topictitle: opts.topictitle || this._resumeTopicTitle || snapshot.title,
+            lessonSnapshot: snapshot,
+        };
+        if (this._resumeJobId) {
+            payload.jobId = this._resumeJobId;
+        }
+        if (this.ui && typeof this.ui.getReturnToCard === 'function') {
+            const returnCard = this.ui.getReturnToCard();
+            if (returnCard) {
+                payload.returnCard = returnCard;
+            } else if (snapshot.title) {
+                payload.returnCard = {type: 'lesson', title: snapshot.title};
+            }
+        } else if (snapshot.title) {
+            payload.returnCard = {type: 'lesson', title: snapshot.title};
+        }
+        this.persistState(payload);
+    };
+
     TeachController.prototype.mountLesson = async function(lesson, resumeMeta) {
         this._lastSetupConfig = null;
         this._currentLesson = lesson;
@@ -256,21 +305,90 @@ define([
         this._resumeJobId = meta.jobId || this._resumeJobId || null;
         this._resumeTopicTitle = meta.topictitle || this._resumeTopicTitle || '';
 
-        // Technical resume fields only — re-finalize from jobId after reload.
-        if (this._resumeJobId) {
-            this.persistState({
-                phase: 'viewing',
-                jobId: this._resumeJobId,
-                title: lesson.title,
-                topictitle: this._resumeTopicTitle,
-            });
-        }
+        // JobId → re-finalize after reload; lessonSnapshot → reopen context/view lesson.
+        this._persistViewingState(lesson, meta);
 
         await teachLessonView.mountLesson(
             this.teachPane,
             lesson,
             () => this._handleLessonClose()
         );
+    };
+
+    /**
+     * Restore return-card identity used when closing the lesson pane.
+     *
+     * @param {Object} saved
+     * @private
+     */
+    TeachController.prototype._restoreReturnCardFromStorage = function(saved) {
+        if (!this.ui || typeof this.ui.setReturnToMessageRow !== 'function') {
+            return;
+        }
+        if (saved.returnCard) {
+            this.ui.setReturnToMessageRow(saved.returnCard);
+            return;
+        }
+        if (saved.phase === 'viewing' && saved.title) {
+            this.ui.setReturnToMessageRow({type: 'lesson', title: saved.title});
+        }
+    };
+
+    /**
+     * @private
+     */
+    TeachController.prototype._ensureTeachModeChrome = function() {
+        if (this.modeController && typeof this.modeController.setMode === 'function') {
+            this.modeController.setMode('teach', {skipRouting: true});
+        }
+    };
+
+    /**
+     * Resume a lesson that was generated from a job id.
+     *
+     * @param {Object} saved
+     * @returns {Promise<void>}
+     * @private
+     */
+    TeachController.prototype._resumeViewingFromJob = async function(saved) {
+        this._ensureTeachModeChrome();
+        this._resumeJobId = saved.jobId;
+        this._resumeTopicTitle = saved.topictitle || saved.title || '';
+        this._generationToken++;
+        const generationToken = this._generationToken;
+        try {
+            await this.finalizeAndMount(
+                saved.jobId,
+                this._resumeTopicTitle,
+                generationToken
+            );
+        } catch (e) {
+            await this.handleError(e);
+        }
+    };
+
+    /**
+     * Resume a lesson opened from a chat card (snapshot only).
+     *
+     * @param {Object} saved
+     * @returns {Promise<void>}
+     * @private
+     */
+    TeachController.prototype._resumeViewingFromSnapshot = async function(saved) {
+        this._ensureTeachModeChrome();
+        const lesson = {
+            title: saved.lessonSnapshot.title || saved.title || '',
+            introhtml: saved.lessonSnapshot.introhtml || '',
+            contenthtml: saved.lessonSnapshot.contenthtml || '',
+        };
+        try {
+            await this.mountLesson(lesson, {
+                fromContext: true,
+                topictitle: saved.topictitle || lesson.title,
+            });
+        } catch (e) {
+            await this.handleError(e);
+        }
     };
 
     TeachController.prototype.tryResumeFromStorage = async function() {
@@ -283,27 +401,22 @@ define([
             this._setModeSelectorLocked(true);
         }
 
+        this._restoreReturnCardFromStorage(saved);
         this.showTeachPane();
 
         if (saved.phase === 'generating' && saved.jobId) {
+            this._ensureTeachModeChrome();
             await this.tryResumeGenerating(saved);
             return;
         }
 
         if (saved.phase === 'viewing' && saved.jobId) {
-            this._resumeJobId = saved.jobId;
-            this._resumeTopicTitle = saved.topictitle || saved.title || '';
-            this._generationToken++;
-            const generationToken = this._generationToken;
-            try {
-                await this.finalizeAndMount(
-                    saved.jobId,
-                    this._resumeTopicTitle,
-                    generationToken
-                );
-            } catch (e) {
-                await this.handleError(e);
-            }
+            await this._resumeViewingFromJob(saved);
+            return;
+        }
+
+        if (saved.phase === 'viewing' && saved.lessonSnapshot) {
+            await this._resumeViewingFromSnapshot(saved);
         }
     };
 

@@ -26,6 +26,8 @@ namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\service\practice_quiz_context_service;
+use block_dixeo_tutor\service\tutor_mode_policy;
+use block_dixeo_tutor\service\tutor_mode_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -48,6 +50,7 @@ class submit_quiz_context extends external_api {
             'questionsjson' => new external_value(PARAM_RAW, 'JSON array of simplequiz2 questions'),
             'bestattemptjson' => new external_value(PARAM_RAW, 'JSON best attempt state'),
             'exitscore' => new external_value(PARAM_INT, 'Exit attempt score', VALUE_DEFAULT, 0),
+            'introhtml' => new external_value(PARAM_RAW, 'Formatted intro HTML', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -60,6 +63,7 @@ class submit_quiz_context extends external_api {
      * @param string $questionsjson
      * @param string $bestattemptjson
      * @param int $exitscore
+     * @param string $introhtml
      * @return array
      */
     public static function execute(
@@ -68,7 +72,8 @@ class submit_quiz_context extends external_api {
         int $total = 0,
         string $questionsjson = '',
         string $bestattemptjson = '',
-        int $exitscore = 0
+        int $exitscore = 0,
+        string $introhtml = ''
     ): array {
         global $USER;
 
@@ -79,11 +84,13 @@ class submit_quiz_context extends external_api {
             'questionsjson' => $questionsjson,
             'bestattemptjson' => $bestattemptjson,
             'exitscore' => $exitscore,
+            'introhtml' => $introhtml,
         ]);
 
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_mode_policy::require_quiz_mode(tutor_mode_policy::is_quiz_runtime_available());
 
         $service = new practice_quiz_context_service();
         $result = $service->submit_review(
@@ -95,6 +102,7 @@ class submit_quiz_context extends external_api {
                 'questionsjson' => $params['questionsjson'],
                 'bestattemptjson' => $params['bestattemptjson'],
                 'exitscore' => $params['exitscore'],
+                'introhtml' => $params['introhtml'],
             ]
         );
 
@@ -107,6 +115,7 @@ class submit_quiz_context extends external_api {
         if ($jobid !== '') {
             job_ownership::register((int) $USER->id, (int) $params['courseid'], $jobid);
         }
+        (new tutor_mode_service())->touch_activity((int) $USER->id, (int) $params['courseid']);
         return [
             'success' => true,
             'jobid' => $jobid,

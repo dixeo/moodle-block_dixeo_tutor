@@ -68,7 +68,10 @@ define([
                         practiceQuizReview.removeOptimisticMessage(deps.ui);
                     }
                     if (isCustomLesson) {
-                        customLessonPanel.removeOptimisticMessage(deps.ui);
+                        customLessonPanel.removeOptimisticMessage(
+                            deps.ui,
+                            customLessonPanel.getLessonData(msg)
+                        );
                     }
                     if (msg.id && deps.ui.hasMessage(msg.id)) {
                         if (msg.id) {
@@ -104,6 +107,17 @@ define([
         };
 
         /**
+         * Whether the id is a pollable job UUID (versions 1–5).
+         * Tutor context submit may return a message ULID instead.
+         *
+         * @param {string} jobId
+         * @returns {boolean}
+         */
+        const isPollableJobId = function(jobId) {
+            return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId);
+        };
+
+        /**
          * Start polling a tutor reply job. Duplicate job IDs are ignored.
          *
          * @param {string} jobId
@@ -111,6 +125,11 @@ define([
          */
         const poll = function(jobId, options) {
             if (!jobId || activeJobs.has(jobId)) {
+                return;
+            }
+
+            if (!isPollableJobId(jobId)) {
+                appendReplies();
                 return;
             }
 

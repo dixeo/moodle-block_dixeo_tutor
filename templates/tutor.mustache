@@ -12,7 +12,10 @@
      data-course-name="{{coursename}}"
      data-current-cmid="{{currentcmid}}"
      data-generation-languages="{{generationlanguagesjson}}"
-     data-default-generation-language="{{defaultgenerationlanguage}}">
+     data-default-generation-language="{{defaultgenerationlanguage}}"
+     data-quiz-mode-available="{{#quizmodeavailable}}1{{/quizmodeavailable}}{{^quizmodeavailable}}0{{/quizmodeavailable}}"
+     data-teach-mode-available="{{#teachmodeavailable}}1{{/teachmodeavailable}}{{^teachmodeavailable}}0{{/teachmodeavailable}}"
+     data-tutor-mode="{{#mode_selector}}{{currentmode}}{{/mode_selector}}{{^mode_selector}}normal{{/mode_selector}}">
     <div class="card-header d-flex flex-nowrap align-items-center bg-light px-3 py-2" id="dixeo-tutor-header">
         <span class="font-weight-bold dixeo-tutor-title">{{#str}}assistanttitle, block_dixeo_tutor{{/str}}</span>
         <div class="dixeo-tutor-header__end">
@@ -22,8 +25,27 @@
         </div>
     </div>
     <div class="card-body p-0 d-flex flex-column flex-grow-1 dixeo-tutor-body" id="dixeo-tutor-body">
+        <div class="dixeo-guide-banner" role="region" aria-label="{{#str}}guide_banner_title, block_dixeo_tutor{{/str}}">
+            <div class="dixeo-guide-banner__content">
+                <span class="dixeo-guide-banner__label">{{#str}}guide_banner_title, block_dixeo_tutor{{/str}}</span>
+                <div class="dixeo-guide-banner__topic">
+                    <span class="dixeo-guide-banner__topic-title d-none" data-role="guide-topic-title"></span>
+                    <span class="dixeo-guide-banner__topic-description d-none" data-role="guide-topic-description"></span>
+                </div>
+            </div>
+            <div class="dixeo-guide-banner__actions">
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        data-action="exit-guide"
+                        title="{{#str}}guide_banner_exit, block_dixeo_tutor{{/str}}"
+                        aria-label="{{#str}}guide_banner_exit, block_dixeo_tutor{{/str}}">
+                    <i class="fa fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
         <div id="dixeo-tutor-quiz-pane" class="dixeo-tutor-quiz-pane d-none" aria-hidden="true"></div>
         <div id="dixeo-tutor-teach-pane" class="dixeo-tutor-teach-pane d-none" aria-hidden="true"></div>
+        <div id="dixeo-tutor-guide-pane" class="dixeo-tutor-guide-pane d-none" aria-hidden="true"></div>
         <div id="dixeo-tutor-chat-pane" class="dixeo-tutor-chat-pane d-flex flex-column flex-grow-1">
             <div class="card-body p-2 d-flex flex-column flex-grow-1" id="dixeo-tutor-messages">
                 <!-- Messages will be appended here. -->

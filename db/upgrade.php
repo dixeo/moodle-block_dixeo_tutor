@@ -33,7 +33,7 @@ function xmldb_block_dixeo_tutor_upgrade($oldversion) {
 
     $dbman = $DB->get_manager();
 
-    if ($oldversion < 2026073101) {
+    if ($oldversion < 2026073118) {
         $table = new xmldb_table('block_dixeo_tutor_pending');
 
         $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
@@ -52,7 +52,7 @@ function xmldb_block_dixeo_tutor_upgrade($oldversion) {
             $dbman->create_table($table);
         }
 
-        upgrade_block_savepoint(true, 2026073101, 'dixeo_tutor');
+        upgrade_block_savepoint(true, 2026073118, 'dixeo_tutor');
     }
 
     return true;

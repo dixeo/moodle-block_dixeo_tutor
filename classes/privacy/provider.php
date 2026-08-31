@@ -79,6 +79,11 @@ class provider implements \core_privacy\local\metadata\provider {
             'privacy:metadata:tutormode'
         );
 
+        $collection->add_user_preference(
+            tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX,
+            'privacy:metadata:tutormodeactivity'
+        );
+
         return $collection;
     }
 }

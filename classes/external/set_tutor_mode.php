@@ -29,6 +29,7 @@ use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
 use core_external\external_value;
+use local_dixeo\dto\tutor_message;
 
 /**
  * Persist tutor mode preference per course.
@@ -66,7 +67,8 @@ class set_tutor_mode extends external_api {
         require_capability('block/dixeo_tutor:talktotutor', $context);
 
         $service = new tutor_mode_service();
-        $stored = $service->set_mode((int) $USER->id, $params['courseid'], $params['mode']);
+        $userid = (int) $USER->id;
+        $stored = $service->set_mode($userid, $params['courseid'], $params['mode']);
 
         return ['mode' => $stored];
     }

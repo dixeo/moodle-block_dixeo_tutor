@@ -3,11 +3,13 @@ define([
     'core/str',
     'block_dixeo_tutor/text_utils',
     'block_dixeo_tutor/tts_player',
-], function(Templates, str, textUtils, ttsPlayer) {
+    'block_dixeo_tutor/custom_lesson_utils',
+    'block_dixeo_tutor/teach_lesson_view',
+], function(Templates, str, textUtils, ttsPlayer, customLessonUtils, teachLessonView) {
     'use strict';
 
     /** Must match {@see \block_dixeo_tutor\service\tutor_context_schema::SCHEMA_CUSTOM_LESSON}. */
-    const SCHEMA_CUSTOM_LESSON = 'custom_lesson';
+    const SCHEMA_CUSTOM_LESSON = customLessonUtils.SCHEMA_CUSTOM_LESSON;
     const OPTIMISTIC_ID_PREFIX = 'temp-custom-lesson-';
 
     const STRING_KEYS = [
@@ -109,6 +111,11 @@ define([
         return null;
     }
 
+    const lessonFromPayload = customLessonUtils.lessonFromPayload;
+    const previewText = customLessonUtils.previewText;
+    const ttsText = customLessonUtils.ttsText;
+    const lessonTtsGroupId = customLessonUtils.lessonTtsGroupId;
+
     /**
      * @param {object} message
      * @returns {{version: number, data: object}|null}
@@ -122,50 +129,6 @@ define([
             version: data.version || 1,
             data: data,
         };
-    }
-
-    /**
-     * @param {object} lesson
-     * @returns {object}
-     */
-    function lessonFromPayload(lesson) {
-        return {
-            schema: SCHEMA_CUSTOM_LESSON,
-            version: 1,
-            title: lesson.title || '',
-            introhtml: lesson.introhtml || '',
-            contenthtml: lesson.contenthtml || '',
-        };
-    }
-
-    /**
-     * @param {object} data Parsed lesson context.
-     * @returns {string}
-     */
-    function previewText(data) {
-        const plain = textUtils.htmlToPlain(data.contenthtml || '');
-        return textUtils.truncateAtWordBoundary(plain, 200);
-    }
-
-    /**
-     * @param {object} data Parsed lesson context.
-     * @returns {string}
-     */
-    function ttsText(data) {
-        const intro = textUtils.htmlToPlain(data.introhtml || '');
-        const content = textUtils.htmlToPlain(data.contenthtml || '');
-        return [intro, content].filter(Boolean).join(' ').trim();
-    }
-
-    /**
-     * Stable TTS group id so card and lesson panel share playback state.
-     *
-     * @param {object} data Parsed lesson context.
-     * @returns {string}
-     */
-    function lessonTtsGroupId(data) {
-        const text = ttsText(data);
-        return 'custom-lesson:' + text.length + ':' + text.substring(0, 200);
     }
 
     /**
@@ -185,6 +148,50 @@ define([
             ttsPlayLabel: labels.teach_lesson_tts_play || 'Read lesson aloud',
             ttsStopLabel: labels.teach_lesson_tts_stop || 'Stop reading',
         };
+    }
+
+    /**
+     * Open an existing lesson for read-only viewing when teach mode is disabled.
+     *
+     * @param {object} lesson
+     * @returns {Promise<void>}
+     */
+    function openLessonView(lesson) {
+        const teachPane = document.getElementById('dixeo-tutor-teach-pane');
+        const body = document.getElementById('dixeo-tutor-body');
+        if (!teachPane) {
+            return teachLessonView.openFullscreenModal(lesson);
+        }
+
+        const ui = actionDeps.teachController && actionDeps.teachController.ui;
+        const closeLessonView = async function() {
+            teachLessonView.destroy();
+            teachPane.innerHTML = '';
+            teachPane.classList.add('d-none');
+            teachPane.setAttribute('aria-hidden', 'true');
+            if (body) {
+                body.classList.remove('dixeo-tutor-body--teach-active');
+                body.classList.remove('dixeo-tutor-body--teach-viewing');
+            }
+            const chatController = actionDeps.teachController
+                ? actionDeps.teachController.chatController
+                : null;
+            if (ui && typeof ui.consumeInitialScrollPending === 'function') {
+                await ui.consumeInitialScrollPending(chatController);
+            }
+        };
+
+        if (ui && typeof ui.preserveMessagesScroll === 'function') {
+            ui.preserveMessagesScroll();
+        }
+        teachPane.classList.remove('d-none');
+        teachPane.setAttribute('aria-hidden', 'false');
+        if (body) {
+            body.classList.add('dixeo-tutor-body--teach-active');
+            body.classList.add('dixeo-tutor-body--teach-viewing');
+        }
+
+        return teachLessonView.mountLesson(teachPane, lesson, closeLessonView);
     }
 
     /**
@@ -216,31 +223,65 @@ define([
         if (viewBtn) {
             viewBtn.addEventListener('click', function(e) {
                 e.stopPropagation();
+                const lessonPayload = {
+                    title: data.title || '',
+                    introhtml: data.introhtml || '',
+                    contenthtml: data.contenthtml || '',
+                };
+                const sourceRow = panelEl.closest('.dixeo-tutor-message-row');
                 const controller = actionDeps.teachController;
                 if (controller && typeof controller.openLessonFromContext === 'function') {
-                    controller.openLessonFromContext({
-                        title: data.title || '',
-                        introhtml: data.introhtml || '',
-                        contenthtml: data.contenthtml || '',
-                    });
+                    controller.openLessonFromContext(lessonPayload, sourceRow);
+                    return;
                 }
+                const ui = controller && controller.ui;
+                if (ui && typeof ui.setReturnToMessageRow === 'function') {
+                    ui.setReturnToMessageRow(sourceRow);
+                }
+                openLessonView(lessonPayload);
             });
         }
     }
 
     /**
+     * Remove one optimistic custom-lesson bubble (temp ids only).
+     *
+     * Matches by lesson title when provided so concurrent lessons are not wiped.
+     *
      * @param {Object} ui ChatUI
+     * @param {object} [matchData] Optional parsed lesson with title.
      */
-    function removeOptimisticMessage(ui) {
+    function removeOptimisticMessage(ui, matchData) {
         if (!ui || !ui.dom || !ui.dom.messagesContainer) {
             return;
         }
+        const temps = [];
         ui.dom.messagesContainer.querySelectorAll('.dixeo-tutor-message-row--custom-lesson').forEach(function(row) {
             const mid = row.dataset.mid || '';
             if (mid.indexOf(OPTIMISTIC_ID_PREFIX) === 0) {
-                row.remove();
+                temps.push(row);
             }
         });
+        const matchTitle = matchData && matchData.title ? String(matchData.title).trim() : '';
+        let target = null;
+        if (matchTitle) {
+            temps.forEach(function(row) {
+                if (target) {
+                    return;
+                }
+                const titleEl = row.querySelector('.dixeo-custom-lesson-panel__title, strong');
+                const title = titleEl ? String(titleEl.textContent || '').trim() : '';
+                if (title === matchTitle) {
+                    target = row;
+                }
+            });
+        }
+        if (!target && temps.length) {
+            target = temps[0];
+        }
+        if (target) {
+            target.remove();
+        }
     }
 
     /**
@@ -253,7 +294,6 @@ define([
         if (!data.contenthtml || !ui || typeof ui.appendMessage !== 'function') {
             return null;
         }
-        removeOptimisticMessage(ui);
         const tempId = OPTIMISTIC_ID_PREFIX + Date.now();
         ui.appendMessage({
             id: tempId,

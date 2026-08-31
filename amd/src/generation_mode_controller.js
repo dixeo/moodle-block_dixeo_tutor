@@ -27,6 +27,10 @@ define([
      * @param {Object} config Mode configuration
      */
     const applyGenerationModeMixin = function(proto, config) {
+        if (typeof config.finalizeAndMount === 'function') {
+            proto.finalizeAndMount = config.finalizeAndMount;
+        }
+
         proto.loadHierarchy = function() {
             if (this.hierarchy) {
                 return Promise.resolve(this.hierarchy);
