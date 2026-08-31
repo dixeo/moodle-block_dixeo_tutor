@@ -15,24 +15,27 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Version information for the DIXEO Tutor block plugin.
+ * Message providers for the Dixeo Student Tutor block.
  *
- * This file defines the version, dependencies, and metadata
- * for the DIXEO Tutor block plugin.
+ * A privacy request that cannot reach the Dixeo API is still marked complete by core,
+ * so the only way the data protection officer learns the answer was incomplete is a
+ * notification. It is scoped to site administrators, who alone can replay a request.
  *
  * @package    block_dixeo_tutor
- * @copyright  2025 Edunao SAS (contact@edunao.com)
+ * @copyright  2026 Edunao SAS (contact@edunao.com)
  * @author     Pierre FACQ <pierre.facq@edunao.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
 defined('MOODLE_INTERNAL') || die();
 
-$plugin->version   = 2026082800;
-$plugin->requires  = 2024100700;
-$plugin->component = 'block_dixeo_tutor';
-$plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '4.3.0';
-$plugin->dependencies = [
-    'local_dixeo' => 2026082800,
+$messageproviders = [
+    // The Dixeo API was unreachable while serving a privacy request.
+    'privacyfailure' => [
+        'defaults' => [
+            'popup' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+            'email' => MESSAGE_PERMITTED + MESSAGE_DEFAULT_ENABLED,
+        ],
+        'capability' => 'moodle/site:config',
+    ],
 ];
