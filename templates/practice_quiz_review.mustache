@@ -1,0 +1,78 @@
+{{!
+    @template block_dixeo_tutor/practice_quiz_review
+
+    Practice quiz attempt review panel embedded in chat.
+
+    Example context (json):
+    {
+        "version": 1,
+        "title": "Practice quiz review",
+        "bestScoreLabel": "Best score: 1/1 (100%)",
+        "showExitScore": true,
+        "exitScoreLabel": "This attempt: 1/1 (100%)",
+        "questions": [
+            {
+                "displayIndex": 1,
+                "statusLabel": "Correct",
+                "question": "What is 2 + 2?",
+                "yourAnswerLabel": "Your answer",
+                "selectedText": "4",
+                "isCorrect": true,
+                "correctAnswerLabel": "Correct answer",
+                "correctText": "4",
+                "hasFeedback": true,
+                "feedbackLabel": "Feedback",
+                "feedbackHtml": "<p>Well done.</p>"
+            }
+        ],
+        "canRetake": true,
+        "retakeLabel": "Retake quiz"
+    }
+}}
+<div class="dixeo-practice-quiz-review" data-review-version="{{version}}">
+    <div class="dixeo-practice-quiz-review__header">
+        <h4 class="dixeo-practice-quiz-review__title">{{title}}</h4>
+        <div class="dixeo-practice-quiz-review__scores">
+            <span class="dixeo-practice-quiz-review__best-score">{{bestScoreLabel}}</span>
+            {{#showExitScore}}
+            <span class="dixeo-practice-quiz-review__exit-score">{{exitScoreLabel}}</span>
+            {{/showExitScore}}
+        </div>
+    </div>
+    <ol class="dixeo-practice-quiz-review__questions">
+        {{#questions}}
+        <li class="dixeo-practice-quiz-review__question {{#isCorrect}}dixeo-practice-quiz-review__question--correct{{/isCorrect}}{{^isCorrect}}dixeo-practice-quiz-review__question--incorrect{{/isCorrect}}">
+            <div class="dixeo-practice-quiz-review__question-head">
+                <span class="dixeo-practice-quiz-review__question-num">{{displayIndex}}</span>
+                <span class="dixeo-practice-quiz-review__status">{{statusLabel}}</span>
+            </div>
+            <p class="dixeo-practice-quiz-review__question-text">{{question}}</p>
+            <div class="dixeo-practice-quiz-review__answer-row">
+                <span class="dixeo-practice-quiz-review__label">{{yourAnswerLabel}}</span>
+                <span class="dixeo-practice-quiz-review__value">{{selectedText}}</span>
+            </div>
+            {{^isCorrect}}
+            <div class="dixeo-practice-quiz-review__answer-row">
+                <span class="dixeo-practice-quiz-review__label">{{correctAnswerLabel}}</span>
+                <span class="dixeo-practice-quiz-review__value">{{correctText}}</span>
+            </div>
+            {{/isCorrect}}
+            {{#hasFeedback}}
+            <div class="dixeo-practice-quiz-review__feedback">
+                <span class="dixeo-practice-quiz-review__label">{{feedbackLabel}}</span>
+                <div class="dixeo-practice-quiz-review__feedback-body">{{{feedbackHtml}}}</div>
+            </div>
+            {{/hasFeedback}}
+        </li>
+        {{/questions}}
+    </ol>
+    {{#canRetake}}
+    <div class="dixeo-practice-quiz-review__actions">
+        <button type="button"
+                class="btn btn-sm btn-outline-primary dixeo-practice-quiz-review__retake-btn"
+                data-action="retake-quiz">
+            {{retakeLabel}}
+        </button>
+    </div>
+    {{/canRetake}}
+</div>

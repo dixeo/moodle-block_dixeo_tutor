@@ -1,0 +1,36 @@
+{{!
+    @template block_dixeo_tutor/setup_language_field
+
+    Optional generation-language select for tutor setup panels.
+
+    Example context (json):
+    {
+        "showlanguageselector": true,
+        "languageselectid": "dixeo-quiz-setup-language",
+        "labelclass": "dixeo-tutor-setup__label dixeo-quiz-setup__label",
+        "selectclass": "dixeo-quiz-setup__language-select",
+        "languages": [
+            {
+                "code": "en",
+                "name": "English",
+                "selected": true
+            },
+            {
+                "code": "es",
+                "name": "Spanish",
+                "selected": false
+            }
+        ]
+    }
+}}
+{{#showlanguageselector}}
+<label class="{{#labelclass}}{{labelclass}}{{/labelclass}}{{^labelclass}}dixeo-setup__label{{/labelclass}} small font-weight-bold mb-1" for="{{languageselectid}}">{{#str}}setup_language, block_dixeo_tutor{{/str}}</label>
+<select id="{{languageselectid}}"
+        class="form-control form-control-sm {{#selectclass}}{{selectclass}}{{/selectclass}}{{^selectclass}}dixeo-setup__language-select{{/selectclass}} mb-2"
+        data-role="language-select"
+        aria-label="{{#str}}setup_language, block_dixeo_tutor{{/str}}">
+    {{#languages}}
+    <option value="{{code}}"{{#selected}} selected{{/selected}}>{{name}}</option>
+    {{/languages}}
+</select>
+{{/showlanguageselector}}

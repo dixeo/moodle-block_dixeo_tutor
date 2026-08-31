@@ -11,8 +11,11 @@ define([
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/event_emitter',
     'block_dixeo_tutor/a11y',
-    'block_dixeo_tutor/text_utils'
-], function(str, constants, EventEmitter, a11y, textUtils) {
+    'block_dixeo_tutor/text_utils',
+    'block_dixeo_tutor/message_actions',
+    'block_dixeo_tutor/practice_quiz_review',
+    'block_dixeo_tutor/custom_lesson_panel',
+], function(str, constants, EventEmitter, a11y, textUtils, messageActions, practiceQuizReview, customLessonPanel) {
     'use strict';
 
     return class ChatUI extends EventEmitter {
@@ -26,6 +29,9 @@ define([
                 sendButton: document.getElementById('dixeo-tutor-send'),
             };
             this.pendingIndicator = null;
+            this.loadOlderSlot = null;
+            this._hasMoreOlder = false;
+            this._loadingOlder = false;
             // Tracks whether the "Today" date separator has been added this session.
             this.todaySeparatorAdded = false;
             // User scrolled up to read older messages; reset when at bottom or scrollToBottom is called.
@@ -39,16 +45,29 @@ define([
                 {key: 'connection_lost', component: 'block_dixeo_tutor'},
                 {key: 'aria_your_message', component: 'block_dixeo_tutor'},
                 {key: 'aria_assistant_message', component: 'block_dixeo_tutor'},
-                {key: 'aria_sent_at', component: 'block_dixeo_tutor'},
                 {key: 'message_too_long', component: 'block_dixeo_tutor'},
-            ]).then(([senderYou, senderAssistant, connLost, yourMsg, assistantMsg, sentAt, tooLong]) => {
+                {key: 'load_older_messages', component: 'block_dixeo_tutor'},
+                {key: 'aria_load_older_messages', component: 'block_dixeo_tutor'},
+                {key: 'aria_read_message', component: 'block_dixeo_tutor'},
+                {key: 'aria_stop_reading', component: 'block_dixeo_tutor'},
+                {key: 'aria_copy_message', component: 'block_dixeo_tutor'},
+                {key: 'aria_message_copied', component: 'block_dixeo_tutor'},
+            ]).then(([
+                senderYou, senderAssistant, connLost, yourMsg, assistantMsg,
+                tooLong, loadOlder, ariaLoadOlder, readMsg, stopReading, copyMsg, copiedMsg,
+            ]) => {
                 this.strings.senderYou = senderYou;
                 this.strings.senderAssistant = senderAssistant;
                 this.strings.connectionLost = connLost;
                 this.strings.yourMessage = yourMsg;
                 this.strings.assistantMessage = assistantMsg;
-                this.strings.sentAt = sentAt;
                 this.strings.messageTooLong = tooLong;
+                this.strings.loadOlder = loadOlder;
+                this.strings.ariaLoadOlder = ariaLoadOlder;
+                this.strings.ariaReadMessage = readMsg;
+                this.strings.ariaStopReading = stopReading;
+                this.strings.ariaCopyMessage = copyMsg;
+                this.strings.ariaMessageCopied = copiedMsg;
                 return null;
             }).catch(() => {
                 // Fallback to English.
@@ -57,8 +76,13 @@ define([
                 this.strings.connectionLost = 'Connection lost. Attempting to reconnect...';
                 this.strings.yourMessage = 'Your message';
                 this.strings.assistantMessage = 'Assistant message';
-                this.strings.sentAt = 'Sent at {$a}';
                 this.strings.messageTooLong = 'Message cannot exceed {a} characters.';
+                this.strings.loadOlder = 'Load older messages';
+                this.strings.ariaLoadOlder = 'Load older messages';
+                this.strings.ariaReadMessage = 'Read message aloud';
+                this.strings.ariaStopReading = 'Stop reading';
+                this.strings.ariaCopyMessage = 'Copy message';
+                this.strings.ariaMessageCopied = 'Copied';
             });
 
             this._initialize();
@@ -132,6 +156,102 @@ define([
             const threshold = constants.ui.SCROLL_BOTTOM_THRESHOLD;
             const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
             this._userScrolledUp = !atBottom;
+            this._updateLoadOlderVisibility();
+        }
+
+        /**
+         * Creates or returns the load-older control slot at the top of the message list.
+         * @returns {HTMLElement}
+         * @private
+         */
+        _ensureLoadOlderSlot() {
+            if (this.loadOlderSlot && this.loadOlderSlot.isConnected) {
+                return this.loadOlderSlot;
+            }
+
+            this.loadOlderSlot = document.createElement('div');
+            this.loadOlderSlot.id = 'dixeo-tutor-load-older';
+            this.loadOlderSlot.className = 'dixeo-tutor-load-older';
+            this.loadOlderSlot.hidden = true;
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm btn-outline-primary dixeo-tutor-load-older__btn';
+            btn.textContent = this.strings.loadOlder || 'Load older messages';
+            btn.setAttribute('aria-label', this.strings.ariaLoadOlder || 'Load older messages');
+            btn.addEventListener('click', () => {
+                this.emit(constants.events.LOAD_OLDER_MESSAGES);
+            });
+            this.loadOlderSlot.appendChild(btn);
+
+            const container = this.dom.messagesContainer;
+            if (container.firstChild) {
+                container.insertBefore(this.loadOlderSlot, container.firstChild);
+            } else {
+                container.appendChild(this.loadOlderSlot);
+            }
+
+            return this.loadOlderSlot;
+        }
+
+        /**
+         * Updates whether older messages are available (called after each page fetch).
+         * @param {boolean} hasMoreOlder
+         */
+        syncLoadOlderControl(hasMoreOlder) {
+            this._hasMoreOlder = !!hasMoreOlder;
+            this._ensureLoadOlderSlot();
+            this._updateLoadOlderVisibility();
+        }
+
+        /**
+         * Shows or hides the load-older slot based on scroll position and availability.
+         * @private
+         */
+        _updateLoadOlderVisibility() {
+            if (!this.loadOlderSlot || !this.loadOlderSlot.isConnected) {
+                return;
+            }
+            if (this._loadingOlder) {
+                this.loadOlderSlot.hidden = false;
+                return;
+            }
+            const el = this.dom.messagesContainer;
+            if (!el) {
+                return;
+            }
+            const atTop = el.scrollTop <= constants.ui.SCROLL_TOP_THRESHOLD;
+            this.loadOlderSlot.hidden = !(this._hasMoreOlder && atTop);
+        }
+
+        /**
+         * Swaps the load-older button for a loading indicator (or restores the button).
+         * @param {boolean} loading
+         */
+        setLoadOlderLoading(loading) {
+            this._loadingOlder = loading;
+            const slot = this._ensureLoadOlderSlot();
+
+            if (loading) {
+                slot.innerHTML = `
+                    <div class="dixeo-tutor-load-older__loading" role="status" aria-live="polite">
+                        <div class="chat-dots"><span></span><span></span><span></span></div>
+                    </div>`;
+                slot.hidden = false;
+                return;
+            }
+
+            slot.innerHTML = '';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-sm btn-outline-primary dixeo-tutor-load-older__btn';
+            btn.textContent = this.strings.loadOlder || 'Load older messages';
+            btn.setAttribute('aria-label', this.strings.ariaLoadOlder || 'Load older messages');
+            btn.addEventListener('click', () => {
+                this.emit(constants.events.LOAD_OLDER_MESSAGES);
+            });
+            slot.appendChild(btn);
+            this._updateLoadOlderVisibility();
         }
 
         /**
@@ -228,7 +348,10 @@ define([
          * @param {Array<object>} messages A sorted list of message objects.
          */
         async renderMessageHistory(messages) {
+            this.hidePendingIndicator();
             this.dom.messagesContainer.innerHTML = '';
+            this.loadOlderSlot = null;
+            this._loadingOlder = false;
             this.todaySeparatorAdded = false;
 
             const [todayLabel] = await str.get_strings([{key: 'today'}]);
@@ -258,6 +381,134 @@ define([
                 this.appendMessage(msg, false, false);
             });
             this.scrollToBottom();
+        }
+
+        /**
+         * Prepends older messages at the top of the list, preserving scroll position.
+         * @param {Array<object>} messages Chronological list of message objects.
+         */
+        async prependMessages(messages) {
+            if (!messages || !messages.length) {
+                return;
+            }
+
+            const container = this.dom.messagesContainer;
+            const prevScrollHeight = container.scrollHeight;
+            this._ensureLoadOlderSlot();
+
+            const [todayLabel] = await str.get_strings([{key: 'today'}]);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            let lastDateLabel = null;
+            const fragment = document.createDocumentFragment();
+            let lastPrependedDateLabel = null;
+
+            messages.forEach(msg => {
+                if (msg.id && this.hasMessage(msg.id)) {
+                    return;
+                }
+
+                const dateLabel = this._dateLabelForMessage(msg, todayLabel, today);
+                if (dateLabel !== lastDateLabel) {
+                    fragment.appendChild(this._createDateSeparatorNode(dateLabel));
+                    lastDateLabel = dateLabel;
+                }
+                lastPrependedDateLabel = dateLabel;
+
+                const messageNode = this._createMessageNode(msg);
+                if (msg.id) {
+                    messageNode.dataset.mid = msg.id;
+                }
+                fragment.appendChild(messageNode);
+            });
+
+            let insertBefore = this._getFirstContentNode();
+            if (insertBefore && lastPrependedDateLabel) {
+                const firstExistingLabel = this._dateLabelForFirstContentNode(insertBefore, todayLabel, today);
+                if (firstExistingLabel === lastPrependedDateLabel
+                    && insertBefore.classList.contains('dixeo-tutor-separator')) {
+                    insertBefore.remove();
+                }
+            }
+
+            const anchor = this._getFirstContentNode();
+            if (anchor && anchor.isConnected) {
+                container.insertBefore(fragment, anchor);
+            } else {
+                container.appendChild(fragment);
+            }
+
+            container.scrollTop += container.scrollHeight - prevScrollHeight;
+        }
+
+        /**
+         * @param {object} msg
+         * @param {string} todayLabel
+         * @param {Date} today
+         * @returns {string}
+         * @private
+         */
+        _dateLabelForMessage(msg, todayLabel, today) {
+            const msgDate = new Date((msg.time || 0) * 1000);
+            const msgDay = new Date(msgDate).setHours(0, 0, 0, 0);
+            if (msgDay === today.getTime()) {
+                return todayLabel;
+            }
+            return msgDate.toLocaleDateString(undefined, {year: 'numeric', month: 'long', day: 'numeric'});
+        }
+
+        /**
+         * @param {Element} node
+         * @param {string} todayLabel
+         * @param {Date} today
+         * @returns {string|null}
+         * @private
+         */
+        _dateLabelForFirstContentNode(node, todayLabel, today) {
+            if (node.classList.contains('dixeo-tutor-separator')) {
+                return node.querySelector('.text-muted')?.textContent?.trim() || null;
+            }
+            if (node.dataset.mid) {
+                const timeEl = node.querySelector('.message-time');
+                if (!timeEl) {
+                    return null;
+                }
+                const msgDate = new Date(timeEl.textContent);
+                if (Number.isNaN(msgDate.getTime())) {
+                    return null;
+                }
+                return this._dateLabelForMessage({time: Math.floor(msgDate.getTime() / 1000)}, todayLabel, today);
+            }
+            return null;
+        }
+
+        /**
+         * First message or separator node after the load-older slot.
+         * @returns {Element|null}
+         * @private
+         */
+        _getFirstContentNode() {
+            const slot = this.loadOlderSlot;
+            if (slot && slot.nextElementSibling) {
+                return slot.nextElementSibling;
+            }
+            return this.dom.messagesContainer.querySelector('[data-mid], .dixeo-tutor-separator');
+        }
+
+        /**
+         * @param {string} label
+         * @returns {HTMLElement}
+         * @private
+         */
+        _createDateSeparatorNode(label) {
+            const div = document.createElement('div');
+            div.className = 'w-100 d-flex align-items-center dixeo-tutor-separator my-2';
+            div.innerHTML = `
+                <hr class="flex-grow-1 mx-2">
+                <span class="mx-2 text-muted small text-nowrap">${textUtils.escapeHtml(label)}</span>
+                <hr class="flex-grow-1 mx-2">`;
+            return div;
         }
 
         /**
@@ -396,21 +647,29 @@ define([
         }
 
         /**
+         * Enables or disables the input field and send button without clearing pending indicators.
+         *
+         * @param {boolean} enabled
+         */
+        setInputEnabled(enabled) {
+            this.dom.inputField.disabled = !enabled;
+            this.dom.sendButton.disabled = !enabled;
+        }
+
+        /**
          * Enables the input field and send button. Clears any temporary elements.
          */
         enableInput() {
             this._removeSystemMessage();
             this._removeConnectionLostBanner();
-            this.dom.inputField.disabled = false;
-            this.dom.sendButton.disabled = false;
+            this.setInputEnabled(true);
         }
 
         /**
          * Disables the input field and send button.
          */
         disableInput() {
-            this.dom.inputField.disabled = true;
-            this.dom.sendButton.disabled = true;
+            this.setInputEnabled(false);
         }
 
         /**
@@ -530,25 +789,58 @@ define([
          * @private
          */
         _createMessageNode(msg) {
+            const parsedReview = practiceQuizReview.parseReviewMessage(msg);
+            if (parsedReview) {
+                const row = practiceQuizReview.createMessageNode(msg, parsedReview, this.strings);
+                this._attachMessageActions(row.querySelector('.dixeo-tutor-message'));
+                return row;
+            }
+
+            const parsedLesson = customLessonPanel.parseCustomLessonMessage(msg);
+            if (parsedLesson) {
+                return customLessonPanel.createMessageNode(msg, parsedLesson, this.strings);
+            }
+
             const time = new Date((msg.time || 0) * 1000).toLocaleTimeString([], constants.ui.TIME_FORMAT);
             const alignCls = msg.role === 'user' ? 'd-flex justify-content-end' : 'd-flex justify-content-start';
-            const contentHtml = textUtils.parseMarkdownToHtml(msg.content);
+            const contentHtml = textUtils.resolveMessageContentHtml(msg);
             const ariaLabel = msg.role === 'user'
                 ? (this.strings.yourMessage || 'Your message')
                 : (this.strings.assistantMessage || 'Assistant message');
 
-            const sentAtLabel = (this.strings.sentAt || 'Sent at {$a}').replace('{$a}', time);
-
-            return this._createNodeFromHTML(`
-                <div class="${alignCls} mb-2">
+            const row = this._createNodeFromHTML(`
+                <div class="${alignCls} mb-2 dixeo-tutor-message-row">
                     <div class="dixeo-tutor-message dixeo-tutor-message-${msg.role}"
                          role="article"
                          aria-label="${ariaLabel}"
                          tabindex="0">
                         <div class="dixeo-tutor-message-content">${contentHtml}</div>
-                        <small class="message-time" aria-label="${sentAtLabel}">${time}</small>
+                        <div class="dixeo-tutor-message-footer">
+                            <div class="dixeo-tutor-message-actions"></div>
+                            <small class="message-time" aria-label="Sent at ${time}">${time}</small>
+                        </div>
                     </div>
                 </div>`);
+
+            this._attachMessageActions(row.querySelector('.dixeo-tutor-message'));
+            return row;
+        }
+
+        /**
+         * Attach copy and TTS controls to a message bubble.
+         * @param {HTMLElement|null} bubbleEl The .dixeo-tutor-message element.
+         * @private
+         */
+        _attachMessageActions(bubbleEl) {
+            if (!bubbleEl) {
+                return;
+            }
+            messageActions.attach(bubbleEl, {
+                copy: this.strings.ariaCopyMessage || 'Copy message',
+                copied: this.strings.ariaMessageCopied || 'Copied',
+                play: this.strings.ariaReadMessage || 'Read message aloud',
+                stop: this.strings.ariaStopReading || 'Stop reading',
+            });
         }
 
         /**
@@ -568,7 +860,7 @@ define([
 
         /**
          * Removes the pending indicator and any system messages from the DOM.
-         * The welcome message uses class `dixeo-tutor-message-assistant`, never `dixeo-tutor-message-system`,
+         * Assistant messages use `dixeo-tutor-message-assistant`, never `dixeo-tutor-message-system`,
          * so unconditional removal is safe.
          * @private
          */
@@ -639,6 +931,7 @@ define([
          * Removes pending UI elements and clears references.
          */
         destroy() {
+            messageActions.stop();
             this._removeSystemMessage();
             this._removeConnectionLostBanner();
 
@@ -654,6 +947,7 @@ define([
 
             this.dom = null;
             this.pendingIndicator = null;
+            this.loadOlderSlot = null;
             this.connectionLostBanner = null;
             this.previousInputState = null;
             this.strings = null;

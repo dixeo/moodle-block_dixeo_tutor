@@ -1,0 +1,52 @@
+{{!
+    @template block_dixeo_tutor/teach_lesson
+
+    Full custom-lesson reading panel (title, intro, content, TTS).
+
+    Example context (json):
+    {
+        "title": "Photosynthesis basics",
+        "introhtml": "<p>A short introduction.</p>",
+        "contenthtml": "<p>Lesson body content.</p>",
+        "hasintro": true,
+        "hastts": true
+    }
+}}
+<div class="dixeo-teach-lesson">
+    <div class="dixeo-teach-lesson__header">
+        <h5 class="dixeo-teach-lesson__title mb-0">{{title}}</h5>
+        <div class="dixeo-teach-lesson__header-actions">
+            {{#hastts}}
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary dixeo-teach-lesson__tts-btn dixeo-tutor-tts-btn"
+                    data-action="tts"
+                    title="{{#str}}teach_lesson_tts_play, block_dixeo_tutor{{/str}}"
+                    aria-label="{{#str}}teach_lesson_tts_play, block_dixeo_tutor{{/str}}">
+                <i class="fa fa-volume-up dixeo-tutor-tts-btn__icon" aria-hidden="true"></i>
+            </button>
+            {{/hastts}}
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    data-action="fullscreen"
+                    title="{{#str}}teach_lesson_fullscreen, block_dixeo_tutor{{/str}}"
+                    aria-label="{{#str}}teach_lesson_fullscreen, block_dixeo_tutor{{/str}}">
+                <i class="fa fa-expand" aria-hidden="true"></i>
+            </button>
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    data-action="close"
+                    title="{{#str}}teach_lesson_close, block_dixeo_tutor{{/str}}"
+                    aria-label="{{#str}}teach_lesson_close, block_dixeo_tutor{{/str}}">
+                <i class="fa fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+    {{#hasintro}}
+    <div class="dixeo-teach-lesson__intro">
+        {{{introhtml}}}
+    </div>
+    {{/hasintro}}
+    <div class="dixeo-teach-lesson__content">
+        {{{contenthtml}}}
+    </div>
+</div>

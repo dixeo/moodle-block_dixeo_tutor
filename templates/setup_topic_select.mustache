@@ -1,0 +1,33 @@
+{{!
+    @template block_dixeo_tutor/setup_topic_select
+
+    Topic select dropdown for tutor setup panels.
+
+    Example context (json):
+    {
+        "labelclass": "dixeo-quiz-setup__label",
+        "selectclass": "dixeo-quiz-setup__topic-select",
+        "topiclabel": "Topic",
+        "coursename": "Sample course",
+        "topics": [
+            {
+                "key": "course",
+                "label": "Entire course",
+                "selected": true
+            },
+            {
+                "key": "cm:12",
+                "label": "Activity title",
+                "selected": false
+            }
+        ]
+    }
+}}
+<label class="{{labelclass}} small font-weight-bold mb-1">{{topiclabel}}</label>
+<select class="form-control form-control-sm {{selectclass}} mb-2"
+        data-role="topic-select"
+        aria-label="{{coursename}}">
+    {{#topics}}
+    <option value="{{key}}"{{#selected}} selected{{/selected}}>{{label}}</option>
+    {{/topics}}
+</select>
