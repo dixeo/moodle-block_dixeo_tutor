@@ -54,6 +54,8 @@ class send_message extends external_api {
             'message' => new external_value(PARAM_RAW, 'The user message'),
             'pageurl' => new external_value(PARAM_URL, 'The current page URL', VALUE_DEFAULT, ''),
             'cmid' => new external_value(PARAM_INT, 'Course module id when on an activity page', VALUE_DEFAULT, 0),
+            'guidetitle' => new external_value(PARAM_TEXT, 'Active guide session title', VALUE_DEFAULT, ''),
+            'guidedescription' => new external_value(PARAM_TEXT, 'Active guide session summary', VALUE_DEFAULT, ''),
         ]);
     }
 
@@ -65,9 +67,18 @@ class send_message extends external_api {
      * @param string $message The user message.
      * @param string $pageurl The current page URL.
      * @param int $cmid Optional course module id.
+     * @param string $guidetitle Optional active guide session title from client storage.
+     * @param string $guidedescription Optional active guide session summary from client storage.
      * @return array The pending operation result with job_id.
      */
-    public static function execute(int $courseid, string $message, string $pageurl = '', int $cmid = 0): array {
+    public static function execute(
+        int $courseid,
+        string $message,
+        string $pageurl = '',
+        int $cmid = 0,
+        string $guidetitle = '',
+        string $guidedescription = ''
+    ): array {
         global $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
@@ -75,6 +86,8 @@ class send_message extends external_api {
             'message' => $message,
             'pageurl' => $pageurl,
             'cmid' => $cmid,
+            'guidetitle' => $guidetitle,
+            'guidedescription' => $guidedescription,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -100,6 +113,19 @@ class send_message extends external_api {
         );
 
         try {
+            $messagecontext = tutor_context_schema::page_context($pagecontext);
+            if ($resolvedmode === tutor_message::MODE_GUIDE) {
+                $title = \core_text::substr(trim((string) ($params['guidetitle'] ?? '')), 0, 120);
+                $description = \core_text::substr(trim((string) ($params['guidedescription'] ?? '')), 0, 300);
+                if ($title !== '' && $description !== '') {
+                    $messagecontext = tutor_context_schema::guide_session_context(
+                        $title,
+                        $description,
+                        $pagecontext
+                    );
+                }
+            }
+
             $service = service_factory::get_tutor_service();
             $result = $service->submit(
                 $params['courseid'],
@@ -107,7 +133,7 @@ class send_message extends external_api {
                 new tutor_message(
                     tutor_message::ROLE_USER,
                     $message,
-                    tutor_context_schema::page_context($pagecontext)
+                    $messagecontext
                 ),
                 $resolvedmode,
                 $sanitizedcmid

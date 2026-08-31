@@ -4,8 +4,9 @@ define([
     'block_dixeo_tutor/errors',
     'block_dixeo_tutor/reconciliation_service',
     'block_dixeo_tutor/system_message_display',
-    'block_dixeo_tutor/text_utils'
-], function(str, constants, errors, ReconciliationService, systemMessageDisplay, textUtils) {
+    'block_dixeo_tutor/guide_session_context',
+    'block_dixeo_tutor/text_utils',
+], function(str, constants, errors, ReconciliationService, systemMessageDisplay, guideSessionContext, textUtils) {
     'use strict';
 
     return class ChatController {
@@ -32,7 +33,11 @@ define([
             this.maxConnectionRetryDelay = 30000;
             this.isConnectionLost = false;
             this._loadingOlder = false;
+            this._ensuringVisible = false;
+            this._loadingAllOlder = false;
+            this._initialHistoryReady = false;
             this._flushingPending = false;
+            this._guideOutboundProvider = null;
             // Event handler references stored for cleanup in destroy().
             this._onOffline = null;
             this._onOnline = null;
@@ -76,6 +81,44 @@ define([
                     this.ui.appendErrorMessage('Failed to initialize chat.');
                 }
             }
+        }
+
+        /**
+         * Provide active guide session fields for outbound user messages.
+         *
+         * @param {function(): object|null} fn
+         */
+        setGuideOutboundProvider(fn) {
+            this._guideOutboundProvider = typeof fn === 'function' ? fn : null;
+        }
+
+        /**
+         * Emit guide assistant metadata parsed from the latest assistant delta.
+         *
+         * @param {Array<object>} deltaMessages
+         * @param {object|null} pollState
+         * @private
+         */
+        _dispatchGuideAssistantContext(deltaMessages, pollState) {
+            if (!Array.isArray(deltaMessages) || !deltaMessages.length) {
+                return;
+            }
+            const lastAssistant = [...deltaMessages].reverse().find((msg) => {
+                return String(msg.role || '').toLowerCase() === 'assistant';
+            });
+            if (!lastAssistant) {
+                return;
+            }
+            const parsed = guideSessionContext.parseAssistantContext(lastAssistant);
+            if (!parsed) {
+                return;
+            }
+            window.dispatchEvent(new CustomEvent(constants.events.GUIDE_ASSISTANT_CONTEXT, {
+                detail: Object.assign({}, parsed, {
+                    fromGuideStart: !!(pollState && pollState.fromGuideStart),
+                    messageTime: lastAssistant.time || 0,
+                }),
+            }));
         }
 
         /**
@@ -210,6 +253,9 @@ define([
             this.ui.on(constants.events.SEND_MESSAGE, (message) => this.handleSendMessage(message));
             this.ui.on(constants.events.RETRY_SEND_MESSAGE, (message) => this.handleSendMessage(message));
             this.ui.on(constants.events.LOAD_OLDER_MESSAGES, () => this._handleLoadOlderMessages());
+            this.ui.on(constants.events.ENSURE_VISIBLE_TRANSCRIPT, () => {
+                this._ensureVisibleStandardTranscript();
+            });
             this.ui.on(constants.events.DELETE_CONVERSATION, () => this.handleDeleteConversation());
         }
 
@@ -351,7 +397,10 @@ define([
 
             this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
 
+            this._initialHistoryReady = true;
             this._emitConversationSynced(conversationData);
+
+            await this._ensureVisibleStandardTranscript();
 
             const last = messages.length ? messages[messages.length - 1] : null;
             const waitingForReply = !!(last && String(last.role).toLowerCase() === 'user');
@@ -360,6 +409,49 @@ define([
                     this.state.clearPollState();
                 }
                 this.ui.enableInput();
+            }
+        }
+
+        /**
+         * In standard view, keep loading older pages while the viewport is empty
+         * (e.g. the newest page is only guide-lane turns).
+         *
+         * @private
+         */
+        async _ensureVisibleStandardTranscript() {
+            if (this._ensuringVisible) {
+                return;
+            }
+            if (typeof this.ui.getMessageView === 'function'
+                    && this.ui.getMessageView() !== 'standard') {
+                return;
+            }
+            if (typeof this.ui.hasVisibleTranscriptContent === 'function'
+                    && this.ui.hasVisibleTranscriptContent()) {
+                return;
+            }
+            if (!this.state.getHasMoreOlder()) {
+                return;
+            }
+
+            this._ensuringVisible = true;
+            try {
+                let pages = 0;
+                const maxPages = 50;
+                while (pages < maxPages
+                        && this.ui.getMessageView() === 'standard'
+                        && !this.ui.hasVisibleTranscriptContent()
+                        && this.state.getHasMoreOlder()) {
+                    pages += 1;
+                    const beforeOldest = this.state.getOldestLoadedId();
+                    await this._handleLoadOlderMessages();
+                    // Stop if pagination did not advance (avoid infinite loops).
+                    if (this.state.getOldestLoadedId() === beforeOldest) {
+                        break;
+                    }
+                }
+            } finally {
+                this._ensuringVisible = false;
             }
         }
 
@@ -382,9 +474,13 @@ define([
 
         /**
          * Loads and prepends the next page of older messages.
+         *
+         * @param {{silent?: boolean}} [options]
          * @private
          */
-        async _handleLoadOlderMessages() {
+        async _handleLoadOlderMessages(options) {
+            const opts = options || {};
+            const silent = !!opts.silent;
             if (this._loadingOlder || !this.state.getHasMoreOlder()) {
                 return;
             }
@@ -397,7 +493,9 @@ define([
             const nextOffset = this.state.getHistoryOffset() + constants.ui.MESSAGE_PAGE_SIZE;
 
             this._loadingOlder = true;
-            this.ui.setLoadOlderLoading(true);
+            if (!silent) {
+                this.ui.setLoadOlderLoading(true);
+            }
 
             try {
                 const data = await this.api.loadConversation(
@@ -415,9 +513,9 @@ define([
                     this.state.setHistoryOffset(nextOffset);
                     this.state.setOldestLoadedId(rawBatch[0].id);
                 }
-                this.state.setHasMoreOlder(
-                    rawBatch.length === constants.ui.MESSAGE_PAGE_SIZE && displayBatch.length > 0
-                );
+                // Keep paging while the API returns a full page, even if every row
+                // was filtered from display (guide/system-only batches).
+                this.state.setHasMoreOlder(rawBatch.length === constants.ui.MESSAGE_PAGE_SIZE);
                 this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             } catch (e) {
                 if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
@@ -428,7 +526,84 @@ define([
                 this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             } finally {
                 this._loadingOlder = false;
-                this.ui.setLoadOlderLoading(false);
+                if (!silent) {
+                    this.ui.setLoadOlderLoading(false);
+                } else {
+                    this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+                }
+            }
+        }
+
+        /**
+         * Whether the first conversation history fetch has finished painting.
+         *
+         * @returns {boolean}
+         */
+        isInitialHistoryReady() {
+            return !!this._initialHistoryReady;
+        }
+
+        /**
+         * Silently page through older history until nothing remains (used by guide review).
+         *
+         * @returns {Promise<void>}
+         */
+        async loadAllOlderMessages() {
+            if (this._loadingAllOlder) {
+                return;
+            }
+            this._loadingAllOlder = true;
+            try {
+                let pages = 0;
+                const maxPages = 100;
+                while (pages < maxPages && this.state.getHasMoreOlder()) {
+                    pages += 1;
+                    const beforeOldest = this.state.getOldestLoadedId();
+                    await this._handleLoadOlderMessages({silent: true});
+                    if (this.state.getOldestLoadedId() === beforeOldest) {
+                        break;
+                    }
+                }
+            } finally {
+                this._loadingAllOlder = false;
+                this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+            }
+        }
+
+        /**
+         * Silently load older pages until predicate() is true or history is exhausted.
+         *
+         * @param {function(): boolean} predicate
+         * @param {{maxPages?: number}} [options]
+         * @returns {Promise<boolean>} True when predicate became true.
+         */
+        async loadOlderUntil(predicate, options) {
+            const opts = options || {};
+            const maxPages = typeof opts.maxPages === 'number' ? opts.maxPages : 100;
+            if (typeof predicate !== 'function') {
+                return false;
+            }
+            if (predicate()) {
+                return true;
+            }
+            if (this._loadingAllOlder) {
+                return predicate();
+            }
+            this._loadingAllOlder = true;
+            try {
+                let pages = 0;
+                while (pages < maxPages && this.state.getHasMoreOlder() && !predicate()) {
+                    pages += 1;
+                    const beforeOldest = this.state.getOldestLoadedId();
+                    await this._handleLoadOlderMessages({silent: true});
+                    if (this.state.getOldestLoadedId() === beforeOldest) {
+                        break;
+                    }
+                }
+                return !!predicate();
+            } finally {
+                this._loadingAllOlder = false;
+                this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             }
         }
 
@@ -484,7 +659,17 @@ define([
             // 1. Create an optimistic bubble with a negative temp ID.
             const tempId = --this.tempIdCounter;
             const timestamp = Math.floor(Date.now() / 1000);
-            this.ui.appendMessage({id: tempId, role: 'user', content: message, time: timestamp});
+            const guideSession = this._guideOutboundProvider ? this._guideOutboundProvider() : null;
+            const optimistic = {id: tempId, role: 'user', content: message, time: timestamp};
+            if (guideSession && guideSession.title && guideSession.description) {
+                optimistic.context = {
+                    schema: 'guide_session',
+                    version: 1,
+                    title: guideSession.title,
+                    description: guideSession.description,
+                };
+            }
+            this.ui.appendMessage(optimistic);
 
             this.pendingTempId = tempId;
             this.state.setDraft(message);
@@ -500,7 +685,8 @@ define([
                     this.state.getCourseId(),
                     message,
                     window.location.href,
-                    this._getCurrentCmid()
+                    this._getCurrentCmid(),
+                    guideSession
                 );
 
                 if (response.errormessage) {
@@ -596,6 +782,8 @@ define([
                         );
                         const rawDelta = Array.isArray(delta.messages) ? delta.messages : [];
                         const deltaMessages = this._messagesForDisplay(rawDelta);
+
+                        this._dispatchGuideAssistantContext(deltaMessages, pollState);
 
                         this.pendingTempId = this.reconciler.reconcile(deltaMessages, this.pendingTempId);
                         this._emitConversationSynced(delta);

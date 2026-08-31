@@ -106,6 +106,13 @@ $functions = [
         'ajax'        => true,
         'capabilities' => 'block/dixeo_tutor:talktotutor',
     ],
+    'block_dixeo_tutor_start_guide_session' => [
+        'classname'   => '\block_dixeo_tutor\external\start_guide_session',
+        'description' => 'Start a Guide me session with the learner prompt and flush proactive context',
+        'type'        => 'write',
+        'ajax'        => true,
+        'capabilities' => 'block/dixeo_tutor:talktotutor',
+    ],
     'block_dixeo_tutor_submit_teach_lesson' => [
         'classname'   => '\block_dixeo_tutor\external\submit_teach_lesson',
         'description' => 'Submit ephemeral teach lesson generation job',

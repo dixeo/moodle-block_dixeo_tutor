@@ -83,9 +83,20 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
     background-color: var(--tutor-mode-footer) !important;
 }
 
-#dixeo-tutor .dixeo-tutor-message-user:not(.dixeo-tutor-message--quiz-review):not(.dixeo-tutor-message--custom-lesson)
-.dixeo-tutor-message-content {
-    background: var(--tutor-mode-user) !important;
+#dixeo-tutor .dixeo-tutor-message-user .dixeo-tutor-message-content {
+    background: #108eee !important;
+}
+
+#dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message-content {
+    background: #6d4ab3 !important;
+}
+
+body.darkmode #dixeo-tutor .dixeo-tutor-message-user .dixeo-tutor-message-content {
+    background: #108eee !important;
+}
+
+body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message-content {
+    background: #8b6fd1 !important;
 }
 
 /* Title of the block */
@@ -155,6 +166,12 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
     overflow-x: hidden;
     overflow-y: auto;
     background: var(--tutor-mode-surface, transparent) !important;
+}
+
+/* Beats Bootstrap .d-flex when both classes are present on a row. */
+#dixeo-tutor .dixeo-tutor-message-row.dixeo-tutor-row--hidden,
+#dixeo-tutor .dixeo-tutor-separator.dixeo-tutor-row--hidden {
+    display: none !important;
 }
 
 .dixeo-tutor-body {
@@ -453,7 +470,7 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
 .dixeo-teach-lesson__header {
     display: flex;
     flex-wrap: nowrap;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
@@ -474,11 +491,7 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
     background: var(--tutor-mode-footer, #fef3e6);
 }
 
-.dixeo-teach-lesson__title {
-    flex: 1 1 auto;
-    min-width: 0;
-}
-
+.dixeo-teach-lesson__title,
 .dixeo-practice-quiz-panel__title {
     flex: 1 1 auto;
     min-width: 0;
@@ -489,20 +502,30 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
 }
 
 .dixeo-teach-lesson__header-actions,
-.dixeo-practice-quiz-panel__header-actions,
+.dixeo-practice-quiz-panel__header-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+    align-items: center;
+    align-self: center;
+}
+
 .dixeo-guide-banner__actions {
     display: flex;
     flex-shrink: 0;
     gap: 0.25rem;
+    align-self: flex-start;
+    padding-top: 0.1rem;
 }
 
 .dixeo-guide-banner {
     display: none;
     flex-wrap: nowrap;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    min-height: 4.25rem;
     border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     flex-shrink: 0;
     background: var(--tutor-mode-footer, #f4f0fa);
@@ -511,8 +534,292 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
     z-index: 3;
 }
 
-#dixeo-tutor[data-tutor-mode="guide"] .dixeo-guide-banner {
+#dixeo-tutor[data-tutor-mode="guide"][data-guide-session="active"] .dixeo-guide-banner,
+#dixeo-tutor[data-tutor-mode="guide"][data-guide-session="review"] .dixeo-guide-banner {
     display: flex;
+}
+
+#dixeo-tutor[data-tutor-mode="guide"][data-guide-session="review"] #dixeo-tutor-composer {
+    display: none !important;
+}
+
+.dixeo-guide-banner__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.dixeo-guide-banner__label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    opacity: 0.85;
+    line-height: 1.2;
+}
+
+.dixeo-guide-banner__topic {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.dixeo-guide-banner__topic-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.3;
+}
+
+.dixeo-guide-banner__topic-description {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    opacity: 0.95;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+}
+
+.dixeo-tutor-guide-pane {
+    flex: 0 0 auto;
+    max-height: 60vh;
+    overflow-y: auto;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.5rem;
+}
+
+.dixeo-tutor-body--guide-active {
+    min-height: 0;
+}
+
+.dixeo-tutor-body--guide-active .dixeo-tutor-chat-pane {
+    display: none !important;
+}
+
+.dixeo-tutor-body--guide-active .dixeo-tutor-guide-pane {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    border-bottom: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.dixeo-tutor-body--guide-active .dixeo-tutor-generating,
+.dixeo-tutor-body--guide-active .dixeo-tutor-setup--instant,
+.dixeo-tutor-body--guide-active .dixeo-guide-setup--instant {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.dixeo-guide-setup {
+    padding: 0.5rem;
+}
+
+.dixeo-guide-setup__prompt {
+    width: 100%;
+}
+
+.dixeo-guide-setup__instructions {
+    color: inherit;
+    opacity: 0.9;
+    line-height: 1.45;
+}
+
+.dixeo-guide-setup__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.dixeo-guide-setup__actions .btn + .btn {
+    margin-left: 0.5rem;
+}
+
+.dixeo-guide-setup--instant {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 4rem;
+    padding: 1rem 0.5rem;
+}
+
+.dixeo-guide-setup__instant-spinner {
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--tutor-main-color, #02aaff);
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel {
+    --tutor-mode-header: #7c5cbf;
+    --tutor-mode-footer: #f4f0fa;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1;
+    min-width: 14rem;
+    max-width: 100%;
+    border-color: rgba(124, 92, 191, 0.35);
+}
+
+.dixeo-guide-topic-panel * {
+    line-height: 1.2;
+    box-sizing: border-box;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel .card-header,
+#dixeo-tutor .dixeo-guide-topic-panel__header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    background: var(--tutor-mode-header) !important;
+    color: #fff !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.75rem 1rem !important;
+    height: auto;
+    margin-bottom: 0;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__label {
+    margin: 0 0 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #fff !important;
+    overflow-wrap: anywhere;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel .card-body,
+#dixeo-tutor .dixeo-guide-topic-panel__body,
+#dixeo-tutor-popup-container > section .dixeo-guide-topic-panel .card-body,
+#dixeo-tutor-popup-container > section .dixeo-guide-topic-panel__body {
+    background: var(--tutor-mode-footer) !important;
+    padding: 1rem !important;
+    display: block;
+    height: auto;
+    max-height: none;
+    flex: none;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__description {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #495057;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel .card-footer,
+#dixeo-tutor .dixeo-guide-topic-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    background: var(--tutor-mode-footer) !important;
+    border-top: 0 !important;
+    padding: 0.75rem 1rem !important;
+    padding-top: 0 !important;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__review-btn:hover,
+#dixeo-tutor .dixeo-guide-topic-panel__review-btn:focus {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__restart-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 1px solid var(--tutor-mode-header);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--tutor-mode-header);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__restart-btn:hover,
+#dixeo-tutor .dixeo-guide-topic-panel__restart-btn:focus {
+    background: var(--tutor-mode-header);
+    border-color: var(--tutor-mode-header);
+    color: #fff;
+}
+
+.dixeo-guide-topic-panel__restart-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+#dixeo-tutor .dixeo-tutor-message--guide-topic .dixeo-tutor-message-content {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+.dixeo-tutor-message--guide-topic .dixeo-tutor-message-footer {
+    justify-content: flex-end;
+}
+
+.dixeo-tutor-message-row[data-guide-understood="1"] .dixeo-tutor-message-actions {
+    display: none !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions {
+    gap: 0.5rem;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions__restart {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    background-image: none !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions__restart:hover,
+#dixeo-tutor .dixeo-guide-completion-actions__restart:focus {
+    color: #fff !important;
+    background-color: var(--tutor-mode-send) !important;
+    border-color: var(--tutor-mode-send) !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions__exit:hover,
+#dixeo-tutor .dixeo-guide-completion-actions__exit:focus {
+    color: var(--tutor-mode-header) !important;
+    background-color: color-mix(in srgb, var(--tutor-mode-header) 16%, #fff) !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-panel {
+    --tutor-mode-header: #7c5cbf;
+    --tutor-mode-footer: #f4f0fa;
+    max-width: 92%;
+    border: 1px solid color-mix(in srgb, var(--tutor-mode-header) 35%, #eaecef);
+    background: var(--tutor-mode-footer);
+}
+
+#dixeo-tutor .dixeo-guide-completion-panel__title {
+    color: var(--tutor-mode-header);
+    font-weight: 600;
+}
+
+#dixeo-tutor .dixeo-guide-completion-panel__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
 }
 
 .dixeo-guide-banner__title-wrap {
@@ -634,7 +941,8 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
 }
 
 #dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn,
-#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn {
+#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn,
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn {
     color: #fff !important;
     background-color: var(--tutor-mode-header) !important;
     background-image: none !important;
@@ -643,15 +951,18 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
 
 #dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn:hover:not(:disabled),
 #dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:hover:not(:disabled),
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn:hover:not(:disabled),
 #dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn:focus:not(:disabled),
-#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:focus:not(:disabled) {
+#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:focus:not(:disabled),
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn:focus:not(:disabled) {
     color: #fff !important;
     background-color: var(--tutor-mode-send) !important;
     border-color: var(--tutor-mode-send) !important;
 }
 
 #dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn:disabled,
-#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:disabled {
+#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:disabled,
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn:disabled {
     opacity: 0.55;
 }
 
@@ -673,6 +984,8 @@ body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
 #dixeo-tutor .dixeo-quiz-setup .btn-outline-secondary:not(.active):focus,
 #dixeo-tutor .dixeo-teach-setup .btn-outline-secondary:hover,
 #dixeo-tutor .dixeo-teach-setup .btn-outline-secondary:focus,
+#dixeo-tutor .dixeo-guide-setup .btn-outline-secondary:hover,
+#dixeo-tutor .dixeo-guide-setup .btn-outline-secondary:focus,
 #dixeo-tutor .dixeo-tutor-setup .btn-outline-secondary:not(.active):hover,
 #dixeo-tutor .dixeo-tutor-setup .btn-outline-secondary:not(.active):focus,
 #dixeo-tutor .dixeo-teach-lesson__header-actions .btn:not(.playing):hover,
@@ -1477,7 +1790,7 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
 }
 
 /* Practice quiz review panel (replaces structured tutor message) */
-.dixeo-tutor-message--quiz-review .dixeo-tutor-message-content {
+#dixeo-tutor .dixeo-tutor-message--quiz-review .dixeo-tutor-message-content {
     background: transparent !important;
     padding: 0 !important;
 }
@@ -1854,7 +2167,7 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
 }
 
 /* Custom lesson chat card */
-.dixeo-tutor-message--custom-lesson .dixeo-tutor-message-content {
+#dixeo-tutor .dixeo-tutor-message--custom-lesson .dixeo-tutor-message-content {
     background: transparent !important;
     padding: 0 !important;
 }

@@ -16,7 +16,12 @@ define([
     'block_dixeo_tutor/message_actions',
     'block_dixeo_tutor/practice_quiz_review',
     'block_dixeo_tutor/custom_lesson_panel',
-], function(str, Notification, constants, EventEmitter, a11y, textUtils, messageActions, practiceQuizReview, customLessonPanel) {
+    'block_dixeo_tutor/guide_session_context',
+    'block_dixeo_tutor/guide_topic_panel',
+], function(
+    str, Notification, constants, EventEmitter, a11y, textUtils, messageActions,
+    practiceQuizReview, customLessonPanel, guideSessionContext, guideTopicPanel
+) {
     'use strict';
 
     return class ChatUI extends EventEmitter {
@@ -43,6 +48,18 @@ define([
             this._initialScrollPending = false;
             // Scroll offset captured before a quiz/lesson pane hides the chat.
             this._savedMessagesScrollTop = null;
+            /** @type {HTMLElement|null} Live DOM row when the overlay was opened. */
+            this._returnToMessageRow = null;
+            /**
+             * Durable card identity for reload / pagination.
+             * @type {{type: string, title?: string, description?: string, messageId?: string}|null}
+             */
+            this._returnToCard = null;
+            this._guideCompletionHandlers = null;
+            /** @type {'standard'|'guide'|'review'} */
+            this._messageView = 'standard';
+            /** @type {{title: string, description: string, startedAt?: number, timeEnded?: number}|null} */
+            this._guideViewFilter = null;
             // Pre-fetched to avoid async race when the first message arrives quickly.
             this.todayLabel = null;
             this.strings = {};
@@ -59,9 +76,12 @@ define([
                 {key: 'aria_stop_reading', component: 'block_dixeo_tutor'},
                 {key: 'aria_copy_message', component: 'block_dixeo_tutor'},
                 {key: 'aria_message_copied', component: 'block_dixeo_tutor'},
+                {key: 'guide_completion_exit', component: 'block_dixeo_tutor'},
+                {key: 'guide_completion_restart', component: 'block_dixeo_tutor'},
             ]).then(([
                 senderYou, senderAssistant, connLost, yourMsg, assistantMsg,
                 tooLong, loadOlder, ariaLoadOlder, readMsg, stopReading, copyMsg, copiedMsg,
+                guideExit, guideRestart,
             ]) => {
                 this.strings.senderYou = senderYou;
                 this.strings.senderAssistant = senderAssistant;
@@ -75,6 +95,8 @@ define([
                 this.strings.ariaStopReading = stopReading;
                 this.strings.ariaCopyMessage = copyMsg;
                 this.strings.ariaMessageCopied = copiedMsg;
+                this.strings.guideCompletionExit = guideExit;
+                this.strings.guideCompletionRestart = guideRestart;
                 return null;
             }).catch(() => {
                 // Fallback to English.
@@ -90,13 +112,609 @@ define([
                 this.strings.ariaStopReading = 'Stop reading';
                 this.strings.ariaCopyMessage = 'Copy message';
                 this.strings.ariaMessageCopied = 'Copied';
+                this.strings.guideCompletionExit = 'Exit';
+                this.strings.guideCompletionRestart = 'Start new session';
             });
 
             this._initialize();
         }
 
         /**
-         * Creates a DOM element from an HTML string.
+         * @param {{shouldShow: function(): boolean, onExit: function, onRestart: function}|null} handlers
+         */
+        setGuideCompletionHandlers(handlers) {
+            this._guideCompletionHandlers = handlers || null;
+        }
+
+        /**
+         * Switch which transcript lanes are visible.
+         *
+         * @param {'standard'|'guide'|'review'} view
+         * @param {{title?: string, description?: string, startedAt?: number, timeEnded?: number}|null} [guideFilter]
+         */
+        setMessageView(view, guideFilter) {
+            const allowed = view === 'guide' || view === 'review' ? view : 'standard';
+            const changed = this._messageView !== allowed;
+            this._messageView = allowed;
+            this._guideViewFilter = (allowed === 'standard') ? null : (guideFilter || null);
+            this.applyMessageView();
+            this._updateLoadOlderVisibility();
+            if (allowed === 'standard' && changed) {
+                this.emit(constants.events.ENSURE_VISIBLE_TRANSCRIPT);
+            }
+        }
+
+        /**
+         * @returns {'standard'|'guide'|'review'}
+         */
+        getMessageView() {
+            return this._messageView || 'standard';
+        }
+
+        /**
+         * Whether any transcript row is currently visible under the active message view.
+         *
+         * @returns {boolean}
+         */
+        hasVisibleTranscriptContent() {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return false;
+            }
+            return !!container.querySelector(
+                '.dixeo-tutor-message-row:not(.dixeo-tutor-row--hidden)'
+            );
+        }
+
+        /**
+         * Re-apply lane visibility to every rendered row and date separator.
+         */
+        applyMessageView() {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return;
+            }
+            this._retagGuideLanesFromWindows();
+            const view = this._messageView || 'standard';
+            const filter = this._guideViewFilter;
+            if (view === 'standard') {
+                this._ensureGuideSummaryCards();
+            }
+            container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
+                // Prefer a custom hidden class: Bootstrap d-flex beats d-none at equal specificity.
+                row.classList.toggle(
+                    'dixeo-tutor-row--hidden',
+                    !this._rowVisibleInMessageView(row, view, filter)
+                );
+            });
+            this._syncDateSeparatorVisibility();
+            if (typeof this.syncGuideCompletionButtons === 'function') {
+                this.syncGuideCompletionButtons();
+            }
+        }
+
+        /**
+         * @param {HTMLElement} row
+         * @param {string} view
+         * @param {{title?: string, description?: string, startedAt?: number, timeEnded?: number}|null} filter
+         * @returns {boolean}
+         * @private
+         */
+        _rowVisibleInMessageView(row, view, filter) {
+            const lane = row.dataset.lane || 'standard';
+            // Standard: only non-guide turns + review summary cards. Guide turns stay hidden.
+            if (view === 'standard') {
+                return lane !== 'guide';
+            }
+            // Guide / review: hide summary cards and every non-guide row.
+            if (lane === 'guide-summary' || lane !== 'guide') {
+                return false;
+            }
+            // Setup / blank session (no topic filter yet): hide everything for a clean slate.
+            if (!filter || !filter.title) {
+                return false;
+            }
+            return this._guideRowMatchesFilter(row, filter);
+        }
+
+        /**
+         * @param {HTMLElement} row
+         * @param {{title?: string, description?: string, startedAt?: number, timeEnded?: number}|null} filter
+         * @returns {boolean}
+         * @private
+         */
+        _guideRowMatchesFilter(row, filter) {
+            if (String(row.dataset.guideTitle || '') !== String(filter.title)) {
+                return false;
+            }
+            if (filter.description
+                    && String(row.dataset.guideDescription || '') !== String(filter.description || '')) {
+                return false;
+            }
+            const time = this._rowMessageTime(row);
+            if (!time) {
+                // Untimed guide-tagged rows still belong to the session once titled.
+                return true;
+            }
+            if (filter.startedAt && time < filter.startedAt) {
+                return false;
+            }
+            if (filter.timeEnded && time > filter.timeEnded) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * @param {HTMLElement} row
+         * @returns {number}
+         * @private
+         */
+        _rowMessageTime(row) {
+            return parseInt(row.dataset.msgTime || row.dataset.guideTime || '0', 10) || 0;
+        }
+
+        /**
+         * @returns {Array<{title: string, description: string, startedAt: number, timeEnded: number, anchor: HTMLElement|null}>}
+         * @private
+         */
+        _collectGuideSessionClusters() {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return [];
+            }
+
+            const assistantMarks = [];
+            container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
+                if (row.dataset.lane === 'guide-summary') {
+                    return;
+                }
+                if (!row.querySelector('.dixeo-tutor-message-assistant')) {
+                    return;
+                }
+                if (row.dataset.lane !== 'guide' || !row.dataset.guideTitle) {
+                    return;
+                }
+                const time = this._rowMessageTime(row);
+                if (!time) {
+                    return;
+                }
+                assistantMarks.push({
+                    title: row.dataset.guideTitle,
+                    description: row.dataset.guideDescription || '',
+                    time: time,
+                    row: row,
+                });
+            });
+            assistantMarks.sort((a, b) => a.time - b.time);
+
+            const clusters = [];
+            let cluster = null;
+            const flush = () => {
+                if (!cluster) {
+                    return;
+                }
+                clusters.push(cluster);
+                cluster = null;
+            };
+            assistantMarks.forEach((mark) => {
+                if (!cluster
+                        || cluster.title !== mark.title
+                        || cluster.description !== mark.description) {
+                    flush();
+                    cluster = {
+                        title: mark.title,
+                        description: mark.description,
+                        startedAt: mark.time,
+                        timeEnded: mark.time,
+                        anchor: mark.row,
+                    };
+                    return;
+                }
+                cluster.timeEnded = mark.time;
+                cluster.anchor = mark.row;
+            });
+            flush();
+
+            // Extend end to cover user replies until the next session (or +15 min).
+            for (let i = 0; i < clusters.length; i++) {
+                const next = clusters[i + 1];
+                if (next) {
+                    clusters[i].timeEnded = Math.max(clusters[i].timeEnded, next.startedAt - 1);
+                } else {
+                    clusters[i].timeEnded = Math.max(clusters[i].timeEnded, clusters[i].timeEnded + 15 * 60);
+                }
+                // Prefer the last guide-lane row in the window as insert anchor.
+                let lastInWindow = clusters[i].anchor;
+                container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
+                    if (row.dataset.lane !== 'guide') {
+                        return;
+                    }
+                    if (String(row.dataset.guideTitle || '') !== String(clusters[i].title)) {
+                        return;
+                    }
+                    const time = this._rowMessageTime(row);
+                    if (!time || time < clusters[i].startedAt || time > clusters[i].timeEnded) {
+                        return;
+                    }
+                    lastInWindow = row;
+                });
+                clusters[i].anchor = lastInWindow;
+            }
+
+            return clusters;
+        }
+
+        /**
+         * Ensure each past guide session has a review summary card in the standard transcript.
+         *
+         * @private
+         */
+        _ensureGuideSummaryCards() {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return;
+            }
+            // Never synthesize cards while a live/review guide session chrome is up.
+            const root = this.dom.container || document.getElementById('dixeo-tutor');
+            const guideSession = root ? root.getAttribute('data-guide-session') : '';
+            if (guideSession === 'active' || guideSession === 'review') {
+                return;
+            }
+
+            const existingKeys = new Set();
+            container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide-summary"]').forEach((row) => {
+                existingKeys.add(
+                    String(row.dataset.guideTitle || '') + '\n' + String(row.dataset.guideDescription || '')
+                );
+            });
+
+            const providerSessions = (typeof this._guideSummarySessionsProvider === 'function')
+                ? (this._guideSummarySessionsProvider() || [])
+                : [];
+            const byKey = new Map();
+            providerSessions.forEach((session) => {
+                if (!session || !session.title) {
+                    return;
+                }
+                const key = String(session.title) + '\n' + String(session.description || '');
+                byKey.set(key, {
+                    title: session.title,
+                    description: session.description || '',
+                    startedAt: session.startedAt || 0,
+                    timeEnded: session.timeEnded || 0,
+                    anchor: null,
+                });
+            });
+
+            this._collectGuideSessionClusters().forEach((cluster) => {
+                const key = String(cluster.title) + '\n' + String(cluster.description || '');
+                const prev = byKey.get(key);
+                if (prev) {
+                    prev.startedAt = prev.startedAt || cluster.startedAt;
+                    prev.timeEnded = Math.max(prev.timeEnded || 0, cluster.timeEnded || 0);
+                    prev.anchor = cluster.anchor;
+                    return;
+                }
+                byKey.set(key, cluster);
+            });
+
+            byKey.forEach((session, key) => {
+                const existing = Array.from(
+                    container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide-summary"]')
+                ).find((row) => {
+                    return String(row.dataset.guideTitle || '') + '\n'
+                        + String(row.dataset.guideDescription || '') === key;
+                });
+                if (existing) {
+                    // After older pages load, move a bottom-appended card next to its session.
+                    if (session.anchor && session.anchor.parentNode === container
+                            && existing.previousElementSibling !== session.anchor) {
+                        if (session.anchor.nextSibling) {
+                            container.insertBefore(existing, session.anchor.nextSibling);
+                        } else {
+                            container.appendChild(existing);
+                        }
+                    }
+                    return;
+                }
+                const node = guideTopicPanel.createCardNode({
+                    title: session.title,
+                    description: session.description,
+                    startedAt: session.startedAt || 0,
+                    timeEnded: session.timeEnded || 0,
+                });
+                if (!node) {
+                    return;
+                }
+                if (session.anchor && session.anchor.parentNode === container) {
+                    if (session.anchor.nextSibling) {
+                        container.insertBefore(node, session.anchor.nextSibling);
+                    } else {
+                        container.appendChild(node);
+                    }
+                } else {
+                    container.appendChild(node);
+                }
+                existingKeys.add(key);
+            });
+        }
+
+        /**
+         * @param {function(): Array<{title: string, description: string, startedAt?: number, timeEnded?: number}>} provider
+         */
+        setGuideSummarySessionsProvider(provider) {
+            this._guideSummarySessionsProvider = typeof provider === 'function' ? provider : null;
+        }
+
+        /**
+         * Tag user turns that fall inside known guide sessions (from summary cards /
+         * assistant guide_assistant markers). Never un-tags guide rows, and never uses
+         * the active view filter alone (that would pull in ordinary chat history).
+         *
+         * @private
+         */
+        _retagGuideLanesFromWindows() {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return;
+            }
+
+            const windows = [];
+
+            container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide-summary"]').forEach((row) => {
+                const start = parseInt(row.dataset.guideStarted || '0', 10) || 0;
+                const end = parseInt(row.dataset.guideEnded || '0', 10) || 0;
+                if (!row.dataset.guideTitle || !start) {
+                    return;
+                }
+                windows.push({
+                    title: row.dataset.guideTitle,
+                    description: row.dataset.guideDescription || '',
+                    start: start,
+                    end: end || Number.MAX_SAFE_INTEGER,
+                });
+            });
+
+            const assistantMarks = [];
+            container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
+                if (!row.querySelector('.dixeo-tutor-message-assistant')) {
+                    return;
+                }
+                if (row.dataset.lane !== 'guide' || !row.dataset.guideTitle) {
+                    return;
+                }
+                const time = this._rowMessageTime(row);
+                if (!time) {
+                    return;
+                }
+                assistantMarks.push({
+                    title: row.dataset.guideTitle,
+                    description: row.dataset.guideDescription || '',
+                    time: time,
+                });
+            });
+            assistantMarks.sort((a, b) => a.time - b.time);
+
+            let cluster = null;
+            const flushCluster = () => {
+                if (!cluster) {
+                    return;
+                }
+                windows.push({
+                    title: cluster.title,
+                    description: cluster.description,
+                    start: cluster.start,
+                    end: cluster.end,
+                });
+                cluster = null;
+            };
+            assistantMarks.forEach((mark) => {
+                if (!cluster
+                        || cluster.title !== mark.title
+                        || cluster.description !== mark.description) {
+                    flushCluster();
+                    cluster = {
+                        title: mark.title,
+                        description: mark.description,
+                        start: mark.time,
+                        end: mark.time,
+                    };
+                    return;
+                }
+                cluster.end = mark.time;
+            });
+            flushCluster();
+
+            // Extend each cluster so user replies after the last assistant turn still match,
+            // until the next session starts (or +15 minutes for the latest open session).
+            const derived = windows.filter((w) => w.start > 0).sort((a, b) => a.start - b.start);
+            for (let i = 0; i < derived.length; i++) {
+                const next = derived[i + 1];
+                if (next && derived[i].end < next.start) {
+                    derived[i].end = next.start - 1;
+                } else if (!next && derived[i].end < Number.MAX_SAFE_INTEGER) {
+                    derived[i].end = Math.max(derived[i].end, derived[i].end + 15 * 60);
+                }
+            }
+
+            container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
+                if (row.dataset.lane === 'guide-summary' || row.dataset.lane === 'guide') {
+                    // Never demote guide / summary rows back to standard.
+                    return;
+                }
+                if (row.querySelector('.dixeo-tutor-message-assistant')) {
+                    return;
+                }
+
+                const time = this._rowMessageTime(row);
+                if (!time) {
+                    return;
+                }
+                const match = derived.find((w) => {
+                    if (!w.title) {
+                        return false;
+                    }
+                    if (time < w.start) {
+                        return false;
+                    }
+                    if (w.end !== Number.MAX_SAFE_INTEGER && time > w.end) {
+                        return false;
+                    }
+                    return true;
+                });
+
+                if (!match) {
+                    return;
+                }
+                row.dataset.lane = 'guide';
+                row.dataset.guideTitle = match.title;
+                row.dataset.guideDescription = match.description;
+                const bubble = row.querySelector('.dixeo-tutor-message-user');
+                if (bubble) {
+                    bubble.classList.add('dixeo-tutor-message-user--guide');
+                }
+            });
+        }
+
+        /**
+         * Hide date separators that have no visible message rows until the next separator.
+         *
+         * @private
+         */
+        _syncDateSeparatorVisibility() {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return;
+            }
+            const children = Array.from(container.children);
+            let pendingSep = null;
+            let visibleSinceSep = false;
+            const flush = () => {
+                if (pendingSep) {
+                    pendingSep.classList.toggle('dixeo-tutor-row--hidden', !visibleSinceSep);
+                }
+            };
+            children.forEach((child) => {
+                if (child.classList.contains('dixeo-tutor-separator')) {
+                    flush();
+                    pendingSep = child;
+                    visibleSinceSep = false;
+                    return;
+                }
+                if (child.classList.contains('dixeo-tutor-message-row')
+                        && !child.classList.contains('dixeo-tutor-row--hidden')) {
+                    visibleSinceSep = true;
+                }
+            });
+            flush();
+        }
+
+        /**
+         * Tag a message row for lane filtering / guide coloring (Moodle-side only).
+         *
+         * @param {HTMLElement} row
+         * @param {object} msg
+         * @private
+         */
+        _annotateMessageLane(row, msg) {
+            if (!row) {
+                return;
+            }
+            if (msg && msg.time) {
+                row.dataset.msgTime = String(msg.time);
+            }
+            // Prefer API assistant metadata; optimistic client guide_session is also fine.
+            const session = guideSessionContext.parseSessionFields(msg);
+            if (!session) {
+                if (!row.dataset.lane) {
+                    row.dataset.lane = 'standard';
+                }
+                return;
+            }
+            row.dataset.lane = 'guide';
+            row.dataset.guideTitle = session.title;
+            row.dataset.guideDescription = session.description;
+            if (msg.time) {
+                row.dataset.guideTime = String(msg.time);
+            }
+            const bubble = row.querySelector('.dixeo-tutor-message-user');
+            if (bubble) {
+                bubble.classList.add('dixeo-tutor-message-user--guide');
+            }
+        }
+
+        /**
+         * Show Exit / Restart on the last assistant message when guide session is understood.
+         */
+        syncGuideCompletionButtons() {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return;
+            }
+            container.querySelectorAll('.dixeo-guide-completion-actions').forEach(function(el) {
+                el.remove();
+            });
+
+            if (!this._guideCompletionHandlers || !this._guideCompletionHandlers.shouldShow()) {
+                return;
+            }
+
+            const rows = Array.from(container.querySelectorAll('.dixeo-tutor-message-row'))
+                .filter(function(row) {
+                    return !row.classList.contains('dixeo-tutor-row--hidden');
+                });
+            if (!rows.length) {
+                return;
+            }
+            const lastRow = rows[rows.length - 1];
+            if (!lastRow || lastRow.dataset.guideUnderstood !== '1') {
+                return;
+            }
+
+            const footer = lastRow.querySelector('.dixeo-tutor-message-footer');
+            if (!footer) {
+                return;
+            }
+
+            const messageActions = lastRow.querySelector('.dixeo-tutor-message-actions');
+            if (messageActions) {
+                messageActions.classList.add('d-none');
+            }
+
+            const actions = document.createElement('div');
+            actions.className = 'dixeo-guide-completion-actions d-flex flex-wrap mt-2';
+            actions.innerHTML =
+                '<button type="button" class="btn btn-sm btn-outline-secondary dixeo-guide-completion-actions__exit"' +
+                ' data-action="guide-exit">' +
+                textUtils.escapeHtml(this.strings.guideCompletionExit || 'Exit') +
+                '</button>' +
+                '<button type="button" class="btn btn-sm btn-primary dixeo-guide-completion-actions__restart"' +
+                ' data-action="guide-restart">' +
+                textUtils.escapeHtml(this.strings.guideCompletionRestart || 'Start new session') +
+                '</button>';
+
+            const exitBtn = actions.querySelector('[data-action="guide-exit"]');
+            const restartBtn = actions.querySelector('[data-action="guide-restart"]');
+            if (exitBtn) {
+                exitBtn.addEventListener('click', () => {
+                    if (typeof this._guideCompletionHandlers.onExit === 'function') {
+                        this._guideCompletionHandlers.onExit();
+                    }
+                });
+            }
+            if (restartBtn) {
+                restartBtn.addEventListener('click', () => {
+                    if (typeof this._guideCompletionHandlers.onRestart === 'function') {
+                        this._guideCompletionHandlers.onRestart();
+                    }
+                });
+            }
+
+            footer.insertBefore(actions, footer.firstChild);
+        }
+
+        /**
          * @param {string} htmlString The HTML string to convert.
          * @returns {HTMLElement} The first child element created.
          * @private
@@ -224,6 +842,11 @@ define([
          */
         _updateLoadOlderVisibility() {
             if (!this.loadOlderSlot || !this.loadOlderSlot.isConnected) {
+                return;
+            }
+            // Review loads the full transcript; never show pagination chrome.
+            if (this._messageView === 'review') {
+                this.loadOlderSlot.hidden = true;
                 return;
             }
             if (this._loadingOlder) {
@@ -398,11 +1021,15 @@ define([
                 return false;
             }
             node.dataset.mid = msg.id;
+            if (msg.time) {
+                node.dataset.msgTime = String(msg.time);
+            }
             const timeElm = node.querySelector('.message-time');
             if (timeElm) {
                 timeElm.textContent = new Date((msg.time || 0) * 1000)
                     .toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
             }
+            // Keep optimistic guide lane tags; retag runs on the next applyMessageView.
             return true;
         }
 
@@ -448,6 +1075,8 @@ define([
                 // Pass false to skip date checks; false to skip per-message scroll — we scroll once at end.
                 this.appendMessage(msg, false, false);
             });
+            this.applyMessageView();
+            this.syncGuideCompletionButtons();
             this.scrollToBottom();
         }
 
@@ -485,9 +1114,13 @@ define([
                 lastPrependedDateLabel = dateLabel;
 
                 const messageNode = this._createMessageNode(msg);
+                if (!messageNode) {
+                    return;
+                }
                 if (msg.id) {
                     messageNode.dataset.mid = msg.id;
                 }
+                this._annotateMessageLane(messageNode, msg);
                 fragment.appendChild(messageNode);
             });
 
@@ -507,6 +1140,7 @@ define([
                 container.appendChild(fragment);
             }
 
+            this.applyMessageView();
             container.scrollTop += container.scrollHeight - prevScrollHeight;
         }
 
@@ -669,6 +1303,9 @@ define([
             }
 
             const messageNode = this._createMessageNode(msg);
+            if (!messageNode) {
+                return;
+            }
             if (msg.id) {
                 messageNode.dataset.mid = msg.id;
                 // The welcome message carries id 0 and is generated locally: nothing to erase.
@@ -676,6 +1313,9 @@ define([
             }
 
             this.dom.messagesContainer.appendChild(messageNode);
+            this._annotateMessageLane(messageNode, msg);
+            this.applyMessageView();
+            this.syncGuideCompletionButtons();
 
             const sender = msg.role === 'user'
                 ? (this.strings.senderYou || 'You')
@@ -904,20 +1544,250 @@ define([
         }
 
         /**
-         * After a quiz/lesson pane closes: scroll to bottom only for the deferred initial
-         * load. Otherwise put the message list back where it was.
+         * Build a durable return-card target from a transcript row.
          *
-         * @returns {boolean} True when a deferred initial scroll ran.
+         * @param {HTMLElement|null} row
+         * @returns {{type: string, title?: string, description?: string, messageId?: string}|null}
          */
-        consumeInitialScrollPending() {
+        cardTargetFromRow(row) {
+            if (!row || row.nodeType !== 1) {
+                return null;
+            }
+            const messageId = row.dataset.mid ? String(row.dataset.mid) : '';
+            if (row.dataset.lane === 'guide-summary') {
+                return {
+                    type: 'guide',
+                    title: String(row.dataset.guideTitle || ''),
+                    description: String(row.dataset.guideDescription || ''),
+                    messageId: messageId || undefined,
+                };
+            }
+            let title = '';
+            const rawEl = row.querySelector('.dixeo-tutor-message-content[data-raw]');
+            if (rawEl && rawEl.dataset.raw) {
+                try {
+                    const parsed = JSON.parse(rawEl.dataset.raw);
+                    title = parsed && parsed.title ? String(parsed.title) : '';
+                } catch (e) {
+                    title = '';
+                }
+            }
+            if (row.classList.contains('dixeo-tutor-message-row--custom-lesson')) {
+                return {type: 'lesson', title: title, messageId: messageId || undefined};
+            }
+            if (row.classList.contains('dixeo-tutor-message-row--quiz-review')) {
+                return {type: 'quiz', title: title, messageId: messageId || undefined};
+            }
+            if (messageId) {
+                return {type: 'message', messageId: messageId};
+            }
+            return null;
+        }
+
+        /**
+         * Remember which transcript card opened a quiz/lesson/guide overlay.
+         *
+         * @param {HTMLElement|{type: string, title?: string, description?: string, messageId?: string}|null} rowOrTarget
+         */
+        setReturnToMessageRow(rowOrTarget) {
+            if (!rowOrTarget) {
+                this._returnToMessageRow = null;
+                this._returnToCard = null;
+                return;
+            }
+            if (rowOrTarget.nodeType === 1) {
+                this._returnToMessageRow = rowOrTarget;
+                this._returnToCard = this.cardTargetFromRow(rowOrTarget);
+                return;
+            }
+            this._returnToMessageRow = null;
+            this._returnToCard = rowOrTarget;
+        }
+
+        /**
+         * @returns {{type: string, title?: string, description?: string, messageId?: string}|null}
+         */
+        getReturnToCard() {
+            return this._returnToCard;
+        }
+
+        /**
+         * Locate a return-card row currently in the transcript.
+         *
+         * @param {{type: string, title?: string, description?: string, messageId?: string}|null} [target]
+         * @returns {HTMLElement|null}
+         */
+        findReturnCardRow(target) {
+            const container = this.dom.messagesContainer;
+            if (!container) {
+                return null;
+            }
+            const spec = target || this._returnToCard;
+            if (this._returnToMessageRow && this._returnToMessageRow.isConnected) {
+                return this._returnToMessageRow;
+            }
+            if (!spec) {
+                return null;
+            }
+            if (spec.messageId) {
+                const mid = String(spec.messageId);
+                const byId = Array.from(
+                    container.querySelectorAll('.dixeo-tutor-message-row[data-mid]')
+                ).find((row) => String(row.dataset.mid) === mid);
+                if (byId) {
+                    return byId;
+                }
+            }
+            if (spec.type === 'guide' && spec.title) {
+                return Array.from(
+                    container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide-summary"]')
+                ).find((row) => {
+                    return String(row.dataset.guideTitle || '') === String(spec.title)
+                        && String(row.dataset.guideDescription || '') === String(spec.description || '');
+                }) || null;
+            }
+            if (spec.type === 'lesson' && spec.title) {
+                return Array.from(
+                    container.querySelectorAll('.dixeo-tutor-message-row--custom-lesson')
+                ).find((row) => {
+                    const t = this.cardTargetFromRow(row);
+                    return t && String(t.title || '') === String(spec.title);
+                }) || null;
+            }
+            if (spec.type === 'quiz' && spec.title) {
+                return Array.from(
+                    container.querySelectorAll('.dixeo-tutor-message-row--quiz-review')
+                ).find((row) => {
+                    const t = this.cardTargetFromRow(row);
+                    return t && String(t.title || '') === String(spec.title);
+                }) || null;
+            }
+            return null;
+        }
+
+        /**
+         * Whether guide-lane turns for a return-card target are already painted.
+         *
+         * @param {{type: string, title?: string, description?: string}|null} target
+         * @returns {boolean}
+         * @private
+         */
+        _hasGuideSessionTurns(target) {
+            const container = this.dom.messagesContainer;
+            if (!container || !target || target.type !== 'guide' || !target.title) {
+                return false;
+            }
+            return Array.from(
+                container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide"]')
+            ).some((row) => {
+                return String(row.dataset.guideTitle || '') === String(target.title)
+                    && String(row.dataset.guideDescription || '') === String(target.description || '');
+            });
+        }
+
+        /**
+         * Load older history until the return card is in the DOM, then scroll to it.
+         *
+         * @param {Object|null} chatController
+         * @returns {Promise<boolean>}
+         */
+        async revealAndScrollReturnCard(chatController) {
+            const target = this._returnToCard;
+            const liveRow = this._returnToMessageRow;
+            this._returnToMessageRow = null;
+
+            const find = () => {
+                if (liveRow && liveRow.isConnected) {
+                    return liveRow;
+                }
+                return this.findReturnCardRow(target);
+            };
+
+            const isReady = () => {
+                if (typeof this.applyMessageView === 'function') {
+                    this.applyMessageView();
+                }
+                const row = find();
+                if (!row) {
+                    return false;
+                }
+                // Guide cards are synthesized; keep paging until session turns exist so
+                // the card can be re-anchored chronologically (not stuck at the bottom).
+                if (target && target.type === 'guide'
+                        && chatController
+                        && typeof chatController.state?.getHasMoreOlder === 'function'
+                        && chatController.state.getHasMoreOlder()
+                        && !this._hasGuideSessionTurns(target)) {
+                    return false;
+                }
+                return true;
+            };
+
+            if (!isReady() && target && chatController
+                    && typeof chatController.loadOlderUntil === 'function') {
+                await chatController.loadOlderUntil(isReady);
+            }
+
+            this._returnToCard = null;
+            const row = find();
+            if (!row) {
+                return false;
+            }
+            const apply = () => {
+                if (row.isConnected) {
+                    row.scrollIntoView({block: 'center', behavior: 'instant'});
+                }
+            };
+            apply();
+            requestAnimationFrame(apply);
+            return true;
+        }
+
+        /**
+         * Scroll the remembered card into view (if still in the DOM).
+         * Prefer {@see revealAndScrollReturnCard} when older pages may be needed.
+         *
+         * @returns {boolean} True when a card was scrolled.
+         */
+        scrollReturnToMessageRow() {
+            const row = this.findReturnCardRow(this._returnToCard);
+            this._returnToMessageRow = null;
+            this._returnToCard = null;
+            if (!row || !row.isConnected) {
+                return false;
+            }
+            const apply = () => {
+                if (row.isConnected) {
+                    row.scrollIntoView({block: 'center', behavior: 'instant'});
+                }
+            };
+            apply();
+            requestAnimationFrame(apply);
+            return true;
+        }
+
+        /**
+         * After a quiz/lesson pane closes: scroll to bottom only for the deferred initial
+         * load. Prefer the card that opened the overlay (loading older pages if needed).
+         *
+         * @param {Object|null} [chatController]
+         * @returns {Promise<boolean>}
+         */
+        async consumeInitialScrollPending(chatController) {
             if (this._isChatPaneHiddenByMode()) {
                 return false;
             }
             if (this._initialScrollPending) {
                 this._initialScrollPending = false;
                 this._savedMessagesScrollTop = null;
+                this._returnToMessageRow = null;
+                this._returnToCard = null;
                 this.scrollToBottom();
                 return true;
+            }
+            if (this._returnToCard || this._returnToMessageRow) {
+                this._savedMessagesScrollTop = null;
+                return this.revealAndScrollReturnCard(chatController || null);
             }
             this._restoreMessagesScroll();
             return false;
@@ -991,9 +1861,11 @@ define([
             const ariaLabel = msg.role === 'user'
                 ? (this.strings.yourMessage || 'Your message')
                 : (this.strings.assistantMessage || 'Assistant message');
+            const assistantCtx = guideSessionContext.parseAssistantContext(msg);
+            const guideUnderstoodAttr = assistantCtx && assistantCtx.isUnderstood ? ' data-guide-understood="1"' : '';
 
             const row = this._createNodeFromHTML(`
-                <div class="${alignCls} mb-2 dixeo-tutor-message-row">
+                <div class="${alignCls} mb-2 dixeo-tutor-message-row"${guideUnderstoodAttr}>
                     <div class="dixeo-tutor-message dixeo-tutor-message-${msg.role}"
                          role="article"
                          aria-label="${ariaLabel}"
@@ -1006,7 +1878,10 @@ define([
                     </div>
                 </div>`);
 
-            this._attachMessageActions(row.querySelector('.dixeo-tutor-message'));
+            if (!(assistantCtx && assistantCtx.isUnderstood)) {
+                this._attachMessageActions(row.querySelector('.dixeo-tutor-message'));
+            }
+            this._annotateMessageLane(row, msg);
             return row;
         }
 

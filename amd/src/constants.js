@@ -46,11 +46,14 @@ define([], function() {
             SEND_MESSAGE: 'sendMessage',
             RETRY_SEND_MESSAGE: 'retrySendMessage',
             LOAD_OLDER_MESSAGES: 'loadOlderMessages',
+            ENSURE_VISIBLE_TRANSCRIPT: 'ensureVisibleTranscript',
             DELETE_CONVERSATION: 'deleteConversation',
             /** Window CustomEvent: new assistant message while tutor may be closed. */
             ASSISTANT_REPLIED: 'dixeo-tutor-assistant-replied',
             /** Window CustomEvent: proactive context flush completed with an assistant reply. */
             PROACTIVE_REPLY_READY: 'dixeo-tutor-proactive-reply-ready',
+            /** Window CustomEvent: guide assistant message includes session metadata. */
+            GUIDE_ASSISTANT_CONTEXT: 'dixeo-tutor-guide-assistant-context',
             /** Window CustomEvent: conversation snapshot updated (detail: {lastIncomingTime}). */
             CONVERSATION_SYNCED: 'dixeo-tutor-conversation-synced',
         }),

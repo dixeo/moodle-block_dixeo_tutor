@@ -217,6 +217,7 @@ define([
                 courseid: courseid,
                 quizAvailable: !!quizmodeavailable,
                 teachAvailable: !!teachmodeavailable,
+                guideAvailable: !!guidemodeavailable,
                 lastActivity: lastModeActivity || 0,
             });
             modeController.setMessagingLockHandler((locked) => {
@@ -228,7 +229,9 @@ define([
 
             const controller = new ChatController(state, ui, new ChatAPI(), modeController);
             modeController.setAfterPersistHandler((mode) => {
-                controller.flushPendingAfterModePersist(mode);
+                if (mode !== 'guide') {
+                    controller.flushPendingAfterModePersist(mode);
+                }
             });
 
             const unreadCallbacks = {
@@ -250,6 +253,26 @@ define([
 
             let quizController = null;
             let teachController = null;
+            let guideController = null;
+
+            if (guidemodeavailable) {
+                require([
+                    'block_dixeo_tutor/guide_controller',
+                    'block_dixeo_tutor/guide_topic_panel',
+                ], function(GuideController, guideTopicPanel) {
+                    guideTopicPanel.preload();
+                    guideController = new GuideController({
+                        courseid: courseid,
+                        userid: userid,
+                        ui: ui,
+                        state: state,
+                        chatController: controller,
+                        modeController: modeController,
+                    });
+                    modeController.setGuideController(guideController);
+                });
+            }
+
             if (quizmodeavailable) {
                 require([
                     'block_dixeo_tutor/practice_quiz_controller',
@@ -260,6 +283,7 @@ define([
                         userid: userid,
                         ui: ui,
                         state: state,
+                        chatController: controller,
                         modeController: modeController,
                     });
                     practiceQuizReview.wireActions({quizController: quizController});
@@ -277,6 +301,7 @@ define([
                         userid: userid,
                         ui: ui,
                         state: state,
+                        chatController: controller,
                         modeController: modeController,
                     });
                     customLessonPanel.wireActions({teachController: teachController});
@@ -295,6 +320,9 @@ define([
                         if (teachController) {
                             teachController.destroy();
                         }
+                        if (guideController) {
+                            guideController.destroy();
+                        }
                         observer.disconnect();
                     }
                 });
@@ -308,6 +336,9 @@ define([
                 }
                 if (teachController) {
                     teachController.destroy();
+                }
+                if (guideController) {
+                    guideController.destroy();
                 }
             });
         }
