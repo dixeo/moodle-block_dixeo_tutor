@@ -247,13 +247,15 @@ class tutor_proactive_context_service {
      * @param int $userid The user id.
      * @param int $courseid The course id.
      * @param string $pageurl Optional page URL for context.
+     * @param int $cmid Optional course module id for analytics.
      * @return operation_result|null Null when queue empty or user cannot use tutor.
      * @throws api_exception When the remote tutor API rejects the submit payload.
      */
     public function flush(
         int $userid,
         int $courseid,
-        string $pageurl = ''
+        string $pageurl = '',
+        int $cmid = 0
     ): ?operation_result {
         if (!$this->can_use_tutor($userid, $courseid)) {
             return null;
@@ -292,7 +294,8 @@ class tutor_proactive_context_service {
                     $instructions,
                     true
                 ),
-                $mode
+                $mode,
+                $cmid
             );
         } catch (api_exception $e) {
             throw $e;
