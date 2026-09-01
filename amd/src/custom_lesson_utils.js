@@ -38,13 +38,13 @@ define([
     }
 
     /**
+     * Plain text for TTS — lesson body only (intro is preview-only in chat).
+     *
      * @param {object} data Parsed lesson context.
      * @returns {string}
      */
     function ttsText(data) {
-        const intro = textUtils.htmlToPlain(data.introhtml || '');
-        const content = textUtils.htmlToPlain(data.contenthtml || '');
-        return [intro, content].filter(Boolean).join(' ').trim();
+        return textUtils.htmlToPlain(data.contenthtml || '').trim();
     }
 
     /**
