@@ -41,7 +41,8 @@
 /* Erase conversation: muted at rest, unmistakably destructive once reached.
    Scoped on #dixeo-tutor to outrank Boost's .btn-link colour, which otherwise
    paints the icon primary blue. Boost exposes no muted-text variable
-   (--secondary is the #ced4da border grey), hence the literal gray-600. */
+   (--secondary is the #ced4da border grey), hence the literal gray-600.
+   Disabled for now — re-enable with #dixeo-tutor-delete in tutor.mustache.
 #dixeo-tutor .dixeo-tutor-delete {
     color: #6c757d;
     line-height: 1;
@@ -59,6 +60,7 @@
 #dixeo-tutor .dixeo-tutor-delete:disabled {
     opacity: 0.35;
 }
+*/
 
 /* Messages container */
 .dixeo-tutor-chat-pane {
