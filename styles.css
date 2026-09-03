@@ -1099,10 +1099,28 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
     margin: 0;
 }
 
-#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container:hover,
-.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container:hover {
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container:hover:not(.question-success):not(.question-fail),
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container:hover:not(.question-success):not(.question-fail) {
     background: var(--tutor-mode-footer, #fef3e6);
     border-color: color-mix(in srgb, var(--tutor-mode-header, #dc7800) 35%, #eaecef);
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container.question-success:hover,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container.question-success:hover p,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container.question-success:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container.question-success:hover p {
+    color: #fff;
+    background-color: color-mix(in srgb, var(--success, #28a745) 82%, #000);
+    border-color: color-mix(in srgb, var(--success, #28a745) 82%, #000);
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container.question-fail:hover,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container.question-fail:hover p,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container.question-fail:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container.question-fail:hover p {
+    color: #fff;
+    background-color: color-mix(in srgb, var(--danger, #dc3545) 82%, #000);
+    border-color: color-mix(in srgb, var(--danger, #dc3545) 82%, #000);
 }
 
 #dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container.selected,
