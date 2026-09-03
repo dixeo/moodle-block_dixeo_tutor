@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Proactive tutor context queue: accumulate event-driven lines and flush to the API.
+ * Proactive tutor context queue: accumulate structured events and flush to the API.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
@@ -271,15 +271,6 @@ class tutor_proactive_context_service {
             return null;
         }
 
-        $instructions = $this->build_instructions_from_events($events, $userid);
-        if ($instructions === '') {
-            return null;
-        }
-
-        if (strlen($instructions) > self::MAX_QUEUE_LENGTH) {
-            $instructions = \core_text::substr($instructions, 0, self::MAX_QUEUE_LENGTH);
-        }
-
         $now = time();
         $modeservice = new tutor_mode_service();
         $mode = $modeservice->get_mode($userid, $courseid);
@@ -291,7 +282,7 @@ class tutor_proactive_context_service {
                 tutor_message::system(
                     tutor_context_schema::proactive_context($events, $userid, $courseid, $now),
                     '',
-                    $instructions,
+                    null,
                     true
                 ),
                 $mode,
@@ -402,36 +393,6 @@ class tutor_proactive_context_service {
         }
         $username = trim((string) ($user->username ?? ''));
         return $username !== '' ? $username : get_string('proactive_default_name', 'block_dixeo_tutor');
-    }
-
-    /**
-     * Language pack code for a user (site default when unset).
-     *
-     * @param int $userid
-     * @return string
-     */
-    private function resolve_user_language(int $userid): string {
-        global $CFG;
-
-        $user = \core_user::get_user($userid, '*', MUST_EXIST);
-        if (!empty($user->lang) && $user->lang !== 'auto') {
-            return $user->lang;
-        }
-
-        return $CFG->lang;
-    }
-
-    /**
-     * Proactive instruction line in the user's preferred language.
-     *
-     * @param string $identifier Lang string identifier in this block.
-     * @param int $userid User receiving the proactive message.
-     * @param string|object|null $a Placeholder value(s) for get_string.
-     * @return string
-     */
-    private function proactive_string(string $identifier, int $userid, $a = null): string {
-        $lang = $this->resolve_user_language($userid);
-        return get_string_manager()->get_string($identifier, 'block_dixeo_tutor', $a, $lang);
     }
 
     /**
@@ -565,66 +526,6 @@ class tutor_proactive_context_service {
         $events[] = $event;
         $record->message = $this->encode_queue($events);
         $record->timemodified = time();
-    }
-
-    /**
-     * Build combined AI instructions from queued proactive events.
-     *
-     * @param array $events Queued proactive events.
-     * @param int $userid User id for language resolution.
-     * @return string
-     */
-    private function build_instructions_from_events(array $events, int $userid): string {
-        $lines = [];
-
-        foreach ($events as $event) {
-            if (!is_array($event)) {
-                continue;
-            }
-
-            $type = (string) ($event['type'] ?? '');
-            if ($type === '') {
-                continue;
-            }
-
-            $a = $this->instruction_placeholders($type, $event);
-            $lines[] = $this->proactive_string('proactive_' . $type, $userid, $a);
-        }
-
-        return trim(implode("\n\n", array_filter($lines, static function (string $line): bool {
-            return trim($line) !== '';
-        })));
-    }
-
-    /**
-     * Build placeholders for a proactive instruction string.
-     *
-     * @param string $type Proactive event type.
-     * @param array $event Structured proactive event.
-     * @return object|null
-     */
-    private function instruction_placeholders(string $type, array $event): ?object {
-        if ($type === 'first_visit') {
-            return (object) [
-                'name' => (string) ($event['name'] ?? get_string('proactive_default_name', 'block_dixeo_tutor')),
-            ];
-        }
-
-        if ($type === 'quiz_graded') {
-            return (object) [
-                'quizname' => (string) ($event['quizname'] ?? ''),
-                'grade' => (string) ($event['grade'] ?? ''),
-                'maxgrade' => (string) ($event['maxgrade'] ?? ''),
-            ];
-        }
-
-        if ($type === 'guide_started') {
-            return (object) [
-                'userprompt' => (string) ($event['userPrompt'] ?? ''),
-            ];
-        }
-
-        return null;
     }
 
     /**

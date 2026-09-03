@@ -56,9 +56,6 @@ class practice_quiz_context_service {
             return null;
         }
 
-        $instructions = isset($context['instructions']) ? (string) $context['instructions'] : null;
-        unset($context['instructions']);
-
         $title = trim((string) ($payload['title'] ?? ''));
         $visiblemessage = $title !== ''
             ? $title
@@ -71,7 +68,7 @@ class practice_quiz_context_service {
                 tutor_message::system(
                     $context,
                     $visiblemessage,
-                    $instructions,
+                    null,
                     true
                 ),
                 tutor_message::MODE_QUIZ
@@ -106,7 +103,6 @@ class practice_quiz_context_service {
         $total = (int) ($payload['total'] ?? count($questions));
         $exitscore = (int) ($payload['exitscore'] ?? ($bestattempt['score'] ?? 0));
         $title = (string) ($payload['title'] ?? '');
-        $bestscore = (int) ($bestattempt['score'] ?? 0);
 
         $context = null;
         if ($courseid > 0) {
@@ -125,12 +121,6 @@ class practice_quiz_context_service {
             $questionsjson,
             trim((string) ($payload['introhtml'] ?? ''))
         );
-
-        $review['instructions'] = get_string('quiz_review_ai_instructions', 'block_dixeo_tutor', (object) [
-            'title' => $title,
-            'score' => $bestscore,
-            'total' => $total,
-        ]);
 
         return $this->shrink_review_context($review);
     }
