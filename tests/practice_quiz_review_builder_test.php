@@ -110,9 +110,9 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
     }
 
     /**
-     * Review message includes AI instructions for the tutor.
+     * Review context is structured data only; the API owns the review brief.
      */
-    public function test_build_review_message_includes_instructions(): void {
+    public function test_build_review_context_omits_behavioral_instructions(): void {
         $this->resetAfterTest();
         $course = $this->getDataGenerator()->create_course();
 
@@ -144,9 +144,10 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
         ], (int) $course->id);
 
         $this->assertIsArray($context);
-        $this->assertArrayHasKey('instructions', $context);
-        $this->assertStringContainsString('Sample quiz', $context['instructions']);
-        $this->assertStringContainsString('1/1', $context['instructions']);
+        $this->assertArrayNotHasKey('instructions', $context);
+        $this->assertSame('Sample quiz', $context['title']);
+        $this->assertSame(1, $context['bestAttempt']['score']);
+        $this->assertSame(1, $context['bestAttempt']['total']);
     }
 
     /**
