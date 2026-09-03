@@ -543,6 +543,12 @@ define([
                     // Never demote guide / summary rows back to standard.
                     return;
                 }
+                // Quiz/lesson cards use the user alignment class but are not guide turns.
+                // Retagging them as lane=guide hides them in standard view.
+                if (row.classList.contains('dixeo-tutor-message-row--quiz-review')
+                        || row.classList.contains('dixeo-tutor-message-row--custom-lesson')) {
+                    return;
+                }
                 if (row.querySelector('.dixeo-tutor-message-assistant')) {
                     return;
                 }
