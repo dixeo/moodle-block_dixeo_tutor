@@ -78,11 +78,12 @@ define([
         /**
          * Loads conversation history.
          * @param {number} courseid The ID of the course.
-         * @param {string|null} sinceid Optional message ID to fetch messages after.
+         * @param {string|null} sinceid Optional message ID cursor for newer messages.
+         * @param {number|null} offset Optional offset for loading older message pages.
          * @returns {Promise<object>} Conversation data.
          * @throws {NetworkError|APIError|ValidationError}
          */
-        async loadConversation(courseid, sinceid = null) {
+        async loadConversation(courseid, sinceid = null, offset = null) {
             if (!courseid || courseid <= 0) {
                 throw new errors.ValidationError(
                     'Invalid course ID',
@@ -91,9 +92,20 @@ define([
                 );
             }
 
+            if (sinceid && offset) {
+                throw new errors.ValidationError(
+                    'Cannot use sinceid and offset together',
+                    'cursor',
+                    {sinceid, offset}
+                );
+            }
+
             const args = {courseid};
             if (sinceid) {
                 args.sinceid = sinceid;
+            }
+            if (offset !== null && offset > 0) {
+                args.offset = offset;
             }
 
             try {
@@ -107,9 +119,13 @@ define([
                     );
                 }
 
+                result.messages = this._normalizeMessages(result.messages);
                 return result;
             } catch (error) {
                 log.error('Failed to load conversation', {
+                    courseid,
+                    sinceid,
+                    offset,
                     error: error.message,
                     code: error.code
                 });
@@ -118,6 +134,25 @@ define([
         }
 
         /**
+         * @param {Array<object>} messages
+         * @returns {Array<object>}
+         * @private
+         */
+        _normalizeMessages(messages) {
+            return messages.map((msg) => {
+                const normalized = Object.assign({}, msg);
+                if (typeof normalized.context === 'string' && normalized.context !== '') {
+                    try {
+                        normalized.context = JSON.parse(normalized.context);
+                    } catch (e) {
+                        // Ignore malformed context JSON.
+                    }
+                }
+                return normalized;
+            });
+        }
+
+        /*
          * Polls the status of a tutor job.
          * @param {string} jobId The job UUID.
          * @param {number} courseid The ID of the course.
@@ -144,6 +179,47 @@ define([
                 return await callAjax('get_job_status', {courseid: courseid, jobid: jobId});
             } catch (error) {
                 log.error('Failed to poll job status', {
+                    error: error.message,
+                    code: error.code
+                });
+                throw error;
+            }
+        }
+
+        /**
+         * Flushes queued proactive context for this course (if any).
+         * @param {number} courseid The ID of the course.
+         * @param {string} pageurl The current page URL for context.
+         * @returns {Promise<object>} Flush result; flushed=true when a job was submitted.
+         */
+        async flushPendingContext(courseid, pageurl = '') {
+            if (!courseid || courseid <= 0) {
+                throw new errors.ValidationError(
+                    'Invalid course ID',
+                    'courseid',
+                    {courseid}
+                );
+            }
+
+            try {
+                const result = await callAjax(
+                    'flush_pending_context',
+                    {courseid, pageurl},
+                    {timeout: constants.network.AJAX_TIMEOUT}
+                );
+
+                if (!result || typeof result.flushed === 'undefined') {
+                    throw new errors.APIError(
+                        'Invalid flush pending context response',
+                        'INVALID_RESPONSE',
+                        {result}
+                    );
+                }
+
+                return result;
+            } catch (error) {
+                log.error('Failed to flush pending context', {
+                    courseid,
                     error: error.message,
                     code: error.code
                 });
@@ -201,6 +277,25 @@ define([
                 });
                 throw error;
             }
+        }
+
+        /**
+         * Marks incoming tutor messages as read.
+         * @param {number} courseid The ID of the course.
+         * @param {number} [lastIncomingTime] Unix time of latest incoming message seen (0 = server resolves).
+         * @returns {Promise<{hasunread: boolean, lastread: number}>}
+         */
+        async markMessagesRead(courseid, lastIncomingTime = 0) {
+            if (!courseid || courseid <= 0) {
+                throw new errors.ValidationError('Invalid course ID', 'courseid', {courseid});
+            }
+
+            const args = {courseid};
+            if (lastIncomingTime > 0) {
+                args.lastincomingtime = lastIncomingTime;
+            }
+
+            return callAjax('mark_messages_read', args);
         }
     };
 });

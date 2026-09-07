@@ -42,6 +42,27 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
+     * Whether an activity module type is omitted from the practice-quiz topic dropdown.
+     * Uses the block excludedmodules setting plus hardcoded types and certificate plugins.
+     *
+     * @param string $modname Activity frankenstyle name (e.g. quiz, h5pactivity).
+     * @return bool
+     */
+    public static function is_quiz_topic_excluded(string $modname): bool {
+        if ($modname === '') {
+            return false;
+        }
+        if (str_contains($modname, 'certificate')) {
+            return true;
+        }
+        // Hardcoded exclusions.
+        if (in_array($modname, ['h5pactivity'], true)) {
+            return true;
+        }
+        return in_array($modname, self::get_excluded_modules(), true);
+    }
+
+    /**
      * Resolve activity module type on a module context page when $PAGE->cm is not set yet.
      *
      * @param \moodle_page $page
@@ -85,6 +106,52 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
+     * Whether the tutor UI is available on this page for the given user (same rules as {@see get_content()}).
+     * Used to decide if queued proactive context may be flushed during the current request.
+     * When false, messages stay queued until the tutor AMD module loads on a qualifying page.
+     *
+     * @param \moodle_page $page Page being rendered (typically global $PAGE).
+     * @param int $userid User who will receive the proactive message.
+     * @return bool
+     */
+    public static function is_tutor_available_on_page(\moodle_page $page, int $userid): bool {
+        $courseid = (int) ($page->course->id ?? 0);
+        if ($courseid <= SITEID || $userid <= 0) {
+            return false;
+        }
+
+        try {
+            $context = \context_course::instance($courseid);
+        } catch (\Exception $e) {
+            return false;
+        }
+
+        if (!has_capability('block/dixeo_tutor:talktotutor', $context, $userid)) {
+            return false;
+        }
+
+        if (self::is_current_page_excluded($page)) {
+            return false;
+        }
+
+        if ($page->user_is_editing()) {
+            return false;
+        }
+
+        $page->blocks->load_blocks();
+        return $page->blocks->is_block_present('dixeo_tutor');
+    }
+
+    /**
+     * Whether mod_simplequiz2 is installed (practice quiz UI dependency).
+     *
+     * @return bool
+     */
+    public static function is_simplequiz2_available(): bool {
+        return \local_dixeo\service\plugin_installation_service::is_component_installed('mod_simplequiz2');
+    }
+
+    /**
      * Initialize the block with its title and basic settings.
      *
      * @return void
@@ -95,7 +162,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Generate the content for this block.
-     *
      * Renders the tutor interface if the user has appropriate permissions
      * and is not on an excluded page type. Returns cached content if already generated.
      *
@@ -136,7 +202,32 @@ class block_dixeo_tutor extends block_base {
         // No need to pre-create anything with Response API architecture.
 
         // Render the tutor interface and initialize JavaScript.
-        $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', []);
+        $currentcmid = 0;
+        if ($this->page->context->contextlevel == CONTEXT_MODULE) {
+            $currentcmid = (int) $this->page->context->instanceid;
+        }
+
+        $simplequiz2available = self::is_simplequiz2_available();
+
+        $modeservice = new \block_dixeo_tutor\service\tutor_mode_service();
+        $modeselector = \block_dixeo_tutor\service\tutor_mode_helper::export_mode_selector(
+            $OUTPUT,
+            $modeservice->get_mode((int) $USER->id, $courseid),
+            $simplequiz2available
+        );
+
+        $langoptions = \local_dixeo\service\generation_language_helper::build_options((int) $USER->id);
+
+        $this->content->text = $OUTPUT->render_from_template('block_dixeo_tutor/tutor', [
+            'coursename' => format_string($this->page->course->fullname, true, ['context' => \context_course::instance($courseid)]),
+            'currentcmid' => $currentcmid,
+            'mode_selector' => $modeselector,
+            'generationlanguagesjson' => json_encode($langoptions['languages']),
+            'defaultgenerationlanguage' => $langoptions['defaultlanguage'],
+        ]);
+        if ($simplequiz2available) {
+            $this->page->requires->css('/mod/simplequiz2/styles.css');
+        }
         $displaymode = get_config('block_dixeo_tutor', 'displaymode');
         if ($displaymode === false) {
             $displaymode = 'popup';
@@ -147,19 +238,21 @@ class block_dixeo_tutor extends block_base {
         }
         $opentooltip = get_string('tooltip_open_tutor', 'block_dixeo_tutor');
         $hidetooltip = get_string('tooltip_hide_tutor', 'block_dixeo_tutor');
+        $readservice = new \block_dixeo_tutor\service\tutor_read_state_service();
         $this->page->requires->js_call_amd('block_dixeo_tutor/tutor', 'init', [
             $courseid,
             $USER->id,
             $displaymode,
             $opentooltip,
             $hidetooltip,
+            $readservice->get_last_read((int) $USER->id, $courseid),
+            $simplequiz2available,
         ]);
         return $this->content;
     }
 
     /**
      * Define where this block can be displayed.
-     *
      * Specifies that this block is only available in course contexts,
      * as it requires course content to function properly.
      *
@@ -171,7 +264,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Determine if multiple instances of this block are allowed.
-     *
      * Only one tutor instance per course is needed and recommended
      * to avoid confusion and resource duplication.
      *
@@ -192,7 +284,6 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Determine if the block header should be hidden.
-     *
      * The tutor interface provides its own visual identity,
      * so the standard block header is not needed.
      *
@@ -203,8 +294,62 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
-     * Handle the creation of a new block instance.
+     * Build course / section / activity hierarchy for practice quiz setup.
+     * Activity rows omit module types excluded by {@see is_quiz_topic_excluded()} (admin setting,
+     * hardcoded types such as h5pactivity, and any mod name containing "certificate").
+     * Tutor page visibility is not applied here. Sections with no included activities are omitted.
      *
+     * @param int $courseid
+     * @param \moodle_page $page
+     * @return array{course: array, sections: array}
+     */
+    public static function build_practice_quiz_hierarchy(int $courseid, \moodle_page $page): array {
+        $course = get_course($courseid);
+        $modinfo = get_fast_modinfo($course);
+        $sectionmap = [];
+
+        foreach ($modinfo->get_section_info_all() as $section) {
+            if ((int) $section->section === 0) {
+                continue;
+            }
+            $sectionmap[(int) $section->section] = [
+                'num' => (int) $section->section,
+                'name' => get_section_name($course, $section),
+                'activities' => [],
+            ];
+        }
+
+        foreach ($modinfo->get_cms() as $cm) {
+            if (self::is_quiz_topic_excluded($cm->modname)) {
+                continue;
+            }
+            $sectionnum = (int) $cm->sectionnum;
+            if ($sectionnum === 0 || !isset($sectionmap[$sectionnum])) {
+                continue;
+            }
+            $sectionmap[$sectionnum]['activities'][] = [
+                'cmid' => (int) $cm->id,
+                'name' => $cm->get_formatted_name(),
+            ];
+        }
+
+        $sections = [];
+        foreach ($sectionmap as $section) {
+            if ($section['activities'] !== []) {
+                $sections[] = $section;
+            }
+        }
+
+        return [
+            'course' => [
+                'name' => format_string($course->fullname, true, ['context' => \context_course::instance($courseid)]),
+            ],
+            'sections' => $sections,
+        ];
+    }
+
+    /**
+     * Handle the creation of a new block instance.
      * This method is called when the block is added to a course.
      * It configures the block settings (display on all pages, weight, etc.).
      *

@@ -1,0 +1,20 @@
+{{!
+    @template block_dixeo_tutor/setup_topic_loading
+
+    Topic loading placeholder while course hierarchy loads.
+
+    Example context (json):
+    {
+        "loadingtext": "Loading topics…"
+    }
+}}
+<div class="dixeo-tutor-setup__topic-loading mb-2"
+     data-role="topic-loading"
+     role="status"
+     aria-live="polite"
+     aria-busy="true">
+    <span class="dixeo-tutor-setup__topic-loading-icon" aria-hidden="true">
+        <i class="fa fa-spinner fa-spin"></i>
+    </span>
+    <span class="dixeo-tutor-setup__topic-loading-text">{{loadingtext}}</span>
+</div>

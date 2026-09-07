@@ -26,6 +26,9 @@
 namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\event\conversation_viewed;
+use block_dixeo_tutor\service\tutor_message_read_mapper;
+use block_dixeo_tutor\service\tutor_message_format_service;
+use block_dixeo_tutor\service\tutor_read_state_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
@@ -46,23 +49,26 @@ class get_conversation extends external_api {
     public static function execute_parameters(): external_function_parameters {
         return new external_function_parameters([
             'courseid' => new external_value(PARAM_INT, 'The course ID'),
-            'sinceid' => new external_value(PARAM_ALPHANUMEXT, 'Message ID to fetch messages after', VALUE_DEFAULT, ''),
+            'sinceid' => new external_value(PARAM_ALPHANUMEXT, 'Message ID cursor for newer messages', VALUE_DEFAULT, ''),
+            'offset' => new external_value(PARAM_INT, 'Offset for loading older message pages', VALUE_DEFAULT, 0),
         ]);
     }
 
     /**
-     * Get conversation history for the current user in a course.
+     * Execute the web service.
      *
-     * @param int $courseid The course ID.
-     * @param string $sinceid Optional message ID to fetch messages after.
-     * @return array Array with messages key containing message objects.
+     * @param int $courseid
+     * @param string $sinceid
+     * @param int $offset
+     * @return array
      */
-    public static function execute(int $courseid, string $sinceid = ''): array {
+    public static function execute(int $courseid, string $sinceid = '', int $offset = 0): array {
         global $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
             'sinceid' => $sinceid,
+            'offset' => $offset,
         ]);
 
         $context = \context_course::instance($params['courseid']);
@@ -74,8 +80,20 @@ class get_conversation extends external_api {
             $messages = $service->get_conversation(
                 $params['courseid'],
                 $USER->id,
-                $params['sinceid']
+                $params['sinceid'],
+                50,
+                $params['offset']
             );
+
+            $messages = tutor_message_read_mapper::normalize_messages($messages);
+            $lastincomingtime = tutor_read_state_service::latest_incoming_time_from_messages($messages);
+            $messages = tutor_message_format_service::add_display_html($messages, $context);
+
+            foreach ($messages as $i => $msg) {
+                if (isset($msg['context']) && is_array($msg['context'])) {
+                    $messages[$i]['context'] = json_encode($msg['context']);
+                }
+            }
 
             conversation_viewed::create_for_course(
                 (int) $params['courseid'],
@@ -84,13 +102,19 @@ class get_conversation extends external_api {
                 (string) $params['sinceid']
             )->trigger();
 
-            return ['messages' => $messages];
+            return [
+                'messages' => $messages,
+                'lastincomingtime' => $lastincomingtime,
+            ];
         } catch (api_exception $e) {
             debugging(
                 'Tutor get_conversation failed: ' . $e->get_error_code(),
                 DEBUG_DEVELOPER
             );
-            return ['messages' => []];
+            return [
+                'messages' => [],
+                'lastincomingtime' => 0,
+            ];
         }
     }
 
@@ -104,10 +128,18 @@ class get_conversation extends external_api {
             'messages' => new external_multiple_structure(
                 new external_single_structure([
                     'id' => new external_value(PARAM_RAW, 'Message UUID'),
-                    'role' => new external_value(PARAM_ALPHA, 'Message role (user or assistant)'),
+                    'role' => new external_value(PARAM_ALPHA, 'Message role (user, assistant, or system)'),
                     'content' => new external_value(PARAM_RAW, 'Message content'),
+                    'contenthtml' => new external_value(PARAM_RAW, 'Filtered HTML for display', VALUE_DEFAULT, ''),
                     'time' => new external_value(PARAM_INT, 'Unix timestamp'),
+                    'context' => new external_value(PARAM_RAW, 'Message context JSON object', VALUE_DEFAULT, ''),
                 ])
+            ),
+            'lastincomingtime' => new external_value(
+                PARAM_INT,
+                'Unix time of the latest assistant message in this batch',
+                VALUE_DEFAULT,
+                0
             ),
         ]);
     }

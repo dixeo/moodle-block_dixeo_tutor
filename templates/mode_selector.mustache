@@ -1,0 +1,99 @@
+{{!
+    @template block_dixeo_tutor/mode_selector
+
+    Tutor mode choicedropdown (core choicelist + dropdown/status).
+
+    Context variables required for this template:
+    * mode_selector.id - select element id (tutormode)
+    * mode_selector.name - form field name
+    * mode_selector.select - choicelist export
+    * mode_selector.dropdown - dropdown/status export
+    * mode_selector.currentmode - selected tutor mode value
+
+    Example context (json):
+    {
+        "mode_selector": {
+            "id": "tutormode",
+            "name": "tutormode",
+            "currentmode": "normal",
+            "select": {
+                "options": [
+                    {
+                        "value": "normal",
+                        "name": "Chat",
+                        "optionuniqid": "normalopt",
+                        "selected": true
+                    },
+                    {
+                        "value": "quiz",
+                        "name": "Practice quiz",
+                        "optionuniqid": "quizopt",
+                        "selected": false
+                    }
+                ]
+            },
+            "dropdown": {
+                "buttonid": "tutormode_button",
+                "buttoncontent": "Chat",
+                "choices": {
+                    "hasoptions": true,
+                    "options": [
+                        {
+                            "optionid": "option_normal",
+                            "value": "normal",
+                            "name": "Chat",
+                            "hasicon": false,
+                            "first": true,
+                            "optionnumber": 1,
+                            "optionuniqid": "normalopt",
+                            "selected": true
+                        },
+                        {
+                            "optionid": "option_quiz",
+                            "value": "quiz",
+                            "name": "Practice quiz",
+                            "hasicon": false,
+                            "optionnumber": 2,
+                            "optionuniqid": "quizopt"
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}}
+<div class="tutor-mode-selector"
+     data-current-mode="{{mode_selector.currentmode}}"
+     title="{{#str}} mode_selector_title, block_dixeo_tutor {{/str}}">
+    <form class="tutor-mode-selector__form" action="#" onsubmit="return false;">
+    <select
+        class="custom-select d-none"
+        name="{{mode_selector.name}}"
+        id="{{mode_selector.id}}"
+        data-region="choice-select"
+    >
+        {{#mode_selector.select}}
+            {{#options}}
+            <option
+                value="{{value}}"
+                data-optionid="{{mode_selector.id}}_{{optionuniqid}}"
+                {{#selected}}selected{{/selected}}
+                {{#disabled}}disabled{{/disabled}}
+            >
+                {{{name}}}
+            </option>
+            {{/options}}
+        {{/mode_selector.select}}
+    </select>
+    {{#mode_selector.dropdown}}
+        {{< core/local/dropdown/status}}
+            {{$ buttonclasses }} btn btn-sm dropdown-toggle tutor-mode-selector__toggle {{/ buttonclasses }}
+        {{/ core/local/dropdown/status}}
+    {{/mode_selector.dropdown}}
+    </form>
+</div>
+{{#js}}
+require(['core_form/choicedropdown'], function(ChoiceDropdown) {
+    ChoiceDropdown.init('{{mode_selector.id}}');
+});
+{{/js}}

@@ -1,4 +1,7 @@
-define([], function() {
+define([
+    'block_dixeo_tutor/constants',
+    'block_dixeo_tutor/system_message_display'
+], function(constants, systemMessageDisplay) {
     'use strict';
 
     /**
@@ -70,8 +73,17 @@ define([], function() {
          * @param {object} msg Message to append to the conversation.
          */
         _appendNewMessage(msg) {
-            if (!this.ui.hasMessage(msg.id)) {
+            const isNew = !this.ui.hasMessage(msg.id);
+            if (isNew) {
                 this.ui.appendMessage(msg);
+                if (String(msg.role || '').toLowerCase() === 'assistant'
+                        && !systemMessageDisplay.isProactiveMessage(msg)) {
+                    window.dispatchEvent(new CustomEvent(constants.events.ASSISTANT_REPLIED, {
+                        detail: {
+                            lastIncomingTime: parseInt(msg.time, 10) || 0,
+                        },
+                    }));
+                }
             }
             // Always track even if already rendered — keeps lastRenderedId current.
             this.state.setLastRenderedId(msg.id);
@@ -89,7 +101,7 @@ define([], function() {
             }
 
             const lastMessage = messages[messages.length - 1];
-            if (lastMessage.role === 'assistant') {
+            if (String(lastMessage.role || '').toLowerCase() === 'assistant') {
                 // Assistant replied — safe to discard draft and polling checkpoint.
                 this.state.clearDraft();
                 this.state.clearPollState();

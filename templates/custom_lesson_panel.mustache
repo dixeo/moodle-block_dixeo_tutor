@@ -1,0 +1,39 @@
+{{!
+    @template block_dixeo_tutor/custom_lesson_panel
+
+    Compact custom-lesson preview card embedded in chat.
+
+    Example context (json):
+    {
+        "version": 1,
+        "label": "Custom lesson",
+        "title": "Photosynthesis basics",
+        "preview": "Plants convert light energy into chemical energy…",
+        "viewLabel": "View lesson",
+        "ttssupported": true,
+        "ttsPlayLabel": "Read lesson aloud",
+        "ttsStopLabel": "Stop reading"
+    }
+}}
+<div class="dixeo-custom-lesson-panel" data-custom-lesson-version="{{version}}">
+    <p class="dixeo-custom-lesson-panel__label">{{label}}</p>
+    <h4 class="dixeo-custom-lesson-panel__title">{{title}}</h4>
+    <p class="dixeo-custom-lesson-panel__preview">{{preview}}</p>
+    <div class="dixeo-custom-lesson-panel__actions">
+        {{#ttssupported}}
+        <button type="button"
+                class="dixeo-custom-lesson-panel__tts-btn dixeo-tutor-tts-btn"
+                data-action="tts"
+                data-play-label="{{ttsPlayLabel}}"
+                data-stop-label="{{ttsStopLabel}}"
+                aria-label="{{ttsPlayLabel}}">
+            <i class="fa fa-volume-up dixeo-custom-lesson-panel__tts-icon dixeo-tutor-tts-btn__icon" aria-hidden="true"></i>
+        </button>
+        {{/ttssupported}}
+        <button type="button"
+                class="btn btn-sm btn-outline-primary dixeo-custom-lesson-panel__view-btn"
+                data-action="view-lesson">
+            {{viewLabel}}
+        </button>
+    </div>
+</div>

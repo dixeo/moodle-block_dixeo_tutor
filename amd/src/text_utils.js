@@ -37,6 +37,56 @@ define([], function() {
         },
 
         /**
+         * Resolve display HTML for a chat message (server-filtered or client fallback).
+         *
+         * @param {object} msg Message with content and optional contenthtml.
+         * @returns {string}
+         */
+        resolveMessageContentHtml: function(msg) {
+            const serverHtml = msg && msg.contenthtml ? String(msg.contenthtml).trim() : '';
+            const usedServer = serverHtml !== '';
+            const resolved = usedServer
+                ? serverHtml
+                : this.parseMarkdownToHtml(msg ? msg.content : '');
+            return resolved;
+        },
+
+        /**
+         * Convert HTML to plain text for previews and TTS.
+         *
+         * @param {string} html
+         * @returns {string}
+         */
+        htmlToPlain: function(html) {
+            const div = document.createElement('div');
+            div.innerHTML = html || '';
+            return (div.textContent || div.innerText || '').trim();
+        },
+
+        /**
+         * Truncate text at a word boundary without exceeding maxLength.
+         *
+         * @param {string} text
+         * @param {number} [maxLength=200]
+         * @returns {string}
+         */
+        truncateAtWordBoundary: function(text, maxLength) {
+            const limit = maxLength || 200;
+            const normalized = (text || '').trim();
+            if (normalized.length <= limit) {
+                return normalized;
+            }
+
+            const slice = normalized.slice(0, limit + 1);
+            const lastSpace = slice.lastIndexOf(' ');
+            if (lastSpace > 0) {
+                return slice.slice(0, lastSpace).trim() + '\u2026';
+            }
+
+            return normalized.slice(0, limit).trim() + '\u2026';
+        },
+
+        /**
          * Strips markdown headers and code blocks from text content.
          * Removes # symbols from headers and ``` ``` from code blocks, keeping only the content.
          * @param {string} text The text to process.

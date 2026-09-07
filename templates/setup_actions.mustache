@@ -1,0 +1,17 @@
+{{!
+    @template block_dixeo_tutor/setup_actions
+
+    Start and cancel buttons for tutor setup panels.
+    Pass startlabel and cancellabel from AMD.
+
+    Example context (json):
+    {
+        "startlabel": "Start quiz",
+        "cancellabel": "Cancel",
+        "startdisabled": true
+    }
+}}
+<div class="dixeo-tutor-setup__actions">
+    <button type="button" class="btn btn-primary btn-sm" data-action="start"{{#startdisabled}} disabled{{/startdisabled}}>{{startlabel}}</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-action="cancel">{{cancellabel}}</button>
+</div>

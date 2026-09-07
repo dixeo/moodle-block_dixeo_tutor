@@ -17,6 +17,10 @@ define([], function() {
             MAX_MESSAGE_LENGTH: 2000,
             /** Px from bottom to consider "at bottom" for user-scrolled-up tracker. */
             SCROLL_BOTTOM_THRESHOLD: 20,
+            /** Px from top to show the load-older control. */
+            SCROLL_TOP_THRESHOLD: 20,
+            /** Conversation page size (must match tutor_service default limit). */
+            MESSAGE_PAGE_SIZE: 50,
         }),
 
         // DOM Selectors
@@ -31,11 +35,6 @@ define([], function() {
             RETRY_DELAY: 1000,
         }),
 
-        // Message Configuration
-        messages: Object.freeze({
-            WELCOME_MESSAGE_ID: 0,
-        }),
-
         // Accessibility
         a11y: Object.freeze({
             LIVE_REGION_DELAY: 100,
@@ -45,6 +44,13 @@ define([], function() {
         events: Object.freeze({
             SEND_MESSAGE: 'sendMessage',
             RETRY_SEND_MESSAGE: 'retrySendMessage',
+            LOAD_OLDER_MESSAGES: 'loadOlderMessages',
+            /** Window CustomEvent: new assistant message while tutor may be closed. */
+            ASSISTANT_REPLIED: 'dixeo-tutor-assistant-replied',
+            /** Window CustomEvent: proactive context flush completed with an assistant reply. */
+            PROACTIVE_REPLY_READY: 'dixeo-tutor-proactive-reply-ready',
+            /** Window CustomEvent: conversation snapshot updated (detail: {lastIncomingTime}). */
+            CONVERSATION_SYNCED: 'dixeo-tutor-conversation-synced',
         }),
     });
 });

@@ -12,6 +12,9 @@ define([
             this.lastRenderedId = null;
             // Draft message bodies stay in memory only (audit: no personal content in Web Storage).
             this.draftMessage = '';
+            this.oldestLoadedId = null;
+            this.hasMoreOlder = false;
+            this.historyOffset = 0;
             // Non-sensitive poll checkpoint (jobId / pending) uses localStorage for cross-tab sync.
             this.storage = StorageService.namespace(`${userid}_${courseid}`);
         }
@@ -34,6 +37,30 @@ define([
 
         setLastRenderedId(id) {
             this.lastRenderedId = id;
+        }
+
+        getOldestLoadedId() {
+            return this.oldestLoadedId;
+        }
+
+        setOldestLoadedId(id) {
+            this.oldestLoadedId = id;
+        }
+
+        getHasMoreOlder() {
+            return this.hasMoreOlder;
+        }
+
+        setHasMoreOlder(hasMore) {
+            this.hasMoreOlder = !!hasMore;
+        }
+
+        getHistoryOffset() {
+            return this.historyOffset;
+        }
+
+        setHistoryOffset(offset) {
+            this.historyOffset = Math.max(0, offset);
         }
 
         getDraft() {
