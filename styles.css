@@ -1800,6 +1800,10 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
     }
 }
 
+.tutor-mode-selector .option-select-indicator {
+    display: none;
+}
+
 .tutor-mode-selector--locked .tutor-mode-selector__toggle {
     pointer-events: none;
     cursor: not-allowed;
