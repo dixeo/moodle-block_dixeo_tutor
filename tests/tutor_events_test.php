@@ -226,8 +226,7 @@ final class tutor_events_test extends \advanced_testcase {
         job_ownership::register((int) $user->id, (int) $course->id, self::JOB_ID);
 
         foreach (['failed', 'cancelled'] as $terminalstatus) {
-            global $SESSION;
-            unset($SESSION->block_dixeo_tutor_terminal_status_audit);
+            job_status_audit::forget((int) $user->id, (int) $course->id, self::JOB_ID);
 
             $status = new job_status(
                 jobid: self::JOB_ID,

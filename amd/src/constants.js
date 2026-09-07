@@ -20,8 +20,8 @@ define([], function() {
             SCROLL_BOTTOM_THRESHOLD: 20,
             /** Px from top to show the load-older control. */
             SCROLL_TOP_THRESHOLD: 20,
-            /** Conversation page size (must match tutor_service default limit). */
-            MESSAGE_PAGE_SIZE: 50,
+            /** Conversation page size (must match the limit passed by get_conversation). */
+            MESSAGE_PAGE_SIZE: 15,
         }),
 
         // DOM Selectors

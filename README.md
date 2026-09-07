@@ -41,6 +41,27 @@ The plugin provides the following administrator settings.
   quiz,simplequiz2
   ```
 
+# Recommended for production: read-only sessions
+
+By default Moodle takes an **exclusive PHP session lock** for every web service call, so AJAX requests issued by a page run one after another instead of together. On a course page this serialises the module catalogue, the generation queue status and the tutor's history load, and the tutor cannot accept input until its turn comes around. Measured on a course page, the tutor's first call spent over 1.5 seconds waiting for the lock while doing under 5 ms of its own work.
+
+The Dixeo read-only web services already declare `'readonlysession' => true`, so they are ready to run concurrently. Three site-level steps are required to activate that:
+
+1. **Map session caches outside the session store.** Moodle refuses to start with read-only sessions while any session-mode cache uses the default session store. In Site Administration > Plugins > Caching > Configuration, map the **Session** mode to a shared store (Redis or Memcached; a file store also works). Without this, enabling the flag below throws `The session caches can not be in the session store...`.
+2. **Enable the flag** in `config.php`:
+
+```php
+$CFG->enable_read_only_sessions = true;
+```
+
+3. **Terminate existing sessions as part of the same change.** Sessions created *before* the remap still carry the cache payload inside the session record, and Moodle's check rejects it on every request. The result is a hard error for everyone already logged in, including on the logout page, so it cannot be cleared by the user. Kill sessions immediately after enabling the flag:
+
+```php
+\core\session\manager::kill_all_sessions();
+```
+
+To validate before switching it on, set `$CFG->enable_read_only_sessions_debug = true` instead. That keeps the locking behaviour unchanged but reports any service that declares `readonlysession` and then writes to `$SESSION`, so violations surface during testing rather than in production. Violations are written with `error_log()`, so check the web server error log rather than the Moodle debug output.
+
 # Adding the tutor to a course
 
 Teachers with permission to manage blocks can add the tutor to a course:

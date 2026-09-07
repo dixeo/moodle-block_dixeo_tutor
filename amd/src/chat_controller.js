@@ -400,8 +400,8 @@ define([
             this._initialHistoryReady = true;
             this._emitConversationSynced(conversationData);
 
-            await this._ensureVisibleStandardTranscript();
-
+            // Skip ensure-visible backfill on first paint (hotfix_load_time): it serialises
+            // extra history fetches before the tutor becomes interactive.
             const last = messages.length ? messages[messages.length - 1] : null;
             const waitingForReply = !!(last && String(last.role).toLowerCase() === 'user');
             if (!this.state.isPending()) {

@@ -17,6 +17,10 @@
 /**
  * Session-scoped deduplication for terminal tutor job-status audit events.
  *
+ * Stored in an application cache (keyed by PHP session id) rather than $SESSION,
+ * like {@see job_ownership}, so get_job_status can run with a read-only session
+ * and stop serializing every poll on the session lock.
+ *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
@@ -31,8 +35,8 @@ use local_dixeo\dto\job_status;
  * Emits job_status_viewed once per owned job when polling reaches a terminal hub status.
  */
 class job_status_audit {
-    /** @var string Session property for emitted terminal status audit keys. */
-    private const SESSION_KEY = 'block_dixeo_tutor_terminal_status_audit';
+    /** @var int How long an emitted marker is retained (seconds). Aligns with job_ownership. */
+    public const TTL_SECONDS = 15 * MINSECS;
 
     /**
      * Hub statuses that end client polling for a tutor job.
@@ -88,11 +92,7 @@ class job_status_audit {
      * @return bool
      */
     public static function has_emitted(int $userid, int $courseid, string $jobid): bool {
-        global $SESSION;
-
-        self::ensure_session_structure();
-
-        return isset($SESSION->{self::SESSION_KEY}[$userid][$courseid][$jobid]);
+        return self::cache()->get(self::cache_key($userid, $courseid, $jobid)) !== false;
     }
 
     /**
@@ -105,24 +105,46 @@ class job_status_audit {
      * @return void
      */
     public static function mark_emitted(int $userid, int $courseid, string $jobid, string $status): void {
-        global $SESSION;
-
         if ($userid < 1 || $courseid < 1 || $jobid === '') {
             return;
         }
 
-        self::ensure_session_structure();
-        $SESSION->{self::SESSION_KEY}[$userid][$courseid][$jobid] = $status;
+        self::cache()->set(self::cache_key($userid, $courseid, $jobid), $status);
     }
 
     /**
-     * Ensure the SESSION property exists as the expected nested array.
+     * Forget the emitted marker for a job (test support and re-audit after cancellation).
+     *
+     * @param int $userid Moodle user id.
+     * @param int $courseid Course id.
+     * @param string $jobid Job UUID.
+     * @return void
      */
-    private static function ensure_session_structure(): void {
-        global $SESSION;
+    public static function forget(int $userid, int $courseid, string $jobid): void {
+        self::cache()->delete(self::cache_key($userid, $courseid, $jobid));
+    }
 
-        if (!isset($SESSION->{self::SESSION_KEY}) || !is_array($SESSION->{self::SESSION_KEY})) {
-            $SESSION->{self::SESSION_KEY} = [];
-        }
+    /**
+     * Application cache for emitted terminal-status markers.
+     *
+     * @return \cache
+     */
+    private static function cache(): \cache {
+        return \cache::make('block_dixeo_tutor', 'terminal_status_audit');
+    }
+
+    /**
+     * Cache key scoped to user, course, job, and PHP session.
+     *
+     * @param int $userid Moodle user id.
+     * @param int $courseid Course id.
+     * @param string $jobid Job UUID.
+     * @return string
+     */
+    private static function cache_key(int $userid, int $courseid, string $jobid): string {
+        // Simplekeys allows only a-zA-Z0-9_ (no UUID hyphens).
+        $sid = preg_replace('/[^a-zA-Z0-9_]/', '', session_id() ?: 'nosess') ?: 'nosess';
+        $job = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $jobid) ?? '');
+        return $userid . '_' . $courseid . '_' . $job . '_' . $sid;
     }
 }
