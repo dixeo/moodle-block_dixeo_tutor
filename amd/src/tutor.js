@@ -193,25 +193,46 @@ define([
          * @param {string} [openTooltip] Tooltip for opening the tutor (popup mode).
          * @param {string} [hideTooltip] Tooltip for hiding the tutor (popup mode).
          * @param {number} [lastread] Last-read incoming watermark from server (Unix seconds).
-         * @param {boolean} [practicequizavailable] Whether mod_simplequiz2 is installed.
+         * @param {boolean} [quizmodeavailable] Whether quiz mode is policy-available.
+         * @param {boolean} [guidemodeavailable] Whether guide mode is policy-available.
+         * @param {boolean} [teachmodeavailable] Whether teach mode is policy-available.
+         * @param {number} [lastModeActivity] Unix seconds of last special-mode message/activity.
          */
-        init: function(courseid, userid, displaymode, openTooltip, hideTooltip, lastread, practicequizavailable) {
+        init: function(
+            courseid,
+            userid,
+            displaymode,
+            openTooltip,
+            hideTooltip,
+            lastread,
+            quizmodeavailable,
+            guidemodeavailable,
+            teachmodeavailable,
+            lastModeActivity
+        ) {
             const state = new ChatState(courseid, userid);
             const ui = new ChatUI();
 
             const modeController = new TutorModeController({
                 courseid: courseid,
-                quizAvailable: !!practicequizavailable,
+                quizAvailable: !!quizmodeavailable,
+                teachAvailable: !!teachmodeavailable,
+                guideAvailable: !!guidemodeavailable,
+                lastActivity: lastModeActivity || 0,
             });
             modeController.setMessagingLockHandler((locked) => {
-                if (locked) {
-                    ui.disableInput();
-                } else if (!state.isPending()) {
+                ui.setMessagingLocked(locked);
+                if (!locked && !state.isPending()) {
                     ui.setInputEnabled(true);
                 }
             });
 
             const controller = new ChatController(state, ui, new ChatAPI(), modeController);
+            modeController.setAfterPersistHandler((mode) => {
+                if (mode !== 'guide') {
+                    controller.flushPendingAfterModePersist(mode);
+                }
+            });
 
             const unreadCallbacks = {
                 onTutorOpened: function() {
@@ -232,7 +253,27 @@ define([
 
             let quizController = null;
             let teachController = null;
-            if (practicequizavailable) {
+            let guideController = null;
+
+            if (guidemodeavailable) {
+                require([
+                    'block_dixeo_tutor/guide_controller',
+                    'block_dixeo_tutor/guide_topic_panel',
+                ], function(GuideController, guideTopicPanel) {
+                    guideTopicPanel.preload();
+                    guideController = new GuideController({
+                        courseid: courseid,
+                        userid: userid,
+                        ui: ui,
+                        state: state,
+                        chatController: controller,
+                        modeController: modeController,
+                    });
+                    modeController.setGuideController(guideController);
+                });
+            }
+
+            if (quizmodeavailable) {
                 require([
                     'block_dixeo_tutor/practice_quiz_controller',
                     'block_dixeo_tutor/practice_quiz_review',
@@ -242,6 +283,7 @@ define([
                         userid: userid,
                         ui: ui,
                         state: state,
+                        chatController: controller,
                         modeController: modeController,
                     });
                     practiceQuizReview.wireActions({quizController: quizController});
@@ -249,20 +291,23 @@ define([
                 });
             }
 
-            require([
-                'block_dixeo_tutor/teach_controller',
-                'block_dixeo_tutor/custom_lesson_panel',
-            ], function(TeachController, customLessonPanel) {
-                teachController = new TeachController({
-                    courseid: courseid,
-                    userid: userid,
-                    ui: ui,
-                    state: state,
-                    modeController: modeController,
+            if (teachmodeavailable) {
+                require([
+                    'block_dixeo_tutor/teach_controller',
+                    'block_dixeo_tutor/custom_lesson_panel',
+                ], function(TeachController, customLessonPanel) {
+                    teachController = new TeachController({
+                        courseid: courseid,
+                        userid: userid,
+                        ui: ui,
+                        state: state,
+                        chatController: controller,
+                        modeController: modeController,
+                    });
+                    customLessonPanel.wireActions({teachController: teachController});
+                    modeController.setTeachController(teachController);
                 });
-                customLessonPanel.wireActions({teachController: teachController});
-                modeController.setTeachController(teachController);
-            });
+            }
 
             const container = document.getElementById('dixeo-tutor');
             if (container) {
@@ -274,6 +319,9 @@ define([
                         }
                         if (teachController) {
                             teachController.destroy();
+                        }
+                        if (guideController) {
+                            guideController.destroy();
                         }
                         observer.disconnect();
                     }
@@ -288,6 +336,9 @@ define([
                 }
                 if (teachController) {
                     teachController.destroy();
+                }
+                if (guideController) {
+                    guideController.destroy();
                 }
             });
         }

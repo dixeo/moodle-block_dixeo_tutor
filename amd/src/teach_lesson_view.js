@@ -3,9 +3,9 @@ define([
     'core/modal',
     'core/modal_events',
     'core/str',
-    'block_dixeo_tutor/custom_lesson_panel',
+    'block_dixeo_tutor/custom_lesson_utils',
     'block_dixeo_tutor/tts_player',
-], function(Templates, Modal, ModalEvents, str, customLessonPanel, ttsPlayer) {
+], function(Templates, Modal, ModalEvents, str, customLessonUtils, ttsPlayer) {
     'use strict';
 
     let activeModal = null;
@@ -19,12 +19,7 @@ define([
      * @return {string}
      */
     const buildModalBodyHtml = function(lesson) {
-        const parts = [];
-        if (lesson.introhtml) {
-            parts.push('<div class="dixeo-teach-lesson__intro">', lesson.introhtml, '</div>');
-        }
-        parts.push('<div class="dixeo-teach-lesson-modal__body">', lesson.contenthtml || '', '</div>');
-        return parts.join('');
+        return '<div class="dixeo-teach-lesson-modal__body">' + (lesson.contenthtml || '') + '</div>';
     };
 
     /**
@@ -74,15 +69,15 @@ define([
             return Promise.resolve();
         }
 
-        const data = customLessonPanel.lessonFromPayload(lesson);
-        const groupId = customLessonPanel.lessonTtsGroupId(data);
+        const data = customLessonUtils.lessonFromPayload(lesson);
+        const groupId = customLessonUtils.lessonTtsGroupId(data);
 
         return str.get_strings([
             {key: 'teach_lesson_tts_play', component: 'block_dixeo_tutor'},
             {key: 'teach_lesson_tts_stop', component: 'block_dixeo_tutor'},
         ]).then(function(strings) {
             ttsPlayer.wireButton(ttsBtn, function() {
-                return customLessonPanel.ttsText(data);
+                return customLessonUtils.ttsText(data);
             }, {
                 play: strings[0],
                 stop: strings[1],
@@ -92,7 +87,7 @@ define([
             return undefined;
         }).catch(function() {
             ttsPlayer.wireButton(ttsBtn, function() {
-                return customLessonPanel.ttsText(data);
+                return customLessonUtils.ttsText(data);
             }, null, {
                 groupId: groupId,
             });
@@ -110,9 +105,7 @@ define([
     const mountLesson = function(container, lesson, onClose) {
         const context = {
             title: lesson.title || '',
-            introhtml: lesson.introhtml || '',
             contenthtml: lesson.contenthtml || '',
-            hasintro: !!(lesson.introhtml && lesson.introhtml.trim()),
             hastts: ttsPlayer.isSupported(),
         };
 

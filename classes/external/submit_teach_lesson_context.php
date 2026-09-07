@@ -26,6 +26,8 @@ namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\service\teach_lesson_context_service;
+use block_dixeo_tutor\service\tutor_mode_policy;
+use block_dixeo_tutor\service\tutor_mode_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -76,6 +78,7 @@ class submit_teach_lesson_context extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_mode_policy::require_teach_mode(tutor_mode_policy::is_quiz_runtime_available());
 
         $service = new teach_lesson_context_service();
         $result = $service->submit_lesson(
@@ -97,6 +100,7 @@ class submit_teach_lesson_context extends external_api {
         if ($jobid !== '') {
             job_ownership::register((int) $USER->id, (int) $params['courseid'], $jobid);
         }
+        (new tutor_mode_service())->touch_activity((int) $USER->id, (int) $params['courseid']);
         return [
             'success' => true,
             'jobid' => $jobid,

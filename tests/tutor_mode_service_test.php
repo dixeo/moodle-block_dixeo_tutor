@@ -25,6 +25,7 @@
 
 namespace block_dixeo_tutor;
 
+use block_dixeo_tutor\service\tutor_mode_policy;
 use block_dixeo_tutor\service\tutor_mode_service;
 use local_dixeo\dto\tutor_message;
 
@@ -53,5 +54,81 @@ final class tutor_mode_service_test extends \advanced_testcase {
 
         $this->assertSame(tutor_message::MODE_GUIDE, $stored);
         $this->assertSame(tutor_message::MODE_GUIDE, $service->get_mode((int) $user->id, (int) $course->id));
+    }
+
+    public function test_get_mode_expires_stale_special_mode(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        $service = new tutor_mode_service();
+        $service->set_mode((int) $user->id, (int) $course->id, tutor_message::MODE_GUIDE);
+        set_user_preference(
+            tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX . $course->id,
+            time() - tutor_mode_service::MODE_TTL - 1,
+            $user->id
+        );
+
+        $this->assertSame(tutor_message::MODE_NORMAL, $service->get_mode((int) $user->id, (int) $course->id));
+        $this->assertSame(
+            tutor_message::MODE_NORMAL,
+            get_user_preferences(tutor_mode_service::PREF_MODE_PREFIX . $course->id, '', $user->id)
+        );
+    }
+
+    public function test_get_mode_keeps_special_mode_within_ttl(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        $service = new tutor_mode_service();
+        $service->set_mode((int) $user->id, (int) $course->id, tutor_message::MODE_TEACH);
+
+        $this->assertSame(tutor_message::MODE_TEACH, $service->get_mode((int) $user->id, (int) $course->id));
+    }
+
+    public function test_touch_activity_extends_ttl(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        $service = new tutor_mode_service();
+        $service->set_mode((int) $user->id, (int) $course->id, tutor_message::MODE_GUIDE);
+        set_user_preference(
+            tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX . $course->id,
+            time() - tutor_mode_service::MODE_TTL + 30,
+            $user->id
+        );
+        $service->touch_activity((int) $user->id, (int) $course->id);
+
+        $this->assertSame(tutor_message::MODE_GUIDE, $service->get_mode((int) $user->id, (int) $course->id));
+    }
+
+    public function test_get_mode_coerces_disabled_mode_to_normal(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        set_user_preference(
+            tutor_mode_service::PREF_MODE_PREFIX . $course->id,
+            tutor_message::MODE_GUIDE,
+            $user->id
+        );
+        set_config(tutor_mode_policy::CONFIG_ENABLED_MODES, 'quiz,teach', 'block_dixeo_tutor');
+
+        $service = new tutor_mode_service();
+        $this->assertSame(tutor_message::MODE_NORMAL, $service->get_mode((int) $user->id, (int) $course->id));
+    }
+
+    public function test_set_mode_rejects_disabled_mode(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_user();
+
+        set_config(tutor_mode_policy::CONFIG_ENABLED_MODES, 'quiz,teach', 'block_dixeo_tutor');
+
+        $service = new tutor_mode_service();
+        $this->expectException(\invalid_parameter_exception::class);
+        $service->set_mode((int) $user->id, (int) $course->id, tutor_message::MODE_GUIDE);
     }
 }

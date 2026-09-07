@@ -7,7 +7,9 @@ define([
     'block_dixeo_tutor/generation_mode_controller',
     'block_dixeo_tutor/tutor_session_storage',
     'block_dixeo_tutor/practice_quiz_review',
-], function(str, embedPlayer, quizSetup, quizApi, contextPoller, generationModeController, sessionStorage, practiceQuizReview) {
+    'block_dixeo_tutor/practice_quiz_panel',
+], function(str, embedPlayer, quizSetup, quizApi, contextPoller, generationModeController, sessionStorage, practiceQuizReview,
+        practiceQuizPanel) {
     'use strict';
 
     const STORAGE_MODE = 'quiz';
@@ -27,6 +29,7 @@ define([
         this.userid = options.userid;
         this.ui = options.ui;
         this.state = options.state;
+        this.chatController = options.chatController || null;
         this.modeController = options.modeController || null;
         this.api = quizApi;
         this.bgPoller = contextPoller.createBackgroundPoller({
@@ -52,6 +55,7 @@ define([
         this.expectedCount = 0;
         this.embedInstance = null;
         this.quizTitle = '';
+        this.introhtml = '';
         this.questions = [];
         this.questionsJson = '';
         this.lastPlayerState = null;
@@ -130,7 +134,7 @@ define([
         beforeReopenSetup: function() {
             this._setModeSelectorLocked(false);
         },
-        finalizeAndMount: async function(jobId, topictitle, generationToken) {
+        finalizeAndMount: async function(jobId, topictitle, generationToken, savedProgress) {
             const finalized = await this.api.finalizePracticeQuiz(
                 this.courseid,
                 jobId,
@@ -143,9 +147,10 @@ define([
             if (!finalized.success) {
                 throw new Error(finalized.error || 'Finalize failed');
             }
-            await this.mountPlayer(finalized.title, finalized.questions, null, {
+            await this.mountPlayer(finalized.title, finalized.questions, savedProgress || null, {
                 jobId: jobId,
                 topictitle: topictitle,
+                introhtml: finalized.introhtml || '',
             });
         },
     });
@@ -166,6 +171,9 @@ define([
         if (!this.quizPane) {
             return;
         }
+        if (this.ui && typeof this.ui.preserveMessagesScroll === 'function') {
+            this.ui.preserveMessagesScroll();
+        }
         this.active = true;
         this.quizPane.classList.remove('d-none');
         this.quizPane.setAttribute('aria-hidden', 'false');
@@ -184,31 +192,7 @@ define([
         }
     };
 
-    PracticeQuizController.prototype.attachQuestionsExitButton = async function() {
-        const questionsPanel = this.quizPane && this.quizPane.querySelector('#simplequiz-questions');
-        if (!questionsPanel || questionsPanel.querySelector('.dixeo-tutor-quiz-panel-exit')) {
-            return;
-        }
-
-        const exitBtn = document.createElement('button');
-        exitBtn.type = 'button';
-        exitBtn.className = 'btn btn-sm btn-outline-secondary dixeo-tutor-quiz-panel-exit';
-        exitBtn.textContent = await str.get_string('quiz_exit', 'block_dixeo_tutor');
-        exitBtn.addEventListener('click', () => this.handleQuizExit());
-        questionsPanel.insertBefore(exitBtn, questionsPanel.firstChild);
-    };
-
     PracticeQuizController.prototype.handleQuizExit = function() {
-        const best = this.lastPlayerState && this.lastPlayerState.bestAttempt;
-        if (best && this.questionsJson) {
-            this.submitReview({
-                title: this.quizTitle,
-                questionsjson: this.questionsJson,
-                bestattemptjson: JSON.stringify(best),
-                exitscore: best.score,
-                total: best.total,
-            });
-        }
         this.clearStorage();
         this.closeQuizPane(false);
         this._lastSetupConfig = null;
@@ -217,10 +201,13 @@ define([
         }
     };
 
-    PracticeQuizController.prototype.closeQuizPane = function(wasCancelled) {
-        if (wasCancelled || !this.quizInProgress) {
+    PracticeQuizController.prototype.closeQuizPane = async function(wasCancelled) {
+        // Never clear resume storage on a plain close (mode switch / pane hide).
+        // Explicit cancel/exit/finish paths call clearStorage themselves.
+        if (wasCancelled) {
             this.clearStorage();
         }
+        practiceQuizPanel.destroy();
         if (this.embedInstance) {
             this.embedInstance.destroy();
             this.embedInstance = null;
@@ -228,6 +215,7 @@ define([
         this.active = false;
         this.expectedCount = 0;
         this.quizTitle = '';
+        this.introhtml = '';
         this.questions = [];
         this.questionsJson = '';
         this.setComposerQuizMode(false);
@@ -240,15 +228,42 @@ define([
             this.body.classList.remove('dixeo-tutor-body--quiz-active');
         }
         this._setModeSelectorLocked(false);
+        if (this.ui && typeof this.ui.consumeInitialScrollPending === 'function') {
+            await this.ui.consumeInitialScrollPending(this.chatController);
+        }
     };
 
     PracticeQuizController.prototype._cancelQuiz = function() {
         this._openSetupToken++;
         this._lastSetupConfig = null;
+        this.clearStorage();
         this.closeQuizPane(false);
         if (this.modeController) {
             this.modeController.resetToNormal();
         }
+    };
+
+    /**
+     * Persist playing phase + optional in-progress answer pointer.
+     *
+     * @param {Object|null} [playerState]
+     * @private
+     */
+    PracticeQuizController.prototype._persistPlayingState = function(playerState) {
+        if (!this._resumeJobId) {
+            return;
+        }
+        const payload = {
+            phase: 'playing',
+            jobId: this._resumeJobId,
+            title: this.quizTitle,
+            topictitle: this._resumeTopicTitle,
+            expectedCount: this.expectedCount,
+        };
+        if (playerState) {
+            payload.playerState = playerState;
+        }
+        this.persistState(payload);
     };
 
     PracticeQuizController.prototype.mountPlayer = async function(title, questionsJson, savedProgress, resumeMeta) {
@@ -258,31 +273,35 @@ define([
         this.questions = JSON.parse(this.questionsJson);
         const self = this;
         const meta = resumeMeta || {};
+        this.introhtml = meta.introhtml !== undefined ? (meta.introhtml || '') : (this.introhtml || '');
         this._resumeJobId = meta.jobId || this._resumeJobId || null;
         this._resumeTopicTitle = meta.topictitle || this._resumeTopicTitle || '';
 
-        const rendered = await this.api.renderEmbed(this.courseid, this.questionsJson, '');
-        this.quizPane.innerHTML = rendered.html;
+        if (this.embedInstance) {
+            practiceQuizPanel.closeFullscreen();
+            this.embedInstance.destroy();
+            this.embedInstance = null;
+        }
 
-        const root = this.quizPane.querySelector('.simplequiz2-embed') || this.quizPane;
+        const rendered = await this.api.renderEmbed(this.courseid, this.questionsJson, '');
+        const root = await practiceQuizPanel.mount(
+            this.quizPane,
+            this.quizTitle,
+            rendered.html,
+            () => this.handleQuizExit()
+        );
         this.showQuizPane();
         this.setComposerQuizMode(true);
-        await this.attachQuestionsExitButton();
 
         const playerState = savedProgress || null;
         this.lastPlayerState = playerState;
 
-        // Technical resume fields only — re-finalize from jobId after reload.
-        if (this._resumeJobId) {
-            this.persistState({
-                phase: 'playing',
-                jobId: this._resumeJobId,
-                title: this.quizTitle,
-                topictitle: this._resumeTopicTitle,
-                expectedCount: this.expectedCount,
-            });
-        }
+        // Re-finalize questions from jobId after reload; playerState holds answer progress.
+        this._persistPlayingState(playerState);
 
+        if (!root) {
+            throw new Error('Practice quiz embed missing after panel render');
+        }
         this.embedInstance = embedPlayer.init(root, {
             courseid: this.courseid,
             questionsJson: this.questionsJson,
@@ -290,11 +309,13 @@ define([
             initialState: playerState,
             onStateChange: function(state) {
                 self.lastPlayerState = state;
+                self._persistPlayingState(state);
             },
             onFinish: function(result) {
                 if (result && result.bestAttempt) {
                     self.submitReview({
                         title: self.quizTitle,
+                        introhtml: self.introhtml || '',
                         questionsjson: self.questionsJson,
                         bestattemptjson: JSON.stringify(result.bestAttempt),
                         exitscore: result.score,
@@ -311,6 +332,7 @@ define([
             },
             onRestart: function() {
                 self.setComposerQuizMode(true);
+                self._persistPlayingState(self.lastPlayerState);
             },
         });
     };
@@ -328,11 +350,17 @@ define([
         this.showQuizPane();
 
         if (saved.phase === 'generating' && saved.jobId) {
+            if (this.modeController && typeof this.modeController.setMode === 'function') {
+                this.modeController.setMode('quiz', {skipRouting: true});
+            }
             await this.tryResumeGenerating(saved);
             return;
         }
 
         if (saved.phase === 'playing' && saved.jobId) {
+            if (this.modeController && typeof this.modeController.setMode === 'function') {
+                this.modeController.setMode('quiz', {skipRouting: true});
+            }
             this.expectedCount = saved.expectedCount || 0;
             this._resumeJobId = saved.jobId;
             this._resumeTopicTitle = saved.topictitle || saved.title || '';
@@ -342,7 +370,8 @@ define([
                 await this.finalizeAndMount(
                     saved.jobId,
                     this._resumeTopicTitle,
-                    generationToken
+                    generationToken,
+                    saved.playerState || null
                 );
             } catch (e) {
                 await this.handleError(e);
@@ -363,7 +392,7 @@ define([
         }
     };
 
-    PracticeQuizController.prototype.retakeQuizFromContext = async function(data) {
+    PracticeQuizController.prototype.retakeQuizFromContext = async function(data, sourceRow) {
         if (!data || !data.questionsJson) {
             return;
         }
@@ -373,6 +402,9 @@ define([
                 || JSON.parse(data.questionsJson).length;
         } catch (e) {
             return;
+        }
+        if (this.ui && typeof this.ui.setReturnToMessageRow === 'function') {
+            this.ui.setReturnToMessageRow(sourceRow || null);
         }
         const freshState = {
             answerResults: [],
@@ -387,7 +419,9 @@ define([
             this.modeController.setMode('quiz', {skipRouting: true});
         }
         try {
-            await this.mountPlayer(data.title || '', data.questionsJson, freshState);
+            await this.mountPlayer(data.title || '', data.questionsJson, freshState, {
+                introhtml: data.introhtml || '',
+            });
         } catch (e) {
             if (typeof this.handleError === 'function') {
                 await this.handleError(e);
@@ -397,6 +431,7 @@ define([
 
     PracticeQuizController.prototype.destroy = function() {
         this.bgPoller.cancel();
+        practiceQuizPanel.destroy();
         if (this.embedInstance) {
             this.embedInstance.destroy();
             this.embedInstance = null;

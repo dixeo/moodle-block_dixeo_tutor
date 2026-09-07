@@ -152,7 +152,33 @@ define([
             });
         }
 
-        /*
+        /**
+         * Erases the current user's conversation in a course.
+         * @param {number} courseid The ID of the course.
+         * @returns {Promise<object>} Result with the number of conversations deleted.
+         * @throws {NetworkError|APIError|ValidationError}
+         */
+        async deleteConversation(courseid) {
+            if (!courseid || courseid <= 0) {
+                throw new errors.ValidationError(
+                    'Invalid course ID',
+                    'courseid',
+                    {courseid}
+                );
+            }
+
+            try {
+                return await callAjax('delete_conversation', {courseid});
+            } catch (error) {
+                log.error('Failed to delete conversation', {
+                    error: error.message,
+                    code: error.code
+                });
+                throw error;
+            }
+        }
+
+        /**
          * Polls the status of a tutor job.
          * @param {string} jobId The job UUID.
          * @param {number} courseid The ID of the course.
@@ -190,9 +216,10 @@ define([
          * Flushes queued proactive context for this course (if any).
          * @param {number} courseid The ID of the course.
          * @param {string} pageurl The current page URL for context.
+         * @param {number} [cmid=0] Course module id when on an activity page.
          * @returns {Promise<object>} Flush result; flushed=true when a job was submitted.
          */
-        async flushPendingContext(courseid, pageurl = '') {
+        async flushPendingContext(courseid, pageurl = '', cmid = 0) {
             if (!courseid || courseid <= 0) {
                 throw new errors.ValidationError(
                     'Invalid course ID',
@@ -204,7 +231,7 @@ define([
             try {
                 const result = await callAjax(
                     'flush_pending_context',
-                    {courseid, pageurl},
+                    {courseid, pageurl, cmid: cmid || 0},
                     {timeout: constants.network.AJAX_TIMEOUT}
                 );
 
@@ -232,10 +259,12 @@ define([
          * @param {number} courseid The ID of the course.
          * @param {string} message The message content.
          * @param {string} pageurl The current page URL for context.
+         * @param {number} [cmid=0] Course module id when on an activity page.
+         * @param {object|null} [guideSession=null] Active guide session context from client storage.
          * @returns {Promise<object>} Send result with job_id.
          * @throws {NetworkError|APIError|ValidationError|TimeoutError}
          */
-        async sendMessage(courseid, message, pageurl = '') {
+        async sendMessage(courseid, message, pageurl = '', cmid = 0, guideSession = null) {
             if (!courseid || courseid <= 0) {
                 throw new errors.ValidationError(
                     'Invalid course ID',
@@ -253,9 +282,19 @@ define([
             }
 
             try {
+                const args = {
+                    courseid,
+                    message: message.trim(),
+                    pageurl,
+                    cmid: cmid || 0,
+                };
+                if (guideSession && guideSession.title && guideSession.description) {
+                    args.guidetitle = guideSession.title;
+                    args.guidedescription = guideSession.description;
+                }
                 const result = await callAjax(
                     'send_message',
-                    {courseid, message: message.trim(), pageurl},
+                    args,
                     {timeout: constants.network.AJAX_TIMEOUT}
                 );
 

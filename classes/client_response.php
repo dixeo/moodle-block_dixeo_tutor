@@ -167,6 +167,7 @@ class client_response {
             'success' => false,
             'error' => self::generic_error_message(),
             'title' => '',
+            'introhtml' => '',
             'questions' => '[]',
         ];
     }

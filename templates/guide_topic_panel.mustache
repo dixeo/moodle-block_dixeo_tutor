@@ -1,0 +1,44 @@
+{{!
+    @template block_dixeo_tutor/guide_topic_panel
+
+    Guide topic summary card (shown in standard transcript after a session ends).
+
+    Example context (json):
+    {
+        "label": "Guided session",
+        "title": "Photosynthesis basics",
+        "description": "Understanding how plants convert light into energy",
+        "startedat": 1710000000,
+        "timeended": 1710003600,
+        "reviewlabel": "Review session",
+        "backlabel": "Back to conversation",
+        "restartlabel": "Start new session"
+    }
+}}
+<div class="card dixeo-guide-topic-panel"
+     data-guide-title="{{title}}"
+     data-guide-description="{{description}}"
+     data-guide-started="{{startedat}}"
+     data-guide-ended="{{timeended}}">
+    <div class="card-header dixeo-guide-topic-panel__header">
+        <p class="dixeo-guide-topic-panel__label mb-0">{{label}}</p>
+        <h4 class="card-title dixeo-guide-topic-panel__title mb-0">{{title}}</h4>
+    </div>
+    <div class="card-body dixeo-guide-topic-panel__body">
+        <p class="card-text dixeo-guide-topic-panel__description mb-0">{{description}}</p>
+    </div>
+    <div class="card-footer dixeo-guide-topic-panel__footer">
+        <button type="button"
+                class="dixeo-guide-topic-panel__restart-btn"
+                data-action="restart-guide-session"
+                aria-label="{{restartlabel}}"
+                title="{{restartlabel}}">
+            <i class="fa fa-refresh dixeo-guide-topic-panel__restart-icon" aria-hidden="true"></i>
+        </button>
+        <button type="button"
+                class="btn btn-sm btn-outline-secondary dixeo-guide-topic-panel__review-btn"
+                data-action="review-guide-session"
+                data-label-review="{{reviewlabel}}"
+                data-label-back="{{backlabel}}">{{reviewlabel}}</button>
+    </div>
+</div>

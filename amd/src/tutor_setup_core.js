@@ -63,9 +63,13 @@ define([
         }
 
         const sync = function() {
+            // Topic is required only when the panel has a topic UI (quiz/teach).
+            const requiresTopic = !!panel.querySelector(
+                '[data-role="topic-loading"], [data-role="topic-select"]'
+            );
             const hasTopic = !!panel.querySelector('[data-role="topic-select"]');
             const extraOk = typeof canStart === 'function' ? canStart() : true;
-            startBtn.disabled = !hasTopic || !extraOk;
+            startBtn.disabled = (requiresTopic && !hasTopic) || !extraOk;
         };
 
         return sync;

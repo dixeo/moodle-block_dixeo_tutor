@@ -4,8 +4,9 @@ define([
     'block_dixeo_tutor/errors',
     'block_dixeo_tutor/reconciliation_service',
     'block_dixeo_tutor/system_message_display',
-    'block_dixeo_tutor/text_utils'
-], function(str, constants, errors, ReconciliationService, systemMessageDisplay, textUtils) {
+    'block_dixeo_tutor/guide_session_context',
+    'block_dixeo_tutor/text_utils',
+], function(str, constants, errors, ReconciliationService, systemMessageDisplay, guideSessionContext, textUtils) {
     'use strict';
 
     return class ChatController {
@@ -24,12 +25,19 @@ define([
             this.reconciler = new ReconciliationService(ui, state);
             this.pendingTempId = null;
             this.replyPollTimeoutId = null;
+            this.replyPollJobId = null;
+            this.replyPollAttempt = 0;
             this.tempIdCounter = 0;
             this.connectionRetryTimeoutId = null;
             this.connectionRetryDelay = 1000;
             this.maxConnectionRetryDelay = 30000;
             this.isConnectionLost = false;
             this._loadingOlder = false;
+            this._ensuringVisible = false;
+            this._loadingAllOlder = false;
+            this._initialHistoryReady = false;
+            this._flushingPending = false;
+            this._guideOutboundProvider = null;
             // Event handler references stored for cleanup in destroy().
             this._onOffline = null;
             this._onOnline = null;
@@ -55,13 +63,15 @@ define([
         }
 
         /**
-         * Flush proactive context, load conversation, restore session state.
+         * Load the conversation, then flush proactive context and restore session state.
          * @private
          */
         async _initSequence() {
             try {
-                await this._flushPendingContext();
                 await this._checkInitialState();
+                this._flushPendingContext().catch(() => {
+                    // A failed proactive flush must not leave the tutor unusable.
+                });
                 this._restoreSession();
                 this._syncPendingUi();
             } catch (e) {
@@ -71,6 +81,44 @@ define([
                     this.ui.appendErrorMessage('Failed to initialize chat.');
                 }
             }
+        }
+
+        /**
+         * Provide active guide session fields for outbound user messages.
+         *
+         * @param {function(): object|null} fn
+         */
+        setGuideOutboundProvider(fn) {
+            this._guideOutboundProvider = typeof fn === 'function' ? fn : null;
+        }
+
+        /**
+         * Emit guide assistant metadata parsed from the latest assistant delta.
+         *
+         * @param {Array<object>} deltaMessages
+         * @param {object|null} pollState
+         * @private
+         */
+        _dispatchGuideAssistantContext(deltaMessages, pollState) {
+            if (!Array.isArray(deltaMessages) || !deltaMessages.length) {
+                return;
+            }
+            const lastAssistant = [...deltaMessages].reverse().find((msg) => {
+                return String(msg.role || '').toLowerCase() === 'assistant';
+            });
+            if (!lastAssistant) {
+                return;
+            }
+            const parsed = guideSessionContext.parseAssistantContext(lastAssistant);
+            if (!parsed) {
+                return;
+            }
+            window.dispatchEvent(new CustomEvent(constants.events.GUIDE_ASSISTANT_CONTEXT, {
+                detail: Object.assign({}, parsed, {
+                    fromGuideStart: !!(pollState && pollState.fromGuideStart),
+                    messageTime: lastAssistant.time || 0,
+                }),
+            }));
         }
 
         /**
@@ -123,33 +171,78 @@ define([
         }
 
         /**
+         * Course module id from the tutor root when on an activity page.
+         * @returns {number}
+         * @private
+         */
+        _getCurrentCmid() {
+            const root = this.ui?.dom?.container || document.getElementById('dixeo-tutor');
+            if (!root) {
+                return 0;
+            }
+            return parseInt(root.dataset.currentCmid, 10) || 0;
+        }
+
+        /**
+         * Submit queued proactive context (welcome, Guide me start, etc.).
+         *
+         * @param {string} [mode] Current tutor mode after a preference save, if known.
+         */
+        flushPendingAfterModePersist(mode) {
+            if (mode !== 'guide') {
+                return;
+            }
+            this._flushPendingContext();
+        }
+
+        /**
          * Submit queued proactive context lines when the tutor UI loads.
          * @private
          */
         async _flushPendingContext() {
+            if (this._flushingPending) {
+                return;
+            }
             if (this.modeController?.isPersisting()) {
                 return;
             }
-
-            const response = await this.api.flushPendingContext(
-                this.state.getCourseId(),
-                window.location.href
-            );
-
-            if (!response.flushed || !response.jobid) {
+            if (this.state.isPending()) {
                 return;
             }
 
-            this.state.setPending(true);
-            this.ui.disableInput();
-            this.ui.showPendingIndicator();
-            this.state.savePollState({
-                isPending: true,
-                jobId: response.jobid,
-                timestamp: Date.now(),
-                fromProactiveFlush: true,
-            });
-            this._pollForJobCompletion(response.jobid);
+            this._flushingPending = true;
+            try {
+                const response = await this.api.flushPendingContext(
+                    this.state.getCourseId(),
+                    window.location.href,
+                    this._getCurrentCmid()
+                );
+
+                if (!response.flushed || !response.jobid) {
+                    return;
+                }
+
+                this.state.setPending(true);
+                this.ui.disableInput();
+                this.ui.showPendingIndicator();
+                this.state.savePollState({
+                    isPending: true,
+                    jobId: response.jobid,
+                    timestamp: Date.now(),
+                    fromProactiveFlush: true,
+                });
+                this._pollForJobCompletion(response.jobid);
+            } finally {
+                this._flushingPending = false;
+            }
+        }
+
+        /**
+         * Drain leftover queued events after a reply job finishes.
+         * @private
+         */
+        _drainPendingContext() {
+            this._flushPendingContext();
         }
 
         /**
@@ -160,6 +253,10 @@ define([
             this.ui.on(constants.events.SEND_MESSAGE, (message) => this.handleSendMessage(message));
             this.ui.on(constants.events.RETRY_SEND_MESSAGE, (message) => this.handleSendMessage(message));
             this.ui.on(constants.events.LOAD_OLDER_MESSAGES, () => this._handleLoadOlderMessages());
+            this.ui.on(constants.events.ENSURE_VISIBLE_TRANSCRIPT, () => {
+                this._ensureVisibleStandardTranscript();
+            });
+            this.ui.on(constants.events.DELETE_CONVERSATION, () => this.handleDeleteConversation());
         }
 
         /**
@@ -201,14 +298,15 @@ define([
          */
         _bindPageUnload() {
             this._onBeforeUnload = () => {
-                if (this.replyPollTimeoutId) {
-                    const existingState = this.state.getPollState();
-                    this.state.savePollState({
-                        isPending: true,
-                        jobId: existingState?.jobId || null,
-                        timestamp: existingState?.timestamp || Date.now()
-                    });
+                if (!this.state.isPending() || !this.replyPollTimeoutId) {
+                    return;
                 }
+                const existingState = this.state.getPollState();
+                this.state.savePollState({
+                    isPending: true,
+                    jobId: existingState?.jobId || null,
+                    timestamp: existingState?.timestamp || Date.now()
+                });
             };
 
             window.addEventListener('beforeunload', this._onBeforeUnload);
@@ -291,6 +389,7 @@ define([
             this._updatePaginationState(rawMessages);
 
             await this.ui.renderMessageHistory(messages);
+            this.ui.noteInitialHistoryPainted();
 
             if (messages.length) {
                 this.state.setLastRenderedId(messages[messages.length - 1].id);
@@ -298,10 +397,61 @@ define([
 
             this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
 
+            this._initialHistoryReady = true;
             this._emitConversationSynced(conversationData);
 
+            await this._ensureVisibleStandardTranscript();
+
+            const last = messages.length ? messages[messages.length - 1] : null;
+            const waitingForReply = !!(last && String(last.role).toLowerCase() === 'user');
             if (!this.state.isPending()) {
+                if (!waitingForReply) {
+                    this.state.clearPollState();
+                }
                 this.ui.enableInput();
+            }
+        }
+
+        /**
+         * In standard view, keep loading older pages while the viewport is empty
+         * (e.g. the newest page is only guide-lane turns).
+         *
+         * @private
+         */
+        async _ensureVisibleStandardTranscript() {
+            if (this._ensuringVisible) {
+                return;
+            }
+            if (typeof this.ui.getMessageView === 'function'
+                    && this.ui.getMessageView() !== 'standard') {
+                return;
+            }
+            if (typeof this.ui.hasVisibleTranscriptContent === 'function'
+                    && this.ui.hasVisibleTranscriptContent()) {
+                return;
+            }
+            if (!this.state.getHasMoreOlder()) {
+                return;
+            }
+
+            this._ensuringVisible = true;
+            try {
+                let pages = 0;
+                const maxPages = 50;
+                while (pages < maxPages
+                        && this.ui.getMessageView() === 'standard'
+                        && !this.ui.hasVisibleTranscriptContent()
+                        && this.state.getHasMoreOlder()) {
+                    pages += 1;
+                    const beforeOldest = this.state.getOldestLoadedId();
+                    await this._handleLoadOlderMessages();
+                    // Stop if pagination did not advance (avoid infinite loops).
+                    if (this.state.getOldestLoadedId() === beforeOldest) {
+                        break;
+                    }
+                }
+            } finally {
+                this._ensuringVisible = false;
             }
         }
 
@@ -324,9 +474,13 @@ define([
 
         /**
          * Loads and prepends the next page of older messages.
+         *
+         * @param {{silent?: boolean}} [options]
          * @private
          */
-        async _handleLoadOlderMessages() {
+        async _handleLoadOlderMessages(options) {
+            const opts = options || {};
+            const silent = !!opts.silent;
             if (this._loadingOlder || !this.state.getHasMoreOlder()) {
                 return;
             }
@@ -339,7 +493,9 @@ define([
             const nextOffset = this.state.getHistoryOffset() + constants.ui.MESSAGE_PAGE_SIZE;
 
             this._loadingOlder = true;
-            this.ui.setLoadOlderLoading(true);
+            if (!silent) {
+                this.ui.setLoadOlderLoading(true);
+            }
 
             try {
                 const data = await this.api.loadConversation(
@@ -357,9 +513,9 @@ define([
                     this.state.setHistoryOffset(nextOffset);
                     this.state.setOldestLoadedId(rawBatch[0].id);
                 }
-                this.state.setHasMoreOlder(
-                    rawBatch.length === constants.ui.MESSAGE_PAGE_SIZE && displayBatch.length > 0
-                );
+                // Keep paging while the API returns a full page, even if every row
+                // was filtered from display (guide/system-only batches).
+                this.state.setHasMoreOlder(rawBatch.length === constants.ui.MESSAGE_PAGE_SIZE);
                 this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             } catch (e) {
                 if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
@@ -370,8 +526,115 @@ define([
                 this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             } finally {
                 this._loadingOlder = false;
-                this.ui.setLoadOlderLoading(false);
+                if (!silent) {
+                    this.ui.setLoadOlderLoading(false);
+                } else {
+                    this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+                }
             }
+        }
+
+        /**
+         * Whether the first conversation history fetch has finished painting.
+         *
+         * @returns {boolean}
+         */
+        isInitialHistoryReady() {
+            return !!this._initialHistoryReady;
+        }
+
+        /**
+         * Silently page through older history until nothing remains (used by guide review).
+         *
+         * @returns {Promise<void>}
+         */
+        async loadAllOlderMessages() {
+            if (this._loadingAllOlder) {
+                return;
+            }
+            this._loadingAllOlder = true;
+            try {
+                let pages = 0;
+                const maxPages = 100;
+                while (pages < maxPages && this.state.getHasMoreOlder()) {
+                    pages += 1;
+                    const beforeOldest = this.state.getOldestLoadedId();
+                    await this._handleLoadOlderMessages({silent: true});
+                    if (this.state.getOldestLoadedId() === beforeOldest) {
+                        break;
+                    }
+                }
+            } finally {
+                this._loadingAllOlder = false;
+                this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+            }
+        }
+
+        /**
+         * Silently load older pages until predicate() is true or history is exhausted.
+         *
+         * @param {function(): boolean} predicate
+         * @param {{maxPages?: number}} [options]
+         * @returns {Promise<boolean>} True when predicate became true.
+         */
+        async loadOlderUntil(predicate, options) {
+            const opts = options || {};
+            const maxPages = typeof opts.maxPages === 'number' ? opts.maxPages : 100;
+            if (typeof predicate !== 'function') {
+                return false;
+            }
+            if (predicate()) {
+                return true;
+            }
+            if (this._loadingAllOlder) {
+                return predicate();
+            }
+            this._loadingAllOlder = true;
+            try {
+                let pages = 0;
+                while (pages < maxPages && this.state.getHasMoreOlder() && !predicate()) {
+                    pages += 1;
+                    const beforeOldest = this.state.getOldestLoadedId();
+                    await this._handleLoadOlderMessages({silent: true});
+                    if (this.state.getOldestLoadedId() === beforeOldest) {
+                        break;
+                    }
+                }
+                return !!predicate();
+            } finally {
+                this._loadingAllOlder = false;
+                this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
+            }
+        }
+
+        /**
+         * Erases the user's conversation, then rebuilds an empty transcript.
+         *
+         * The UI is only cleared once the server confirms the erasure: wiping the
+         * transcript on a failed call would show data as gone while it still exists.
+         */
+        async handleDeleteConversation() {
+            try {
+                await this.api.deleteConversation(this.state.getCourseId());
+            } catch (e) {
+                const message = await str.get_string('deleteconversationfailed', 'block_dixeo_tutor');
+                this.ui.appendErrorMessage(message);
+                return;
+            }
+
+            this._stopPolling();
+            this.pendingTempId = null;
+            this.state.setPending(false);
+            this.state.setLastRenderedId(null);
+            this.state.clearAll();
+
+            // Same path as a first load with no history: the transcript is wiped and
+            // rebuilt with the welcome message, and the input is re-enabled.
+            await this._handleInitialState({messages: []});
+
+            // The erase button is disabled by the rebuild, so it cannot keep the focus
+            // the confirmation modal hands back to it.
+            this.ui.focusInput();
         }
 
         /**
@@ -383,7 +646,8 @@ define([
                 return;
             }
 
-            if (this.modeController?.isPersisting()) {
+            if (this.modeController && typeof this.modeController.isMessagingLocked === 'function'
+                    && this.modeController.isMessagingLocked()) {
                 return;
             }
 
@@ -395,7 +659,17 @@ define([
             // 1. Create an optimistic bubble with a negative temp ID.
             const tempId = --this.tempIdCounter;
             const timestamp = Math.floor(Date.now() / 1000);
-            this.ui.appendMessage({id: tempId, role: 'user', content: message, time: timestamp});
+            const guideSession = this._guideOutboundProvider ? this._guideOutboundProvider() : null;
+            const optimistic = {id: tempId, role: 'user', content: message, time: timestamp};
+            if (guideSession && guideSession.title && guideSession.description) {
+                optimistic.context = {
+                    schema: 'guide_session',
+                    version: 1,
+                    title: guideSession.title,
+                    description: guideSession.description,
+                };
+            }
+            this.ui.appendMessage(optimistic);
 
             this.pendingTempId = tempId;
             this.state.setDraft(message);
@@ -410,7 +684,9 @@ define([
                 const response = await this.api.sendMessage(
                     this.state.getCourseId(),
                     message,
-                    window.location.href
+                    window.location.href,
+                    this._getCurrentCmid(),
+                    guideSession
                 );
 
                 if (response.errormessage) {
@@ -424,6 +700,9 @@ define([
                 // Store jobid and start polling.
                 const jobId = response.jobid;
                 this.state.savePollState({isPending: true, jobId: jobId, timestamp: Date.now()});
+                if (this.modeController && typeof this.modeController.noteActivity === 'function') {
+                    this.modeController.noteActivity();
+                }
                 this._pollForJobCompletion(jobId);
 
             } catch (err) {
@@ -461,6 +740,19 @@ define([
                 this.replyPollTimeoutId = null;
             }
 
+            if (this.replyPollJobId !== jobId) {
+                this.replyPollJobId = jobId;
+                this.replyPollAttempt = 0;
+            }
+            const pollDelay = Math.min(
+                constants.polling.REPLY_INTERVAL_MS,
+                Math.round(
+                    constants.polling.FIRST_REPLY_INTERVAL_MS
+                    * Math.pow(constants.polling.BACKOFF_FACTOR, this.replyPollAttempt)
+                )
+            );
+            this.replyPollAttempt++;
+
             const pollState = this.state.getPollState();
             if (pollState && pollState.timestamp) {
                 const pollAge = Date.now() - pollState.timestamp;
@@ -491,6 +783,8 @@ define([
                         const rawDelta = Array.isArray(delta.messages) ? delta.messages : [];
                         const deltaMessages = this._messagesForDisplay(rawDelta);
 
+                        this._dispatchGuideAssistantContext(deltaMessages, pollState);
+
                         this.pendingTempId = this.reconciler.reconcile(deltaMessages, this.pendingTempId);
                         this._emitConversationSynced(delta);
                         this._dispatchAssistantRepliedForMessages(delta);
@@ -501,11 +795,13 @@ define([
                                 },
                             }));
                         }
+                        this._stopPolling();
                         this.state.clearDraft();
                         this.state.clearPollState();
                         this.state.setPending(false);
                         this.ui.hidePendingIndicator();
                         this.ui.enableInput();
+                        this._drainPendingContext();
 
                     } else if (jobStatus.status === 'failed') {
                         const errorMsg = await str.get_string('errorsendmessage', 'block_dixeo_tutor');
@@ -515,15 +811,17 @@ define([
                             this.pendingTempId = null;
                         }
 
+                        this._stopPolling();
                         this.state.clearDraft();
                         this.state.clearPollState();
                         this.state.setPending(false);
                         this.ui.hidePendingIndicator();
                         this.ui.enableInput();
                         this.ui.appendErrorMessage(errorMsg);
+                        this._drainPendingContext();
 
                     } else {
-                        // Still processing — continue polling.
+                        // Still processing — keep polling with a widening interval.
                         this._pollForJobCompletion(jobId);
                     }
 
@@ -542,7 +840,7 @@ define([
                         });
                     }
                 }
-            }, constants.polling.REPLY_INTERVAL_MS);
+            }, pollDelay);
         }
 
         /**
@@ -587,6 +885,7 @@ define([
                         const lastMessage = visibleMessages[visibleMessages.length - 1];
                         if (lastMessage.role === 'assistant') {
                             this._dispatchAssistantRepliedForMessages(data);
+                            this._stopPolling();
                             this.state.clearPollState();
                             this.state.clearDraft();
                             this.state.setPending(false);
@@ -594,6 +893,17 @@ define([
                             this.ui.enableInput();
                             return;
                         }
+                    }
+
+                    const rendered = this.ui.getRenderedMessages();
+                    const lastRendered = rendered.length ? rendered[rendered.length - 1] : null;
+                    if (!lastRendered || lastRendered.role !== 'user') {
+                        this._stopPolling();
+                        this.state.clearPollState();
+                        this.state.setPending(false);
+                        this.ui.hidePendingIndicator();
+                        this.ui.enableInput();
+                        return;
                     }
 
                     this.state.savePollState({
@@ -630,6 +940,8 @@ define([
                 clearTimeout(this.replyPollTimeoutId);
                 this.replyPollTimeoutId = null;
             }
+            this.replyPollJobId = null;
+            this.replyPollAttempt = 0;
         }
 
         /**

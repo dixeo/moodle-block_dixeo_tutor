@@ -40,11 +40,13 @@ define([], function() {
             icon.classList.remove('fa-volume-up');
             icon.classList.add('fa-stop');
             button.setAttribute('aria-label', labels.stop);
+            button.setAttribute('title', labels.stop);
             button.classList.add('playing');
         } else {
             icon.classList.remove('fa-stop');
             icon.classList.add('fa-volume-up');
             button.setAttribute('aria-label', labels.play);
+            button.setAttribute('title', labels.play);
             button.classList.remove('playing');
         }
     };
@@ -186,6 +188,12 @@ define([], function() {
         if (!button.dataset.stopLabel) {
             button.dataset.stopLabel = ariaLabels.stop;
         }
+        if (!button.getAttribute('title')) {
+            button.setAttribute('title', button.dataset.playLabel);
+        }
+        if (!button.getAttribute('aria-label')) {
+            button.setAttribute('aria-label', button.dataset.playLabel);
+        }
         button.dataset.ttsGroup = groupId;
         getGroup(groupId).add(button);
         syncGroupPlayback(groupId);
@@ -260,6 +268,7 @@ define([], function() {
         button.dataset.playLabel = ariaLabels.play;
         button.dataset.stopLabel = ariaLabels.stop;
         button.setAttribute('aria-label', ariaLabels.play);
+        button.setAttribute('title', ariaLabels.play);
         button.innerHTML =
             '<i class="fa fa-volume-up dixeo-tutor-message-action-btn__icon dixeo-tutor-tts-btn__icon" aria-hidden="true"></i>';
 

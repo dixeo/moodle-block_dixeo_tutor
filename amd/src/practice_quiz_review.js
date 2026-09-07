@@ -1,8 +1,10 @@
 define([
     'core/templates',
     'core/str',
+    'core/modal',
+    'core/modal_events',
     'block_dixeo_tutor/text_utils',
-], function(Templates, str, textUtils) {
+], function(Templates, str, Modal, ModalEvents, textUtils) {
     'use strict';
 
     /** Must match {@see \block_dixeo_tutor\service\tutor_context_schema::SCHEMA_PRACTICE_QUIZ_REVIEW}. */
@@ -10,6 +12,7 @@ define([
     const OPTIMISTIC_REVIEW_ID_PREFIX = 'temp-quiz-review-';
 
     const STRING_KEYS = [
+        'practice_quiz_label',
         'quiz_review_best_score',
         'quiz_review_exit_score',
         'quiz_review_correct',
@@ -18,6 +21,7 @@ define([
         'quiz_review_correct_answer',
         'quiz_review_feedback',
         'quiz_review_retake',
+        'quiz_review_details',
     ];
 
     let stringsPromise = null;
@@ -25,6 +29,18 @@ define([
     let cachedStrings = null;
     /** @type {{quizController: object|null}} */
     let actionDeps = {quizController: null};
+    /** @type {Object|null} */
+    let activeModal = null;
+
+    /**
+     * Whether quiz mode is enabled for new quizzes/retakes.
+     *
+     * @returns {boolean}
+     */
+    function isQuizModeAvailable() {
+        const root = document.getElementById('dixeo-tutor');
+        return !!(root && root.dataset.quizModeAvailable === '1');
+    }
 
     /**
      * Preload review panel strings and Mustache template.
@@ -44,6 +60,7 @@ define([
                 return map;
             }).catch(function() {
                 cachedStrings = {
+                    'practice_quiz_label': 'Practice quiz',
                     'quiz_review_best_score': 'Best score: {$a->score}/{$a->total} ({$a->percent}%)',
                     'quiz_review_exit_score': 'This attempt: {$a->score}/{$a->total} ({$a->percent}%)',
                     'quiz_review_correct': 'Correct',
@@ -52,13 +69,17 @@ define([
                     'quiz_review_correct_answer': 'Correct answer',
                     'quiz_review_feedback': 'Feedback',
                     'quiz_review_retake': 'Retake quiz',
+                    'quiz_review_details': 'View quiz results',
                 };
                 return cachedStrings;
             });
         }
         if (!templatePrefetched) {
             templatePrefetched = true;
-            Templates.prefetchTemplates(['block_dixeo_tutor/practice_quiz_review']);
+            Templates.prefetchTemplates([
+                'block_dixeo_tutor/practice_quiz_review',
+                'block_dixeo_tutor/practice_quiz_review_modal',
+            ]);
         }
         return stringsPromise;
     }
@@ -291,7 +312,7 @@ define([
     /**
      * Build review JSON from the client submit payload (mirrors server shape for rendering).
      *
-     * @param {object} payload title, questionsjson, bestattemptjson, exitscore, total.
+     * @param {object} payload title, questionsjson, bestattemptjson, exitscore, total, introhtml.
      * @returns {object|null}
      */
     function buildReviewDataFromPayload(payload) {
@@ -333,6 +354,7 @@ define([
             schema: 'practice_quiz_review',
             version: 2,
             title: payload.title || '',
+            introhtml: payload.introhtml || '',
             questionsJson: payload.questionsjson || '',
             bestAttempt: {
                 score: bestscore,
@@ -434,8 +456,12 @@ define([
 
         return {
             version: data.version || 1,
+            label: labels.practice_quiz_label || 'Practice quiz',
             title: data.title || '',
-            canRetake: !!(data.questionsJson),
+            detailsLabel: labels.quiz_review_details || 'View quiz results',
+            introHtml: data.introhtml || '',
+            hasIntro: !!(data.introhtml && htmlToPlain(data.introhtml)),
+            canRetake: !!(data.questionsJson) && isQuizModeAvailable(),
             retakeLabel: labels.quiz_review_retake || 'Retake quiz',
             bestScoreLabel: formatString(labels.quiz_review_best_score, {
                 score: bestScore,
@@ -465,6 +491,10 @@ define([
         const bestTotal = best.total ?? 0;
         lines.push((data.title || 'Practice quiz') + ' — ' + bestScore + '/' + bestTotal +
             ' (' + scorePercent(bestScore, bestTotal) + '%)');
+        const introPlain = htmlToPlain(data.introhtml || '');
+        if (introPlain) {
+            lines.push(introPlain);
+        }
         (data.questions || []).forEach(function(q, idx) {
             const num = (q.index ?? idx) + 1;
             const status = q.isCorrect ? 'Correct' : 'Incorrect';
@@ -482,13 +512,62 @@ define([
     }
 
     /**
-     * Wire retake action on a rendered review panel.
+     * Open the quiz results detail modal.
+     *
+     * @param {object} data Parsed review payload.
+     * @param {object} [strings]
+     * @returns {Promise<void>}
+     */
+    function openReviewModal(data, strings) {
+        const labels = strings || cachedStrings || {};
+        const context = buildTemplateContext(data, labels);
+
+        if (activeModal) {
+            activeModal.destroy();
+            activeModal = null;
+        }
+
+        return Templates.render('block_dixeo_tutor/practice_quiz_review_modal', context).then(function(html) {
+            return Modal.create({
+                type: Modal.TYPE.DEFAULT,
+                title: context.title || (labels.practice_quiz_label || 'Practice quiz'),
+                body: html,
+            });
+        }).then(function(modal) {
+            activeModal = modal;
+            modal.setLarge();
+            modal.show();
+            modal.getRoot().on(ModalEvents.hidden, function() {
+                if (activeModal === modal) {
+                    activeModal = null;
+                }
+                modal.destroy();
+            });
+            return undefined;
+        });
+    }
+
+    /**
+     * Wire retake and details actions on a rendered review panel.
      *
      * @param {HTMLElement} panelEl
      * @param {object} data Parsed review payload.
+     * @param {object} [strings]
      */
-    function wireReviewActions(panelEl, data) {
-        if (!panelEl || !data || !data.questionsJson) {
+    function wireReviewActions(panelEl, data, strings) {
+        if (!panelEl || !data) {
+            return;
+        }
+
+        const detailsBtn = panelEl.querySelector('[data-action="view-review-details"]');
+        if (detailsBtn) {
+            detailsBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                openReviewModal(data, strings);
+            });
+        }
+
+        if (!data.questionsJson || !isQuizModeAvailable()) {
             return;
         }
         const retakeBtn = panelEl.querySelector('[data-action="retake-quiz"]');
@@ -499,7 +578,8 @@ define([
             e.stopPropagation();
             const controller = actionDeps.quizController;
             if (controller && typeof controller.retakeQuizFromContext === 'function') {
-                controller.retakeQuizFromContext(data);
+                const sourceRow = panelEl.closest('.dixeo-tutor-message-row');
+                controller.retakeQuizFromContext(data, sourceRow);
             }
         });
     }
@@ -517,7 +597,9 @@ define([
         contentEl.dataset.raw = JSON.stringify(data);
         contentEl.innerHTML = renderFallbackHtml(data);
 
+        let labels = null;
         preload().then(function(strings) {
+            labels = strings;
             const context = buildTemplateContext(data, strings);
             return Templates.render('block_dixeo_tutor/practice_quiz_review', context);
         }).then(function(html, js) {
@@ -525,7 +607,7 @@ define([
                 contentEl.innerHTML = html;
                 const panel = contentEl.querySelector('.dixeo-practice-quiz-review');
                 if (panel) {
-                    wireReviewActions(panel, data);
+                    wireReviewActions(panel, data, labels);
                 }
             }
             if (js) {
@@ -561,7 +643,6 @@ define([
             ' role="article" aria-label="' + textUtils.escapeHtml(ariaLabel) + '" tabindex="0">' +
             '<div class="dixeo-tutor-message-content"></div>' +
             '<div class="dixeo-tutor-message-footer">' +
-            '<div class="dixeo-tutor-message-actions"></div>' +
             '<small class="message-time" aria-label="Sent at ' + textUtils.escapeHtml(time) + '">' +
             textUtils.escapeHtml(time) + '</small>' +
             '</div></div>';

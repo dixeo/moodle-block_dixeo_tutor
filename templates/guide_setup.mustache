@@ -1,0 +1,29 @@
+{{!
+    @template block_dixeo_tutor/guide_setup
+
+    Guide me (Socratic) setup panel.
+
+    Example context (json):
+    {
+        "promptvalue": "I don't understand photosynthesis",
+        "startdisabled": true
+    }
+}}
+<div class="dixeo-guide-setup dixeo-tutor-setup">
+    <h5 class="dixeo-tutor-setup__title dixeo-guide-setup__title mb-2">{{#str}}guide_setup_title, block_dixeo_tutor{{/str}}</h5>
+    <p class="dixeo-tutor-setup__instructions dixeo-guide-setup__instructions small mb-2">{{#str}}guide_setup_instructions, block_dixeo_tutor{{/str}}</p>
+
+    <label class="dixeo-tutor-setup__label dixeo-guide-setup__label small font-weight-bold mb-1" for="dixeo-guide-setup-prompt">{{#str}}guide_setup_prompt, block_dixeo_tutor{{/str}}</label>
+    <textarea id="dixeo-guide-setup-prompt"
+              class="form-control form-control-sm dixeo-guide-setup__prompt mb-2"
+              data-role="learner-prompt"
+              rows="4"
+              placeholder="{{#str}}guide_setup_prompt_placeholder, block_dixeo_tutor{{/str}}"
+              aria-label="{{#str}}guide_setup_prompt, block_dixeo_tutor{{/str}}"
+              required>{{promptvalue}}</textarea>
+
+    <div class="dixeo-tutor-setup__actions dixeo-guide-setup__actions">
+        <button type="button" class="btn btn-primary btn-sm" data-action="start"{{#startdisabled}} disabled{{/startdisabled}}>{{#str}}guide_setup_start, block_dixeo_tutor{{/str}}</button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-action="cancel">{{#str}}guide_setup_cancel, block_dixeo_tutor{{/str}}</button>
+    </div>
+</div>

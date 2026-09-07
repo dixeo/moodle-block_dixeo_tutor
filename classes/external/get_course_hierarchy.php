@@ -24,6 +24,7 @@
 
 namespace block_dixeo_tutor\external;
 
+use block_dixeo_tutor\service\tutor_mode_policy;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
@@ -61,6 +62,7 @@ class get_course_hierarchy extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_mode_policy::require_quiz_or_teach_mode(tutor_mode_policy::is_quiz_runtime_available());
 
         // Block plugin classes are not autoloaded in webservice context.
         require_once($CFG->dirroot . '/blocks/moodleblock.class.php');

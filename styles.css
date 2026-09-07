@@ -1,9 +1,102 @@
 /* stylelint-disable declaration-no-important -- overrides Boost/drawer/card and shared footer defaults */
 #dixeo-tutor {
-    --tutor-main-color: var(--primary, #02aaff);
+    --tutor-mode-header: #108eee;
+    --tutor-mode-footer: #f3f4f5;
+    --tutor-mode-surface: #f8fbfe;
+    --tutor-mode-send: #108eee;
+    --tutor-mode-user: #108eee;
+    --tutor-mode-quiz-card: #ffd9b8;
+    --tutor-mode-teach-card: #d4f0dc;
+    --tutor-main-color: var(--tutor-mode-send);
     --tutor-text-color: #fff;
     height: 100%;
     max-height: 85vh;
+}
+
+#dixeo-tutor[data-tutor-mode="guide"] {
+    --tutor-mode-header: #7c5cbf;
+    --tutor-mode-footer: #f4f0fa;
+    --tutor-mode-surface: #faf8fd;
+    --tutor-mode-send: #6d4ab3;
+    --tutor-mode-user: #6d4ab3;
+}
+
+#dixeo-tutor[data-tutor-mode="quiz"] {
+    --tutor-mode-header: #dc7800;
+    --tutor-mode-footer: #fef3e6;
+    --tutor-mode-surface: #fffaf5;
+    --tutor-mode-send: #dc7800;
+    --tutor-mode-user: #dc7800;
+}
+
+#dixeo-tutor[data-tutor-mode="teach"] {
+    --tutor-mode-header: #2f9e44;
+    --tutor-mode-footer: #eef8f0;
+    --tutor-mode-surface: #f7fcf8;
+    --tutor-mode-send: #148c3a;
+    --tutor-mode-user: #148c3a;
+}
+
+body.darkmode #dixeo-tutor {
+    --tutor-mode-footer: #1f2126;
+    --tutor-mode-surface: #1a1c21;
+    --tutor-mode-user: #003259;
+    --tutor-mode-quiz-card: #5a3d12;
+    --tutor-mode-teach-card: #1b4a2a;
+}
+
+body.darkmode #dixeo-tutor[data-tutor-mode="guide"] {
+    --tutor-mode-header: #7c5cbf;
+    --tutor-mode-footer: #2a2433;
+    --tutor-mode-surface: #221e2b;
+    --tutor-mode-send: #b49ae0;
+    --tutor-mode-user: #3d2a5c;
+}
+
+body.darkmode #dixeo-tutor[data-tutor-mode="quiz"] {
+    --tutor-mode-header: #dc7800;
+    --tutor-mode-footer: #2b2416;
+    --tutor-mode-surface: #242018;
+    --tutor-mode-send: #f08a1a;
+    --tutor-mode-user: #5a3d12;
+}
+
+body.darkmode #dixeo-tutor[data-tutor-mode="teach"] {
+    --tutor-mode-header: #2f9e44;
+    --tutor-mode-footer: #15241a;
+    --tutor-mode-surface: #16241b;
+    --tutor-mode-send: #5dca73;
+    --tutor-mode-user: #1b4a2a;
+}
+
+#dixeo-tutor > .card-header,
+#dixeo-tutor #dixeo-tutor-header {
+    background-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-tutor-title {
+    color: #fff !important;
+}
+
+#dixeo-tutor .card-footer:not(.dixeo-custom-lesson-panel__footer):not(.dixeo-practice-quiz-review__footer),
+#dixeo-tutor #dixeo-tutor-composer {
+    background-color: var(--tutor-mode-footer) !important;
+}
+
+#dixeo-tutor .dixeo-tutor-message-user .dixeo-tutor-message-content {
+    background: #108eee !important;
+}
+
+#dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message-content {
+    background: #6d4ab3 !important;
+}
+
+body.darkmode #dixeo-tutor .dixeo-tutor-message-user .dixeo-tutor-message-content {
+    background: #108eee !important;
+}
+
+body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message-content {
+    background: #8b6fd1 !important;
 }
 
 /* Title of the block */
@@ -50,6 +143,13 @@
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    background: var(--tutor-mode-surface, transparent) !important;
+}
+
+/* Beats Bootstrap .d-flex when both classes are present on a row. */
+#dixeo-tutor .dixeo-tutor-message-row.dixeo-tutor-row--hidden,
+#dixeo-tutor .dixeo-tutor-separator.dixeo-tutor-row--hidden {
+    display: none !important;
 }
 
 .dixeo-tutor-body {
@@ -69,10 +169,12 @@
     min-height: 0;
 }
 
+.dixeo-tutor-body--quiz-active .dixeo-tutor-chat-pane,
 .dixeo-tutor-body--quiz-playing .dixeo-tutor-chat-pane {
     display: none !important;
 }
 
+.dixeo-tutor-body--quiz-active .dixeo-tutor-quiz-pane,
 .dixeo-tutor-body--quiz-playing .dixeo-tutor-quiz-pane {
     flex: 1 1 0;
     min-height: 0;
@@ -83,21 +185,114 @@
     flex-direction: column;
 }
 
+.dixeo-tutor-body--quiz-active .dixeo-tutor-generating,
+.dixeo-tutor-body--quiz-active .dixeo-tutor-setup--instant,
+.dixeo-tutor-body--quiz-active .dixeo-quiz-setup--instant {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
 .dixeo-tutor-body--quiz-playing .dixeo-tutor-quiz-pane .simplequiz2-embed {
     flex: 1 1 auto;
     min-height: 0;
 }
 
-#dixeo-tutor-quiz-pane #simplequiz-questions {
-    position: relative;
-    padding-top: 2.25rem;
+.dixeo-tutor-body--quiz-playing .dixeo-tutor-quiz-pane {
+    padding: 0;
+    overflow: hidden;
 }
 
-#dixeo-tutor-quiz-pane .dixeo-tutor-quiz-panel-exit {
-    position: absolute;
-    top: 0;
-    right: 0;
-    z-index: 2;
+.dixeo-practice-quiz-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+}
+
+.dixeo-practice-quiz-panel__body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.dixeo-practice-quiz-panel__body .simplequiz2-embed {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.dixeo-practice-quiz-fullscreen {
+    --tutor-mode-header: #dc7800;
+    --tutor-mode-footer: #fef3e6;
+    position: fixed;
+    inset: 0;
+    z-index: 1060;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.dixeo-practice-quiz-fullscreen__dialog {
+    display: flex;
+    flex-direction: column;
+    width: 95vw;
+    max-width: 56rem;
+    height: 90vh;
+    max-height: 52rem;
+    background: #fff;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.25);
+    overflow: hidden;
+}
+
+.dixeo-practice-quiz-fullscreen__body {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.75rem 1rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.dixeo-practice-quiz-fullscreen__body .simplequiz2-embed {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.dixeo-practice-quiz-panel__header.dixeo-practice-quiz-fullscreen__header {
+    background: var(--tutor-mode-header) !important;
+    color: #fff !important;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+    padding: 1rem;
+}
+
+.dixeo-practice-quiz-fullscreen__header .dixeo-practice-quiz-panel__title {
+    color: #fff !important;
+}
+
+.dixeo-practice-quiz-fullscreen .dixeo-practice-quiz-fullscreen__header .btn {
+    color: #fff !important;
+    background: transparent !important;
+    background-image: none !important;
+    border-color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.dixeo-practice-quiz-fullscreen .dixeo-practice-quiz-fullscreen__header .btn:hover,
+.dixeo-practice-quiz-fullscreen .dixeo-practice-quiz-fullscreen__header .btn:focus {
+    color: var(--tutor-mode-header) !important;
+    background: #fff !important;
+    border-color: #fff !important;
+    box-shadow: none !important;
 }
 
 .dixeo-tutor-teach-pane {
@@ -112,19 +307,32 @@
     min-height: 0;
 }
 
+.dixeo-tutor-body--teach-active .dixeo-tutor-chat-pane,
 .dixeo-tutor-body--teach-viewing .dixeo-tutor-chat-pane {
     display: none !important;
 }
 
+.dixeo-tutor-body--teach-active .dixeo-tutor-teach-pane,
 .dixeo-tutor-body--teach-viewing .dixeo-tutor-teach-pane {
     flex: 1 1 0;
     min-height: 0;
     max-height: none;
-    overflow: hidden;
+    overflow-y: auto;
     border-bottom: none;
     display: flex;
     flex-direction: column;
+}
+
+.dixeo-tutor-body--teach-viewing .dixeo-tutor-teach-pane {
+    overflow: hidden;
     padding: 0;
+}
+
+.dixeo-tutor-body--teach-active .dixeo-tutor-generating,
+.dixeo-tutor-body--teach-active .dixeo-tutor-setup--instant,
+.dixeo-tutor-body--teach-active .dixeo-teach-setup--instant {
+    flex: 1 1 0;
+    min-height: 0;
 }
 
 .dixeo-tutor-setup {
@@ -240,23 +448,419 @@
 .dixeo-teach-lesson__header {
     display: flex;
     flex-wrap: nowrap;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid rgba(0, 0, 0, 0.08);
     flex-shrink: 0;
+    background: var(--tutor-mode-footer, #eef8f0);
 }
 
-.dixeo-teach-lesson__title {
+.dixeo-practice-quiz-panel__header {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
+    background: var(--tutor-mode-footer, #fef3e6);
+}
+
+.dixeo-teach-lesson__title,
+.dixeo-practice-quiz-panel__title {
     flex: 1 1 auto;
     min-width: 0;
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    line-height: 1.3;
 }
 
-.dixeo-teach-lesson__header-actions {
+.dixeo-teach-lesson__header-actions,
+.dixeo-practice-quiz-panel__header-actions {
     display: flex;
     flex-shrink: 0;
     gap: 0.25rem;
+    align-items: center;
+    align-self: center;
+}
+
+.dixeo-guide-banner__actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 0.25rem;
+    align-self: flex-start;
+    padding-top: 0.1rem;
+}
+
+.dixeo-guide-banner {
+    display: none;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    min-height: 4.25rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    flex-shrink: 0;
+    background: var(--tutor-mode-footer, #f4f0fa);
+    position: sticky;
+    top: 0;
+    z-index: 3;
+}
+
+#dixeo-tutor[data-tutor-mode="guide"][data-guide-session="active"] .dixeo-guide-banner,
+#dixeo-tutor[data-tutor-mode="guide"][data-guide-session="review"] .dixeo-guide-banner {
+    display: flex;
+}
+
+#dixeo-tutor[data-tutor-mode="guide"][data-guide-session="review"] #dixeo-tutor-composer {
+    display: none !important;
+}
+
+.dixeo-guide-banner__content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.dixeo-guide-banner__label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    opacity: 0.85;
+    line-height: 1.2;
+}
+
+.dixeo-guide-banner__topic {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.dixeo-guide-banner__topic-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    line-height: 1.3;
+}
+
+.dixeo-guide-banner__topic-description {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    opacity: 0.95;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+}
+
+.dixeo-tutor-guide-pane {
+    flex: 0 0 auto;
+    max-height: 60vh;
+    overflow-y: auto;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.5rem;
+}
+
+.dixeo-tutor-body--guide-active {
+    min-height: 0;
+}
+
+.dixeo-tutor-body--guide-active .dixeo-tutor-chat-pane {
+    display: none !important;
+}
+
+.dixeo-tutor-body--guide-active .dixeo-tutor-guide-pane {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    border-bottom: none;
+    display: flex;
+    flex-direction: column;
+}
+
+.dixeo-tutor-body--guide-active .dixeo-tutor-generating,
+.dixeo-tutor-body--guide-active .dixeo-tutor-setup--instant,
+.dixeo-tutor-body--guide-active .dixeo-guide-setup--instant {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.dixeo-guide-setup {
+    padding: 0.5rem;
+}
+
+.dixeo-guide-setup__prompt {
+    width: 100%;
+}
+
+.dixeo-guide-setup__instructions {
+    color: inherit;
+    opacity: 0.9;
+    line-height: 1.45;
+}
+
+.dixeo-guide-setup__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.dixeo-guide-setup__actions .btn + .btn {
+    margin-left: 0.5rem;
+}
+
+.dixeo-guide-setup--instant {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 4rem;
+    padding: 1rem 0.5rem;
+}
+
+.dixeo-guide-setup__instant-spinner {
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--tutor-main-color, #02aaff);
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel {
+    --tutor-mode-header: #7c5cbf;
+    --tutor-mode-footer: #f4f0fa;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1;
+    min-width: 14rem;
+    max-width: 100%;
+    border-color: rgba(124, 92, 191, 0.35);
+}
+
+.dixeo-guide-topic-panel * {
+    line-height: 1.2;
+    box-sizing: border-box;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel .card-header,
+#dixeo-tutor .dixeo-guide-topic-panel__header {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    background: var(--tutor-mode-header) !important;
+    color: #fff !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.75rem 1rem !important;
+    height: auto;
+    margin-bottom: 0;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__label {
+    margin: 0 0 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #fff !important;
+    overflow-wrap: anywhere;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel .card-body,
+#dixeo-tutor .dixeo-guide-topic-panel__body,
+#dixeo-tutor-popup-container > section .dixeo-guide-topic-panel .card-body,
+#dixeo-tutor-popup-container > section .dixeo-guide-topic-panel__body {
+    background: var(--tutor-mode-footer) !important;
+    padding: 1rem !important;
+    display: block;
+    height: auto;
+    max-height: none;
+    flex: none;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__description {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #495057;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel .card-footer,
+#dixeo-tutor .dixeo-guide-topic-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    background: var(--tutor-mode-footer) !important;
+    border-top: 0 !important;
+    padding: 0.75rem 1rem !important;
+    padding-top: 0 !important;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__review-btn:hover,
+#dixeo-tutor .dixeo-guide-topic-panel__review-btn:focus {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__restart-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 1px solid var(--tutor-mode-header);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--tutor-mode-header);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#dixeo-tutor .dixeo-guide-topic-panel__restart-btn:hover,
+#dixeo-tutor .dixeo-guide-topic-panel__restart-btn:focus {
+    background: var(--tutor-mode-header);
+    border-color: var(--tutor-mode-header);
+    color: #fff;
+}
+
+.dixeo-guide-topic-panel__restart-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+#dixeo-tutor .dixeo-tutor-message--guide-topic .dixeo-tutor-message-content {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+.dixeo-tutor-message--guide-topic .dixeo-tutor-message-footer {
+    justify-content: flex-end;
+}
+
+.dixeo-tutor-message-row[data-guide-understood="1"] .dixeo-tutor-message-actions {
+    display: none !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions {
+    gap: 0.5rem;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions__restart {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    background-image: none !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions__restart:hover,
+#dixeo-tutor .dixeo-guide-completion-actions__restart:focus {
+    color: #fff !important;
+    background-color: var(--tutor-mode-send) !important;
+    border-color: var(--tutor-mode-send) !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-actions__exit:hover,
+#dixeo-tutor .dixeo-guide-completion-actions__exit:focus {
+    color: var(--tutor-mode-header) !important;
+    background-color: color-mix(in srgb, var(--tutor-mode-header) 16%, #fff) !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-guide-completion-panel {
+    --tutor-mode-header: #7c5cbf;
+    --tutor-mode-footer: #f4f0fa;
+    max-width: 92%;
+    border: 1px solid color-mix(in srgb, var(--tutor-mode-header) 35%, #eaecef);
+    background: var(--tutor-mode-footer);
+}
+
+#dixeo-tutor .dixeo-guide-completion-panel__title {
+    color: var(--tutor-mode-header);
+    font-weight: 600;
+}
+
+#dixeo-tutor .dixeo-guide-completion-panel__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.dixeo-guide-banner__title-wrap {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.25rem;
+    min-width: 0;
+    position: relative;
+}
+
+.dixeo-guide-banner__title {
+    margin: 0;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.dixeo-guide-banner__help {
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    line-height: 1;
+    font-size: 0.75rem;
+    box-shadow: none;
+    cursor: help;
+}
+
+#dixeo-tutor .dixeo-guide-banner__help:hover,
+#dixeo-tutor .dixeo-guide-banner__help:focus,
+#dixeo-tutor .dixeo-guide-banner__help:focus-visible {
+    color: inherit !important;
+    background: transparent !important;
+    background-image: none !important;
+    border: 0 !important;
+    box-shadow: none !important;
+}
+
+.dixeo-guide-banner__help-tip {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    left: 0;
+    width: 16.5rem;
+    max-width: calc(100vw - 2.5rem);
+    padding: 0.6rem 0.75rem;
+    z-index: 20;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 0.35rem;
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.12);
+    font-size: 0.8rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: #212529;
+}
+
+.dixeo-guide-banner__help:hover + .dixeo-guide-banner__help-tip,
+.dixeo-guide-banner__help:focus + .dixeo-guide-banner__help-tip,
+.dixeo-guide-banner__help:focus-visible + .dixeo-guide-banner__help-tip {
+    display: block;
 }
 
 .dixeo-teach-lesson__intro,
@@ -280,6 +884,11 @@
     padding: 1.5rem 2rem;
     max-height: 75vh;
     overflow-y: auto;
+}
+
+.modal-content:has(.dixeo-teach-lesson-modal__body) {
+    --tutor-mode-header: #2f9e44;
+    background: #fff;
 }
 
 .modal-dialog-scrollable .modal-body:has(.dixeo-teach-lesson-modal__body) {
@@ -309,9 +918,65 @@
     font-weight: 500;
 }
 
-.dixeo-quiz-setup__count-row .btn.active,
-.dixeo-quiz-setup__diff-row .btn.active {
+#dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn,
+#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn,
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    background-image: none !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn:hover:not(:disabled),
+#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:hover:not(:disabled),
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn:hover:not(:disabled),
+#dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn:focus:not(:disabled),
+#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:focus:not(:disabled),
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn:focus:not(:disabled) {
+    color: #fff !important;
+    background-color: var(--tutor-mode-send) !important;
+    border-color: var(--tutor-mode-send) !important;
+}
+
+#dixeo-tutor .dixeo-quiz-setup [data-action="start"].btn:disabled,
+#dixeo-tutor .dixeo-teach-setup [data-action="start"].btn:disabled,
+#dixeo-tutor .dixeo-guide-setup [data-action="start"].btn:disabled {
+    opacity: 0.55;
+}
+
+#dixeo-tutor .dixeo-quiz-setup__count-row .btn.active,
+#dixeo-tutor .dixeo-quiz-setup__diff-row .btn.active,
+#dixeo-tutor .dixeo-quiz-setup__count-row .btn.active:hover,
+#dixeo-tutor .dixeo-quiz-setup__diff-row .btn.active:hover,
+#dixeo-tutor .dixeo-quiz-setup__count-row .btn.active:focus,
+#dixeo-tutor .dixeo-quiz-setup__diff-row .btn.active:focus {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    background-image: none !important;
+    border-color: var(--tutor-mode-header) !important;
+    box-shadow: none !important;
     font-weight: 600;
+}
+
+#dixeo-tutor .dixeo-quiz-setup .btn-outline-secondary:not(.active):hover,
+#dixeo-tutor .dixeo-quiz-setup .btn-outline-secondary:not(.active):focus,
+#dixeo-tutor .dixeo-teach-setup .btn-outline-secondary:hover,
+#dixeo-tutor .dixeo-teach-setup .btn-outline-secondary:focus,
+#dixeo-tutor .dixeo-guide-setup .btn-outline-secondary:hover,
+#dixeo-tutor .dixeo-guide-setup .btn-outline-secondary:focus,
+#dixeo-tutor .dixeo-tutor-setup .btn-outline-secondary:not(.active):hover,
+#dixeo-tutor .dixeo-tutor-setup .btn-outline-secondary:not(.active):focus,
+#dixeo-tutor .dixeo-teach-lesson__header-actions .btn:not(.playing):hover,
+#dixeo-tutor .dixeo-teach-lesson__header-actions .btn:not(.playing):focus,
+#dixeo-tutor .dixeo-practice-quiz-panel__header-actions .btn:hover,
+#dixeo-tutor .dixeo-practice-quiz-panel__header-actions .btn:focus,
+#dixeo-tutor .dixeo-guide-banner__actions .btn:hover,
+#dixeo-tutor .dixeo-guide-banner__actions .btn:focus {
+    color: var(--tutor-mode-header) !important;
+    background-color: color-mix(in srgb, var(--tutor-mode-header) 16%, #fff) !important;
+    background-image: none !important;
+    border-color: var(--tutor-mode-header) !important;
+    box-shadow: none !important;
 }
 
 .dixeo-quiz-setup {
@@ -372,6 +1037,92 @@
 
 #dixeo-tutor-quiz-pane .simplequiz2-embed__title {
     font-size: 1rem;
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .question-text .question-rank,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .question-text .question-rank {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--tutor-mode-header, #dc7800);
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container {
+    height: 100%;
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container #simplequiz-result,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container #simplequiz-result {
+    flex: 1 1 auto;
+    min-height: 100%;
+    align-items: center;
+    justify-content: center;
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container #simplequiz-result #details,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container #simplequiz-result #details {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    align-self: stretch;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container:hover {
+    background: var(--tutor-mode-footer, #fef3e6);
+    border-color: color-mix(in srgb, var(--tutor-mode-header, #dc7800) 35%, #eaecef);
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container.selected,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container.selected p,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container.selected,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container.selected p {
+    color: var(--tutor-mode-header, #dc7800);
+    border-color: var(--tutor-mode-header, #dc7800);
+    background-color: var(--tutor-mode-footer, #fef3e6);
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.check-answer,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.next-question,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.show-results,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.restart,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.finish-embed,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.check-answer,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.next-question,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.show-results,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.restart,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.finish-embed {
+    color: #fff;
+    background-color: var(--tutor-mode-header, #dc7800);
+    border: 1px solid var(--tutor-mode-header, #dc7800);
+    border-radius: 0.25rem;
+    text-transform: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.4rem 0.85rem;
+}
+
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.check-answer:hover,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.next-question:hover,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.show-results:hover,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.restart:hover,
+#dixeo-tutor .simplequiz2-embed #simplequiz_container button.finish-embed:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.check-answer:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.next-question:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.show-results:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.restart:hover,
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container button.finish-embed:hover {
+    color: #fff;
+    background-color: color-mix(in srgb, var(--tutor-mode-header, #dc7800) 82%, #000);
+    border-color: color-mix(in srgb, var(--tutor-mode-header, #dc7800) 82%, #000);
 }
 
 /* Message Bubbles */
@@ -599,8 +1350,8 @@
     outline: none;
 }
 #dixeo-tutor-input:focus {
-    border-color: #66afe9;
-    box-shadow: 0 0 3px rgba(102, 175, 233, .6);
+    border-color: var(--tutor-mode-send, #66afe9);
+    box-shadow: 0 0 3px var(--tutor-mode-send, #66afe9);
 }
 #dixeo-tutor-input.max-resize {
     overflow-y: auto; /* Show scrollbar when max-height is reached */
@@ -611,7 +1362,7 @@
     border: none;
     padding: 0;
     margin-left: 10px;
-    color: var(--tutor-main-color);
+    color: var(--tutor-mode-send, var(--tutor-main-color));
 }
 #dixeo-tutor-send[disabled],
 #dixeo-tutor-send:disabled {
@@ -626,7 +1377,7 @@
 }
 #dixeo-tutor-send i {
     font-size: 24px;
-    color: var(--tutor-main-color) !important;
+    color: var(--tutor-mode-send, var(--tutor-main-color)) !important;
 }
 
 /* Style for the date separator between messages from history */
@@ -1017,14 +1768,9 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
 }
 
 /* Practice quiz review panel (replaces structured tutor message) */
-.dixeo-tutor-message--quiz-review {
-    max-width: 100%;
-    width: 100%;
-    white-space: normal;
-}
-
-.dixeo-tutor-message-row--quiz-review {
-    width: 100%;
+#dixeo-tutor .dixeo-tutor-message--quiz-review .dixeo-tutor-message-content {
+    background: transparent !important;
+    padding: 0 !important;
 }
 
 .tutor-mode-selector {
@@ -1038,6 +1784,20 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
 
 .tutor-mode-selector .dropdown-menu {
     min-width: 14rem;
+    margin-left: -45px;
+}
+
+.tutor-mode-selector .option-select-indicator {
+    display: none;
+}
+
+.tutor-mode-selector .tutor-mode-selector__toggle {
+    color: var(--tutor-text-color);
+
+    &:hover,
+    &:focus {
+        color: var(--tutor-text-color);
+    }
 }
 
 .tutor-mode-selector--locked .tutor-mode-selector__toggle {
@@ -1046,128 +1806,102 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
     opacity: 0.65;
 }
 
-.dixeo-practice-quiz-review {
+#dixeo-tutor .dixeo-practice-quiz-review {
+    --tutor-mode-header: #dc7800;
+    --tutor-mode-footer: #fef3e6;
     text-align: left;
     font-size: 0.9rem;
     line-height: 1;
+    min-width: 14rem;
+    max-width: 100%;
+    border-color: rgba(220, 120, 0, 0.35);
 }
 
 .dixeo-practice-quiz-review * {
     line-height: 1.2;
 }
 
-.dixeo-practice-quiz-review__header {
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-}
-
-.dixeo-practice-quiz-review__title {
-    margin: 0 0 0.35rem;
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-.dixeo-practice-quiz-review__scores {
+#dixeo-tutor .dixeo-practice-quiz-review .card-header,
+#dixeo-tutor .dixeo-practice-quiz-review__header {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    color: rgba(0, 0, 0, 0.65);
-    font-size: 0.85rem;
+    flex-direction: column;
+    align-items: flex-start;
+    background: var(--tutor-mode-header) !important;
+    color: #fff !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.75rem 1rem !important;
+    height: auto;
+    margin-bottom: 0;
 }
 
-.dixeo-practice-quiz-review__best-score {
-    font-weight: 600;
-    color: var(--tutor-main-color, #02aaff);
-}
-
-.dixeo-practice-quiz-review__questions {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.dixeo-practice-quiz-review__question {
-    margin: 0 0 0.75rem;
-    padding: 0.65rem 0.75rem;
-    border-radius: 0.5rem;
-    background: rgba(0, 0, 0, 0.03);
-    border-left: 3px solid rgba(0, 0, 0, 0.15);
-}
-
-.dixeo-practice-quiz-review__question--correct {
-    border-left-color: #2e7d32;
-    background: rgba(46, 125, 50, 0.06);
-}
-
-.dixeo-practice-quiz-review__question--incorrect {
-    border-left-color: #c62828;
-    background: rgba(198, 40, 40, 0.05);
-}
-
-.dixeo-practice-quiz-review__question-head {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.35rem;
-}
-
-.dixeo-practice-quiz-review__question-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.08);
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-.dixeo-practice-quiz-review__status {
+#dixeo-tutor .dixeo-practice-quiz-review__mode-label {
+    margin: 0 0 0.25rem;
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.85) !important;
 }
 
-.dixeo-practice-quiz-review__question--correct .dixeo-practice-quiz-review__status {
-    color: #2e7d32;
-}
-
-.dixeo-practice-quiz-review__question--incorrect .dixeo-practice-quiz-review__status {
-    color: #c62828;
-}
-
-.dixeo-practice-quiz-review__question-text {
-    margin: 0 0 0.5rem;
-    font-weight: 500;
-}
-
-.dixeo-practice-quiz-review__answer-row,
-.dixeo-practice-quiz-review__feedback {
-    margin-top: 0.35rem;
-}
-
-.dixeo-practice-quiz-review__label {
-    display: block;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: rgba(0, 0, 0, 0.55);
-    margin-bottom: 0.1rem;
-}
-
-.dixeo-practice-quiz-review__value {
-    display: block;
-}
-
-.dixeo-practice-quiz-review__feedback-body {
-    font-size: 0.85rem;
-    color: rgba(0, 0, 0, 0.75);
-}
-
-.dixeo-practice-quiz-review__feedback-body p {
+#dixeo-tutor .dixeo-practice-quiz-review__title {
     margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #fff !important;
+    overflow-wrap: anywhere;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review .card-body,
+#dixeo-tutor .dixeo-practice-quiz-review__body,
+#dixeo-tutor-popup-container > section .dixeo-practice-quiz-review .card-body,
+#dixeo-tutor-popup-container > section .dixeo-practice-quiz-review__body {
+    background: var(--tutor-mode-footer) !important;
+    padding: 1rem !important;
+    display: block;
+    height: auto;
+    max-height: none;
+    flex: none;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__intro {
+    margin: 0 0 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #495057;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__intro a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__intro a:hover,
+#dixeo-tutor .dixeo-practice-quiz-review__intro a:focus {
+    color: var(--tutor-mode-header);
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__intro p {
+    margin: 0 0 0.5rem;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__intro p:last-child {
+    margin-bottom: 0;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__best-score {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #495057;
+    font-weight: 700;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__exit-score {
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #495057;
 }
 
 .dixeo-practice-quiz-review-fallback {
@@ -1178,79 +1912,348 @@ body:has(#dixeo-tutor-popup-container).jsenabled .btn-footer-popover {
     overflow: auto;
 }
 
-.dixeo-practice-quiz-review__actions {
+#dixeo-tutor .dixeo-practice-quiz-review .card-footer,
+#dixeo-tutor .dixeo-practice-quiz-review__footer {
     display: flex;
     align-items: center;
+    justify-content: flex-start;
     gap: 0.5rem;
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    background: var(--tutor-mode-footer) !important;
+    border-top: 0 !important;
+    padding: 0.75rem 1rem !important;
+    padding-top: 0 !important;
 }
 
-/* Custom lesson chat card */
-.dixeo-custom-lesson-panel {
-    min-width: 14rem;
-    max-width: 100%;
-}
-
-.dixeo-custom-lesson-panel * {
-    box-sizing: border-box;
-}
-
-.dixeo-custom-lesson-panel__label {
-    margin: 0 0 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: #6c757d;
-}
-
-.dixeo-custom-lesson-panel__title {
-    margin: 0 0 0.35rem;
-    font-size: 1rem;
-    font-weight: 600;
-    line-height: 1.3;
-    color: #212529;
-}
-
-.dixeo-custom-lesson-panel__preview {
-    margin: 0 0 0.75rem;
-    font-size: 0.875rem;
-    line-height: 1.35;
-    color: #495057;
-}
-
-.dixeo-custom-lesson-panel__actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.dixeo-custom-lesson-panel__tts-btn {
+#dixeo-tutor .dixeo-practice-quiz-review__details-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: 2.25rem;
     height: 2.25rem;
     padding: 0;
-    border: 1px solid #ced4da;
+    border: 1px solid var(--tutor-mode-header);
     border-radius: 50%;
     background: #fff;
-    color: #495057;
+    color: var(--tutor-mode-header);
     cursor: pointer;
     flex-shrink: 0;
 }
 
-.dixeo-custom-lesson-panel__tts-btn:hover {
-    background: #f8f9fa;
-    border-color: #adb5bd;
+#dixeo-tutor .dixeo-practice-quiz-review__details-btn:hover,
+#dixeo-tutor .dixeo-practice-quiz-review__details-btn:focus {
+    background: var(--tutor-mode-header);
+    border-color: var(--tutor-mode-header);
+    color: #fff;
 }
 
-.dixeo-custom-lesson-panel__tts-btn.playing {
-    background: #0d6efd;
-    border-color: #0d6efd;
+.dixeo-practice-quiz-review__details-icon {
+    font-size: 0.95rem;
+    line-height: 1;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__retake-btn {
+    color: var(--tutor-mode-header) !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: 1px solid var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-practice-quiz-review__retake-btn:hover,
+#dixeo-tutor .dixeo-practice-quiz-review__retake-btn:focus {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    border-color: var(--tutor-mode-header) !important;
+}
+
+.dixeo-tutor-message--quiz-review .dixeo-tutor-message-footer {
+    justify-content: flex-end;
+}
+
+.dixeo-tutor-message-row--quiz-review .dixeo-tutor-message-actions,
+.dixeo-tutor-message--quiz-review .dixeo-tutor-message-actions {
+    display: none !important;
+}
+
+.dixeo-practice-quiz-review-modal {
+    background: #fff;
+    color: #212529;
+    padding: 1.5rem 2rem;
+    max-height: 75vh;
+    overflow-y: auto;
+    text-align: left;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.modal-content:has(.dixeo-practice-quiz-review-modal) {
+    --tutor-mode-header: #dc7800;
+    background: #fff;
+}
+
+.modal-content:has(.dixeo-teach-lesson-modal__body) > .modal-header,
+.modal-content:has(.dixeo-practice-quiz-review-modal) > .modal-header {
+    background-color: var(--tutor-mode-header) !important;
+    color: #fff !important;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+.modal-content:has(.dixeo-teach-lesson-modal__body) > .modal-header .modal-title,
+.modal-content:has(.dixeo-practice-quiz-review-modal) > .modal-header .modal-title {
+    color: #fff !important;
+}
+
+.modal-content:has(.dixeo-teach-lesson-modal__body) > .modal-header .btn-close,
+.modal-content:has(.dixeo-practice-quiz-review-modal) > .modal-header .btn-close {
     color: #fff;
+    opacity: 0.9;
+    background: none;
+    filter: none;
+}
+
+.modal-content:has(.dixeo-teach-lesson-modal__body) > .modal-header .btn-close:hover,
+.modal-content:has(.dixeo-practice-quiz-review-modal) > .modal-header .btn-close:hover,
+.modal-content:has(.dixeo-teach-lesson-modal__body) > .modal-header .btn-close:focus,
+.modal-content:has(.dixeo-practice-quiz-review-modal) > .modal-header .btn-close:focus {
+    color: #fff;
+    opacity: 1;
+    box-shadow: none;
+}
+
+.modal-dialog-scrollable .modal-body:has(.dixeo-practice-quiz-review-modal) {
+    padding: 0;
+    background: #fff;
+}
+
+.dixeo-practice-quiz-review-modal__score {
+    margin: 0 0 1rem;
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.dixeo-practice-quiz-review-modal__exit-score {
+    margin: -0.5rem 0 1rem;
+    font-size: 0.875rem;
+    color: rgba(0, 0, 0, 0.65);
+}
+
+.dixeo-practice-quiz-review-modal__questions {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dixeo-practice-quiz-review-modal__question {
+    margin: 0 0 0.75rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: 0.5rem;
+    background: #f3eee6;
+    border-left: 3px solid #c4b8a4;
+}
+
+.dixeo-practice-quiz-review-modal__question:last-child {
+    margin-bottom: 0;
+}
+
+.dixeo-practice-quiz-review-modal__question--correct {
+    border-left-color: #2e7d32;
+    background: #dcefdc;
+}
+
+.dixeo-practice-quiz-review-modal__question--incorrect {
+    border-left-color: #c62828;
+    background: #f6d6d3;
+}
+
+.dixeo-practice-quiz-review-modal__question-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+.dixeo-practice-quiz-review-modal__question-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    background: #2e7d32;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.dixeo-practice-quiz-review-modal__question--correct .dixeo-practice-quiz-review-modal__question-num {
+    background: #2e7d32;
+}
+
+.dixeo-practice-quiz-review-modal__question--incorrect .dixeo-practice-quiz-review-modal__question-num {
+    background: #c62828;
+}
+
+.dixeo-practice-quiz-review-modal__status {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.dixeo-practice-quiz-review-modal__question--correct .dixeo-practice-quiz-review-modal__status {
+    color: #2e7d32;
+}
+
+.dixeo-practice-quiz-review-modal__question--incorrect .dixeo-practice-quiz-review-modal__status {
+    color: #c62828;
+}
+
+.dixeo-practice-quiz-review-modal__question-text {
+    margin: 0 0 0.5rem;
+    font-weight: 500;
+}
+
+.dixeo-practice-quiz-review-modal__answer-row,
+.dixeo-practice-quiz-review-modal__feedback {
+    margin-top: 0.35rem;
+}
+
+.dixeo-practice-quiz-review-modal__label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.55);
+    margin-bottom: 0.1rem;
+}
+
+.dixeo-practice-quiz-review-modal__value {
+    display: block;
+}
+
+.dixeo-practice-quiz-review-modal__feedback-body {
+    font-size: 0.85rem;
+    color: rgba(0, 0, 0, 0.75);
+}
+
+.dixeo-practice-quiz-review-modal__feedback-body p {
+    margin: 0;
+}
+
+/* Custom lesson chat card */
+#dixeo-tutor .dixeo-tutor-message--custom-lesson .dixeo-tutor-message-content {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel {
+    --tutor-mode-header: #2f9e44;
+    --tutor-mode-footer: #eef8f0;
+    min-width: 14rem;
+    max-width: 100%;
+    border-color: rgba(47, 158, 68, 0.25);
+}
+
+.dixeo-custom-lesson-panel * {
+    box-sizing: border-box;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel .card-header,
+#dixeo-tutor .dixeo-custom-lesson-panel__header {
+    background: var(--tutor-mode-header) !important;
+    color: #fff !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 0.75rem 1rem !important;
+    height: auto;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__label {
+    margin: 0 0 0.25rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.3;
+    color: #fff !important;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel .card-body,
+#dixeo-tutor .dixeo-custom-lesson-panel__body,
+#dixeo-tutor-popup-container > section .dixeo-custom-lesson-panel .card-body,
+#dixeo-tutor-popup-container > section .dixeo-custom-lesson-panel__body {
+    background: var(--tutor-mode-footer) !important;
+    padding: 1rem !important;
+    display: block;
+    height: auto;
+    max-height: none;
+    flex: none;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__preview {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.35;
+    color: #495057;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel .card-footer,
+#dixeo-tutor .dixeo-custom-lesson-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    background: var(--tutor-mode-footer) !important;
+    border-top: 0 !important;
+    padding: 0.75rem 1rem !important;
+    padding-top: 0 !important;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__tts-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: 1px solid var(--tutor-mode-header);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--tutor-mode-header);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__tts-btn:hover {
+    background: var(--tutor-mode-header);
+    border-color: var(--tutor-mode-header);
+    color: #fff;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__tts-btn.playing {
+    background: var(--tutor-mode-header);
+    border-color: var(--tutor-mode-header);
+    color: #fff;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__view-btn {
+    color: var(--tutor-mode-header) !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    border: 1px solid var(--tutor-mode-header) !important;
+}
+
+#dixeo-tutor .dixeo-custom-lesson-panel__view-btn:hover,
+#dixeo-tutor .dixeo-custom-lesson-panel__view-btn:focus {
+    color: #fff !important;
+    background-color: var(--tutor-mode-header) !important;
+    border-color: var(--tutor-mode-header) !important;
 }
 
 .dixeo-custom-lesson-panel__tts-icon {

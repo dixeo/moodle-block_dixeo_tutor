@@ -1,0 +1,32 @@
+{{!
+    @template block_dixeo_tutor/practice_quiz_panel
+
+    Chrome around the practice quiz embed: title, fullscreen, exit.
+
+    Example context (json):
+    {
+        "title": "Practice quiz: Photosynthesis"
+    }
+}}
+<div class="dixeo-practice-quiz-panel">
+    <div class="dixeo-practice-quiz-panel__header">
+        <h5 class="dixeo-practice-quiz-panel__title mb-0">{{title}}</h5>
+        <div class="dixeo-practice-quiz-panel__header-actions">
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    data-action="fullscreen"
+                    title="{{#str}}quiz_panel_fullscreen, block_dixeo_tutor{{/str}}"
+                    aria-label="{{#str}}quiz_panel_fullscreen, block_dixeo_tutor{{/str}}">
+                <i class="fa fa-expand" aria-hidden="true"></i>
+            </button>
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    data-action="close"
+                    title="{{#str}}quiz_exit, block_dixeo_tutor{{/str}}"
+                    aria-label="{{#str}}quiz_exit, block_dixeo_tutor{{/str}}">
+                <i class="fa fa-times" aria-hidden="true"></i>
+            </button>
+        </div>
+    </div>
+    <div class="dixeo-practice-quiz-panel__body"></div>
+</div>

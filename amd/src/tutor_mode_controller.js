@@ -16,17 +16,26 @@ define([
      * @param {Object} options
      * @param {number} options.courseid
      * @param {boolean} options.quizAvailable
+     * @param {boolean} options.teachAvailable
+     * @param {boolean} options.guideAvailable
      * @param {Object|null} options.quizController PracticeQuizController instance when ready.
      * @param {Object|null} options.teachController TeachController instance when ready.
+     * @param {Object|null} options.guideController GuideController instance when ready.
      */
     const TutorModeController = function(options) {
         this.courseid = options.courseid;
         this.quizAvailable = !!options.quizAvailable;
+        this.teachAvailable = !!options.teachAvailable;
+        this.guideAvailable = !!options.guideAvailable;
         this.quizController = options.quizController || null;
         this.teachController = options.teachController || null;
+        this.guideController = options.guideController || null;
         this._persistCount = 0;
         this._externalSelectorLocked = false;
         this._messagingLockHandler = null;
+        this._afterPersistHandler = null;
+        this._expiryTimer = null;
+        this._lastActivity = parseInt(options.lastActivity, 10) || 0;
 
         this.root = document.querySelector('.tutor-mode-selector');
         this.select = document.getElementById('tutormode');
@@ -37,12 +46,17 @@ define([
         }
 
         this._applyVisualState(this.currentMode);
+        this._wireGuideBanner();
+        this._syncExpiryTimer();
 
         if (this.currentMode === MODES.QUIZ && this.quizAvailable) {
             this._openQuizWhenReady();
         }
-        if (this.currentMode === MODES.TEACH) {
+        if (this.currentMode === MODES.TEACH && this.teachAvailable) {
             this._openTeachWhenReady();
+        }
+        if (this.currentMode === MODES.GUIDE && this.guideAvailable) {
+            this._openGuideWhenReady();
         }
     };
 
@@ -58,10 +72,42 @@ define([
     };
 
     /**
-     * @param {function(boolean): void} handler Called with true while mode preference is saving.
+     * True while a mode preference is saving, or while Quiz me / Teach me is active.
+     *
+     * @return {boolean}
+     */
+    TutorModeController.prototype.isMessagingLocked = function() {
+        if (this._persistCount > 0
+            || this.currentMode === MODES.QUIZ
+            || this.currentMode === MODES.TEACH) {
+            return true;
+        }
+        if (this.guideController
+            && this.guideController.active
+            && !this.guideController.sessionActive) {
+            return true;
+        }
+        if (this.guideController
+            && typeof this.guideController.isReviewing === 'function'
+            && this.guideController.isReviewing()) {
+            return true;
+        }
+        return false;
+    };
+
+    /**
+     * @param {function(boolean): void} handler Called with true while composer messaging should stay disabled.
      */
     TutorModeController.prototype.setMessagingLockHandler = function(handler) {
         this._messagingLockHandler = typeof handler === 'function' ? handler : null;
+        this._syncMessagingLock();
+    };
+
+    /**
+     * @param {function(string): void} handler Called after a mode preference save finishes.
+     */
+    TutorModeController.prototype.setAfterPersistHandler = function(handler) {
+        this._afterPersistHandler = typeof handler === 'function' ? handler : null;
     };
 
     TutorModeController.prototype.setQuizController = function(controller) {
@@ -73,8 +119,15 @@ define([
 
     TutorModeController.prototype.setTeachController = function(controller) {
         this.teachController = controller;
-        if (this.currentMode === MODES.TEACH) {
+        if (this.currentMode === MODES.TEACH && this.teachAvailable) {
             this._openTeachWhenReady();
+        }
+    };
+
+    TutorModeController.prototype.setGuideController = function(controller) {
+        this.guideController = controller;
+        if (this.currentMode === MODES.GUIDE && this.guideAvailable) {
+            this._openGuideWhenReady();
         }
     };
 
@@ -86,6 +139,10 @@ define([
         }
         this.currentMode = mode;
         this._applyVisualState(mode);
+        if (this._isExpirableMode(mode)) {
+            this._lastActivity = Math.floor(Date.now() / 1000);
+        }
+        this._syncExpiryTimer();
         if (!opts.skipPersist) {
             this._persistMode(mode);
         }
@@ -120,12 +177,37 @@ define([
         this.teachController.openSetup();
     };
 
+    TutorModeController.prototype._openGuideWhenReady = function() {
+        if (!this.guideController || typeof this.guideController.openSetup !== 'function') {
+            return;
+        }
+        if (typeof this.guideController.hasPersistedSession === 'function'
+            && this.guideController.hasPersistedSession()) {
+            return;
+        }
+        if (this.guideController.sessionActive) {
+            if (typeof this.guideController.onGuideModeEntered === 'function') {
+                this.guideController.onGuideModeEntered();
+            }
+            return;
+        }
+        this.guideController.openSetup();
+    };
+
     TutorModeController.prototype._closeModePanes = function() {
         if (this.quizController && typeof this.quizController.closeQuizPane === 'function') {
             this.quizController.closeQuizPane(false);
         }
         if (this.teachController && typeof this.teachController.closeTeachPane === 'function') {
             this.teachController.closeTeachPane(false);
+        }
+        if (this.guideController && typeof this.guideController.closeGuidePane === 'function') {
+            if (this.guideController.sessionActive
+                && typeof this.guideController._endSession === 'function') {
+                this.guideController._endSession({skipModeReset: true});
+            } else {
+                this.guideController.closeGuidePane();
+            }
         }
     };
 
@@ -145,6 +227,10 @@ define([
         this._applyVisualState(mode);
         this._persistMode(mode);
         this._routeMode(mode);
+        if (this._isExpirableMode(mode)) {
+            this._lastActivity = Math.floor(Date.now() / 1000);
+        }
+        this._syncExpiryTimer();
     };
 
     TutorModeController.prototype._isSelectorLocked = function() {
@@ -181,10 +267,36 @@ define([
         this._setSelectorLocked(locked);
     };
 
+    TutorModeController.prototype._wireGuideBanner = function() {
+        const exitBtn = document.querySelector('#dixeo-tutor [data-action="exit-guide"]');
+        if (!exitBtn) {
+            return;
+        }
+        exitBtn.addEventListener('click', () => {
+            if (this.guideController
+                && typeof this.guideController.isReviewing === 'function'
+                && this.guideController.isReviewing()
+                && typeof this.guideController.exitReview === 'function') {
+                this.guideController.exitReview();
+                return;
+            }
+            if (this.guideController && typeof this.guideController.exitGuide === 'function') {
+                this.guideController.exitGuide();
+                return;
+            }
+            this.resetToNormal();
+        });
+    };
+
     TutorModeController.prototype._applyVisualState = function(mode) {
         if (this.root) {
             this.root.dataset.currentMode = mode;
         }
+        const tutorRoot = document.getElementById('dixeo-tutor');
+        if (tutorRoot) {
+            tutorRoot.setAttribute('data-tutor-mode', mode);
+        }
+        this._syncMessagingLock();
     };
 
     TutorModeController.prototype._notifyMessagingLock = function(locked) {
@@ -193,11 +305,15 @@ define([
         }
     };
 
+    TutorModeController.prototype._syncMessagingLock = function() {
+        this._notifyMessagingLock(this.isMessagingLocked());
+    };
+
     TutorModeController.prototype._beginPersist = function() {
         this._persistCount += 1;
         if (this._persistCount === 1) {
             this._syncSelectorLocked();
-            this._notifyMessagingLock(true);
+            this._syncMessagingLock();
         }
     };
 
@@ -207,7 +323,7 @@ define([
         }
         if (this._persistCount === 0) {
             this._syncSelectorLocked();
-            this._notifyMessagingLock(false);
+            this._syncMessagingLock();
         }
     };
 
@@ -223,6 +339,9 @@ define([
             // Preference sync failure is non-fatal; client mode still applies this session.
         }).always(() => {
             this._endPersist();
+            if (typeof this._afterPersistHandler === 'function') {
+                this._afterPersistHandler(this.currentMode);
+            }
         });
     };
 
@@ -231,20 +350,90 @@ define([
             if (this.teachController && typeof this.teachController.closeTeachPane === 'function') {
                 this.teachController.closeTeachPane(false);
             }
+            if (this.guideController && typeof this.guideController.closeGuidePane === 'function') {
+                this.guideController.closeGuidePane();
+            }
             this._openQuizWhenReady();
             return;
         }
-        if (mode === MODES.TEACH) {
+        if (mode === MODES.TEACH && this.teachAvailable) {
             if (this.quizController && typeof this.quizController.closeQuizPane === 'function') {
                 this.quizController.closeQuizPane(false);
             }
+            if (this.guideController && typeof this.guideController.closeGuidePane === 'function') {
+                this.guideController.closeGuidePane();
+            }
             this._openTeachWhenReady();
+            return;
+        }
+        if (mode === MODES.GUIDE && this.guideAvailable) {
+            if (this.quizController && typeof this.quizController.closeQuizPane === 'function') {
+                this.quizController.closeQuizPane(false);
+            }
+            if (this.teachController && typeof this.teachController.closeTeachPane === 'function') {
+                this.teachController.closeTeachPane(false);
+            }
+            this._openGuideWhenReady();
             return;
         }
         this._closeModePanes();
     };
 
+    TutorModeController.prototype.noteActivity = function() {
+        this._lastActivity = Math.floor(Date.now() / 1000);
+        this._syncExpiryTimer();
+    };
+
+    TutorModeController.prototype._isExpirableMode = function(mode) {
+        return mode === MODES.GUIDE || mode === MODES.QUIZ || mode === MODES.TEACH;
+    };
+
+    TutorModeController.prototype._clearExpiryTimer = function() {
+        if (this._expiryTimer) {
+            clearTimeout(this._expiryTimer);
+            this._expiryTimer = null;
+        }
+    };
+
+    TutorModeController.prototype._syncExpiryTimer = function() {
+        this._clearExpiryTimer();
+        if (!this._isExpirableMode(this.currentMode)) {
+            return;
+        }
+        if (!this._lastActivity) {
+            this._lastActivity = Math.floor(Date.now() / 1000);
+        }
+        const remainingMs = (3600 - (Math.floor(Date.now() / 1000) - this._lastActivity)) * 1000;
+        if (remainingMs <= 0) {
+            this.resetToNormal();
+            return;
+        }
+        this._expiryTimer = setTimeout(() => {
+            this._expiryTimer = null;
+            this.resetToNormal();
+        }, remainingMs);
+    };
+
     TutorModeController.prototype.resetToNormal = function() {
+        // Keep an in-progress quiz/lesson open across the idle timer; intentional
+        // exits clear storage first, so this does not block leaving those modes.
+        if (this.currentMode === MODES.QUIZ
+                && this.quizController
+                && typeof this.quizController.hasPersistedSession === 'function'
+                && this.quizController.hasPersistedSession()) {
+            return;
+        }
+        if (this.currentMode === MODES.TEACH
+                && this.teachController
+                && typeof this.teachController.hasPersistedSession === 'function'
+                && this.teachController.hasPersistedSession()) {
+            return;
+        }
+        if (this.guideController
+            && this.guideController.sessionActive
+            && typeof this.guideController.endSessionFromModeExpiry === 'function') {
+            this.guideController.endSessionFromModeExpiry();
+        }
         this.setMode(MODES.NORMAL);
     };
 

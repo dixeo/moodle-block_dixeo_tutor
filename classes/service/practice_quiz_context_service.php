@@ -38,7 +38,7 @@ class practice_quiz_context_service {
      *
      * @param int $courseid
      * @param int $userid
-     * @param array $payload title, questionsjson, bestattemptjson, exitscore, total.
+     * @param array $payload title, questionsjson, bestattemptjson, exitscore, total, introhtml.
      * @return operation_result|null
      */
     public function submit_review(
@@ -85,7 +85,7 @@ class practice_quiz_context_service {
     /**
      * Build structured review context from client payload.
      *
-     * @param array $payload Must include title, questionsjson, bestattemptjson; optional exitscore, total.
+     * @param array $payload Must include title, questionsjson, bestattemptjson; optional exitscore, total, introhtml.
      * @param int $courseid Course ID for feedback formatting context.
      * @return array|null Review context object or null when invalid.
      */
@@ -122,7 +122,8 @@ class practice_quiz_context_service {
             ],
             $title,
             $context,
-            $questionsjson
+            $questionsjson,
+            trim((string) ($payload['introhtml'] ?? ''))
         );
 
         $review['instructions'] = get_string('quiz_review_ai_instructions', 'block_dixeo_tutor', (object) [
@@ -136,7 +137,7 @@ class practice_quiz_context_service {
 
     /**
      * Progressively shrink review context until encoded JSON fits the limit.
-     * Order: full payload → strip feedbackHtml → drop summary questions → drop questionsJson.
+     * Order: full payload → strip feedbackHtml → drop summary questions → strip introhtml → drop questionsJson.
      *
      * @param array $review Review payload from {@see practice_quiz_review_builder::build()}.
      * @return array|null
@@ -160,7 +161,13 @@ class practice_quiz_context_service {
             return $nosummary;
         }
 
-        $noretake = $nosummary;
+        $nointro = $nosummary;
+        $nointro['introhtml'] = '';
+        if ($this->fits_context($nointro)) {
+            return $nointro;
+        }
+
+        $noretake = $nointro;
         unset($noretake['questionsJson']);
         if ($this->fits_context($noretake)) {
             return $noretake;

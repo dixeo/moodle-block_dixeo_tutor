@@ -47,6 +47,7 @@ class practice_quiz_review_builder {
      * @param string $title Quiz title.
      * @param \context|null $context Course context for formatting feedback HTML.
      * @param string $questionsjson Raw questions JSON for retake and tutor context.
+     * @param string $introhtml Formatted quiz introduction HTML.
      * @return array Review payload array (not yet JSON-encoded).
      */
     public static function build(
@@ -55,7 +56,8 @@ class practice_quiz_review_builder {
         array $exitattempt,
         string $title,
         ?\context $context = null,
-        string $questionsjson = ''
+        string $questionsjson = '',
+        string $introhtml = ''
     ): array {
         $bestscore = (int) ($bestattempt['score'] ?? 0);
         $besttotal = (int) ($bestattempt['total'] ?? count($questions));
@@ -102,6 +104,7 @@ class practice_quiz_review_builder {
             'schema' => tutor_context_schema::SCHEMA_PRACTICE_QUIZ_REVIEW,
             'version' => self::VERSION,
             'title' => $title,
+            'introhtml' => $introhtml,
             'questionsJson' => $questionsjson,
             'bestAttempt' => self::normalize_best_attempt_state($bestattempt, $besttotal),
             'exitAttempt' => [

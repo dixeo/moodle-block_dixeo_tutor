@@ -138,6 +138,46 @@ class tutor_proactive_context_service {
     }
 
     /**
+     * Queue a Socratic opening turn when the learner submits Guide me setup.
+     *
+     * Duplicate events are ignored until the current queue is flushed.
+     *
+     * @param int $userid
+     * @param int $courseid
+     * @param string $userprompt Learner's stated guidance need from setup.
+     * @return void
+     */
+    public function queue_guide_started(int $userid, int $courseid, string $userprompt = ''): void {
+        if (!$this->can_use_tutor($userid, $courseid)) {
+            return;
+        }
+
+        $now = time();
+        $record = $this->get_or_create_record($userid, $courseid, $now);
+        foreach ($this->decode_queue((string) ($record->message ?? '')) as $event) {
+            if (is_array($event) && ($event['type'] ?? '') === 'guide_started') {
+                return;
+            }
+        }
+
+        $prompt = trim($userprompt);
+        if ($prompt !== '') {
+            $prompt = \core_text::substr($prompt, 0, 500);
+        }
+
+        $event = [
+            'type' => 'guide_started',
+            'time' => $now,
+        ];
+        if ($prompt !== '') {
+            $event['userPrompt'] = $prompt;
+        }
+
+        $this->append_event($record, $event);
+        $this->save_record($record);
+    }
+
+    /**
      * Handle quiz grade events for mod_quiz only.
      *
      * @param user_graded $event The event.
@@ -258,9 +298,20 @@ class tutor_proactive_context_service {
             throw $e;
         }
 
-        $record->message = '';
-        $record->timemodified = time();
-        $this->save_record($record);
+        $fresh = $this->get_record($userid, $courseid);
+        if ($fresh) {
+            $latest = $this->decode_queue((string) ($fresh->message ?? ''));
+            foreach ($events as $flushed) {
+                foreach ($latest as $index => $queued) {
+                    if ($queued === $flushed) {
+                        unset($latest[$index]);
+                        break;
+                    }
+                }
+            }
+            $fresh->message = $this->encode_queue(array_values($latest));
+            $this->save_record($fresh);
+        }
 
         return $result;
     }
@@ -466,6 +517,10 @@ class tutor_proactive_context_service {
      * @return string
      */
     private function encode_queue(array $events): string {
+        if ($events === []) {
+            return '';
+        }
+
         $json = json_encode($events, JSON_UNESCAPED_UNICODE);
         if ($json === false) {
             return '[]';
@@ -557,6 +612,12 @@ class tutor_proactive_context_service {
                 'quizname' => (string) ($event['quizname'] ?? ''),
                 'grade' => (string) ($event['grade'] ?? ''),
                 'maxgrade' => (string) ($event['maxgrade'] ?? ''),
+            ];
+        }
+
+        if ($type === 'guide_started') {
+            return (object) [
+                'userprompt' => (string) ($event['userPrompt'] ?? ''),
             ];
         }
 
