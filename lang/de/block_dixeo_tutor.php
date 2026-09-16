@@ -95,7 +95,6 @@ $string['modequiz'] = 'Quiz mich';
 $string['modequiz_desc'] = 'Üben Sie mit einem aus dem Kursinhalt generierten Quiz.';
 $string['modeteach'] = 'Unterrichte mich';
 $string['modeteach_desc'] = 'Fordern Sie eine individuelle Lektion zu einem Thema Ihrer Wahl an.';
-$string['notenrolled'] = 'Sie müssen in diesen Kurs eingeschrieben sein, um den Tutor zu nutzen.';
 $string['placeholder'] = 'Nachricht eingeben...';
 $string['pluginname'] = 'Dixeo Student Tutor';
 $string['practice_quiz_label'] = 'Übungsquiz';

@@ -95,7 +95,6 @@ $string['modequiz'] = 'Teste-moi';
 $string['modequiz_desc'] = 'Entraînez-vous avec un quiz généré à partir du contenu du cours.';
 $string['modeteach'] = 'Enseigne-moi';
 $string['modeteach_desc'] = 'Demandez une leçon personnalisée sur un sujet de votre choix.';
-$string['notenrolled'] = 'Vous devez être inscrit à ce cours pour utiliser le tuteur.';
 $string['placeholder'] = 'Tapez votre message...';
 $string['pluginname'] = 'Dixeo Tuteur';
 $string['practice_quiz_label'] = 'Quiz d\'entraînement';

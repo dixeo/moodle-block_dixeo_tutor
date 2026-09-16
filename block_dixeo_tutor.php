@@ -181,9 +181,8 @@ class block_dixeo_tutor extends block_base {
         $this->content->footer = '';
         $courseid = $this->page->course->id;
 
-        // Check if user has permission to use the tutor.
+        // Users without permission to use the tutor get no block at all.
         if (!has_capability('block/dixeo_tutor:talktotutor', \context_course::instance($courseid))) {
-            $this->content->text = $OUTPUT->notification(get_string('notenrolled', 'block_dixeo_tutor'), 'info');
             return $this->content;
         }
 
@@ -317,6 +316,8 @@ class block_dixeo_tutor extends block_base {
 
     /**
      * Build course / section / activity hierarchy for practice quiz setup.
+     * Only sections and activities the given user may access are listed: hidden or access-restricted
+     * ones are skipped, so the tree never leaks names or cmids the user cannot see on the course page.
      * Activity rows omit module types excluded by {@see is_quiz_topic_excluded()} (admin setting,
      * hardcoded types such as h5pactivity, and any mod name containing "certificate").
      * Tutor page visibility is not applied here. Sections with no included activities are omitted.
@@ -334,6 +335,10 @@ class block_dixeo_tutor extends block_base {
             if ((int) $section->section === 0) {
                 continue;
             }
+            // Covers hidden sections, unmet restrictions and delegated subsections of a hidden parent.
+            if (!$section->uservisible) {
+                continue;
+            }
             $sectionmap[(int) $section->section] = [
                 'num' => (int) $section->section,
                 'name' => get_section_name($course, $section),
@@ -342,6 +347,9 @@ class block_dixeo_tutor extends block_base {
         }
 
         foreach ($modinfo->get_cms() as $cm) {
+            if (!$cm->uservisible) {
+                continue;
+            }
             if (self::is_quiz_topic_excluded($cm->modname)) {
                 continue;
             }

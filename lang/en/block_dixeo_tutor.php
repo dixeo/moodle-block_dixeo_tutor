@@ -95,7 +95,6 @@ $string['modequiz'] = 'Quiz me';
 $string['modequiz_desc'] = 'Practice with a quiz generated from course content.';
 $string['modeteach'] = 'Teach me';
 $string['modeteach_desc'] = 'Request a custom lesson on a topic of your choice.';
-$string['notenrolled'] = 'You must be enrolled in this course to use the tutor.';
 $string['placeholder'] = 'Type your message...';
 $string['pluginname'] = 'Dixeo Student Tutor';
 $string['practice_quiz_label'] = 'Practice quiz';

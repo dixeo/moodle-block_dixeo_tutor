@@ -95,7 +95,6 @@ $string['modequiz'] = 'Testa-me';
 $string['modequiz_desc'] = 'Pratique com um questionário gerado a partir do conteúdo da disciplina.';
 $string['modeteach'] = 'Ensina-me';
 $string['modeteach_desc'] = 'Peça uma lição personalizada sobre um tema à sua escolha.';
-$string['notenrolled'] = 'Tem de estar inscrito nesta disciplina para usar o tutor.';
 $string['placeholder'] = 'Escreva a sua mensagem...';
 $string['pluginname'] = 'Tutor Dixeo para Estudantes';
 $string['practice_quiz_label'] = 'Questionário de prática';
