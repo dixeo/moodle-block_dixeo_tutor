@@ -79,7 +79,8 @@ final class course_hierarchy_visibility_test extends advanced_testcase {
         }
 
         $sectiontwo = get_fast_modinfo($this->course->id)->get_section_info(2);
-        formatactions::section($this->course->id)->set_visibility($sectiontwo, false);
+        // Moodle 4.5 has no sectionactions::set_visibility(); use update() instead.
+        formatactions::section($this->course)->update($sectiontwo, ['visible' => 0]);
         rebuild_course_cache($this->course->id, true);
     }
 
