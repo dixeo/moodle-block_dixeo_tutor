@@ -245,23 +245,42 @@ define([
 
     /**
      * Persist playing phase + optional in-progress answer pointer.
+     * JobId → re-finalize after reload; quizSnapshot → reopen a context retake.
      *
      * @param {Object|null} [playerState]
      * @private
      */
     PracticeQuizController.prototype._persistPlayingState = function(playerState) {
-        if (!this._resumeJobId) {
-            return;
-        }
         const payload = {
             phase: 'playing',
-            jobId: this._resumeJobId,
             title: this.quizTitle,
-            topictitle: this._resumeTopicTitle,
+            topictitle: this._resumeTopicTitle || this.quizTitle,
             expectedCount: this.expectedCount,
         };
+        if (this._resumeJobId) {
+            payload.jobId = this._resumeJobId;
+        } else if (this.questionsJson) {
+            // Retake from a review card has no generation job — snapshot questions.
+            payload.quizSnapshot = {
+                title: this.quizTitle || '',
+                introhtml: this.introhtml || '',
+                questionsJson: this.questionsJson,
+            };
+        } else {
+            return;
+        }
         if (playerState) {
             payload.playerState = playerState;
+        }
+        if (this.ui && typeof this.ui.getReturnToCard === 'function') {
+            const returnCard = this.ui.getReturnToCard();
+            if (returnCard) {
+                payload.returnCard = returnCard;
+            } else if (this.quizTitle) {
+                payload.returnCard = {type: 'quiz', title: this.quizTitle};
+            }
+        } else if (this.quizTitle) {
+            payload.returnCard = {type: 'quiz', title: this.quizTitle};
         }
         this.persistState(payload);
     };
@@ -337,6 +356,19 @@ define([
         });
     };
 
+    PracticeQuizController.prototype._restoreReturnCardFromStorage = function(saved) {
+        if (!this.ui || typeof this.ui.setReturnToMessageRow !== 'function') {
+            return;
+        }
+        if (saved.returnCard) {
+            this.ui.setReturnToMessageRow(saved.returnCard);
+            return;
+        }
+        if (saved.phase === 'playing' && saved.title) {
+            this.ui.setReturnToMessageRow({type: 'quiz', title: saved.title});
+        }
+    };
+
     PracticeQuizController.prototype.tryResumeFromStorage = async function() {
         const saved = sessionStorage.load(STORAGE_MODE, this.userid, this.courseid);
         if (!saved || !saved.phase) {
@@ -347,6 +379,7 @@ define([
             this._setModeSelectorLocked(true);
         }
 
+        this._restoreReturnCardFromStorage(saved);
         this.showQuizPane();
 
         if (saved.phase === 'generating' && saved.jobId) {
@@ -372,6 +405,29 @@ define([
                     this._resumeTopicTitle,
                     generationToken,
                     saved.playerState || null
+                );
+            } catch (e) {
+                await this.handleError(e);
+            }
+            return;
+        }
+
+        if (saved.phase === 'playing' && saved.quizSnapshot && saved.quizSnapshot.questionsJson) {
+            if (this.modeController && typeof this.modeController.setMode === 'function') {
+                this.modeController.setMode('quiz', {skipRouting: true});
+            }
+            this.expectedCount = saved.expectedCount || 0;
+            this._resumeTopicTitle = saved.topictitle || saved.title
+                || saved.quizSnapshot.title || '';
+            try {
+                await this.mountPlayer(
+                    saved.quizSnapshot.title || saved.title || '',
+                    saved.quizSnapshot.questionsJson,
+                    saved.playerState || null,
+                    {
+                        introhtml: saved.quizSnapshot.introhtml || '',
+                        topictitle: this._resumeTopicTitle,
+                    }
                 );
             } catch (e) {
                 await this.handleError(e);
