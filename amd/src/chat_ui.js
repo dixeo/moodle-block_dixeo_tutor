@@ -174,7 +174,6 @@ define([
             if (!container) {
                 return;
             }
-            this._retagGuideLanesFromWindows();
             const view = this._messageView || 'standard';
             const filter = this._guideViewFilter;
             if (view === 'standard') {
@@ -191,6 +190,7 @@ define([
             if (typeof this.syncGuideCompletionButtons === 'function') {
                 this.syncGuideCompletionButtons();
             }
+            this._updateLoadOlderVisibility();
         }
 
         /**
@@ -236,10 +236,16 @@ define([
                 // Untimed guide-tagged rows still belong to the session once titled.
                 return true;
             }
-            if (filter.startedAt && time < filter.startedAt) {
+            const start = filter.startedAt || 0;
+            const end = filter.timeEnded || 0;
+            // Collapsed card timestamps (start === end) are not a real window — ignore them.
+            if (start && end && start === end) {
+                return true;
+            }
+            if (start && time < start) {
                 return false;
             }
-            if (filter.timeEnded && time > filter.timeEnded) {
+            if (end && time > end) {
                 return false;
             }
             return true;
@@ -255,6 +261,92 @@ define([
         }
 
         /**
+         * Bounds of a guide session from currently loaded guide-lane turns.
+         *
+         * @param {string} title
+         * @param {string} description
+         * @returns {{startedAt: number, timeEnded: number}|null}
+         */
+        getGuideSessionBounds(title, description) {
+            const container = this.dom.messagesContainer;
+            if (!container || !title) {
+                return null;
+            }
+            let startedAt = 0;
+            let timeEnded = 0;
+            container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide"]').forEach((row) => {
+                if (String(row.dataset.guideTitle || '') !== String(title)) {
+                    return;
+                }
+                if (description
+                        && String(row.dataset.guideDescription || '') !== String(description || '')) {
+                    return;
+                }
+                const time = this._rowMessageTime(row);
+                if (!time) {
+                    return;
+                }
+                if (!startedAt || time < startedAt) {
+                    startedAt = time;
+                }
+                if (time > timeEnded) {
+                    timeEnded = time;
+                }
+            });
+            if (!startedAt) {
+                return null;
+            }
+            return {startedAt: startedAt, timeEnded: timeEnded || startedAt};
+        }
+
+        /**
+         * True when the loaded window covers the start of this guide session
+         * (or history is exhausted). Used to stop silent paging in review.
+         *
+         * @param {string} title
+         * @param {string} description
+         * @returns {boolean}
+         */
+        isGuideSessionFullyLoaded(title, description) {
+            const container = this.dom.messagesContainer;
+            if (!container || !title) {
+                return true;
+            }
+            const matching = Array.from(
+                container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide"]')
+            ).filter((row) => {
+                if (String(row.dataset.guideTitle || '') !== String(title)) {
+                    return false;
+                }
+                if (description
+                        && String(row.dataset.guideDescription || '') !== String(description || '')) {
+                    return false;
+                }
+                return true;
+            });
+            if (!matching.length) {
+                // Session not in the loaded window yet — keep paging.
+                return false;
+            }
+            const oldest = Array.from(
+                container.querySelectorAll('.dixeo-tutor-message-row')
+            ).find((row) => (row.dataset.lane || '') !== 'guide-summary');
+            if (!oldest) {
+                return true;
+            }
+            // Oldest row still belongs to this session → more turns may exist further back.
+            if (String(oldest.dataset.guideTitle || '') === String(title)
+                    && (!description
+                        || String(oldest.dataset.guideDescription || '')
+                            === String(description || ''))) {
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * Session clusters from metadata-tagged guide rows (no open-ended time stretch).
+         *
          * @returns {Array<{title: string, description: string, startedAt: number, timeEnded: number, anchor: HTMLElement|null}>}
          * @private
          */
@@ -264,14 +356,8 @@ define([
                 return [];
             }
 
-            const assistantMarks = [];
+            const marks = [];
             container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
-                if (row.dataset.lane === 'guide-summary') {
-                    return;
-                }
-                if (!row.querySelector('.dixeo-tutor-message-assistant')) {
-                    return;
-                }
                 if (row.dataset.lane !== 'guide' || !row.dataset.guideTitle) {
                     return;
                 }
@@ -279,14 +365,14 @@ define([
                 if (!time) {
                     return;
                 }
-                assistantMarks.push({
+                marks.push({
                     title: row.dataset.guideTitle,
                     description: row.dataset.guideDescription || '',
                     time: time,
                     row: row,
                 });
             });
-            assistantMarks.sort((a, b) => a.time - b.time);
+            marks.sort((a, b) => a.time - b.time);
 
             const clusters = [];
             let cluster = null;
@@ -297,7 +383,7 @@ define([
                 clusters.push(cluster);
                 cluster = null;
             };
-            assistantMarks.forEach((mark) => {
+            marks.forEach((mark) => {
                 if (!cluster
                         || cluster.title !== mark.title
                         || cluster.description !== mark.description) {
@@ -315,32 +401,6 @@ define([
                 cluster.anchor = mark.row;
             });
             flush();
-
-            // Extend end to cover user replies until the next session (or +15 min).
-            for (let i = 0; i < clusters.length; i++) {
-                const next = clusters[i + 1];
-                if (next) {
-                    clusters[i].timeEnded = Math.max(clusters[i].timeEnded, next.startedAt - 1);
-                } else {
-                    clusters[i].timeEnded = Math.max(clusters[i].timeEnded, clusters[i].timeEnded + 15 * 60);
-                }
-                // Prefer the last guide-lane row in the window as insert anchor.
-                let lastInWindow = clusters[i].anchor;
-                container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
-                    if (row.dataset.lane !== 'guide') {
-                        return;
-                    }
-                    if (String(row.dataset.guideTitle || '') !== String(clusters[i].title)) {
-                        return;
-                    }
-                    const time = this._rowMessageTime(row);
-                    if (!time || time < clusters[i].startedAt || time > clusters[i].timeEnded) {
-                        return;
-                    }
-                    lastInWindow = row;
-                });
-                clusters[i].anchor = lastInWindow;
-            }
 
             return clusters;
         }
@@ -362,41 +422,50 @@ define([
                 return;
             }
 
-            const existingKeys = new Set();
-            container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide-summary"]').forEach((row) => {
-                existingKeys.add(
-                    String(row.dataset.guideTitle || '') + '\n' + String(row.dataset.guideDescription || '')
-                );
+            // Cards follow currently loaded guide turns only (initial page = 15).
+            // localStorage supplies times/metadata; it must not invent orphan cards.
+            const byKey = new Map();
+            this._collectGuideSessionClusters().forEach((cluster) => {
+                const key = String(cluster.title) + '\n' + String(cluster.description || '');
+                byKey.set(key, {
+                    title: cluster.title,
+                    description: cluster.description || '',
+                    startedAt: cluster.startedAt || 0,
+                    timeEnded: cluster.timeEnded || 0,
+                    anchor: cluster.anchor,
+                });
             });
 
             const providerSessions = (typeof this._guideSummarySessionsProvider === 'function')
                 ? (this._guideSummarySessionsProvider() || [])
                 : [];
-            const byKey = new Map();
             providerSessions.forEach((session) => {
                 if (!session || !session.title) {
                     return;
                 }
                 const key = String(session.title) + '\n' + String(session.description || '');
-                byKey.set(key, {
-                    title: session.title,
-                    description: session.description || '',
-                    startedAt: session.startedAt || 0,
-                    timeEnded: session.timeEnded || 0,
-                    anchor: null,
-                });
-            });
-
-            this._collectGuideSessionClusters().forEach((cluster) => {
-                const key = String(cluster.title) + '\n' + String(cluster.description || '');
                 const prev = byKey.get(key);
-                if (prev) {
-                    prev.startedAt = prev.startedAt || cluster.startedAt;
-                    prev.timeEnded = Math.max(prev.timeEnded || 0, cluster.timeEnded || 0);
-                    prev.anchor = cluster.anchor;
+                if (!prev) {
                     return;
                 }
-                byKey.set(key, cluster);
+                // Prefer cluster bounds from loaded turns. Ignore collapsed provider windows.
+                if (!prev.startedAt && session.startedAt) {
+                    prev.startedAt = session.startedAt;
+                }
+                const providerEnd = session.timeEnded || 0;
+                const providerStart = session.startedAt || 0;
+                if (providerEnd && providerEnd !== providerStart) {
+                    prev.timeEnded = Math.max(prev.timeEnded || 0, providerEnd);
+                }
+            });
+
+            // Drop cards whose session turns are not in the loaded window.
+            container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide-summary"]').forEach((row) => {
+                const key = String(row.dataset.guideTitle || '') + '\n'
+                    + String(row.dataset.guideDescription || '');
+                if (!byKey.has(key)) {
+                    row.remove();
+                }
             });
 
             byKey.forEach((session, key) => {
@@ -407,7 +476,15 @@ define([
                         + String(row.dataset.guideDescription || '') === key;
                 });
                 if (existing) {
-                    // After older pages load, move a bottom-appended card next to its session.
+                    // Keep card timestamps in sync with loaded session turns.
+                    if (session.startedAt) {
+                        existing.dataset.guideStarted = String(session.startedAt);
+                    }
+                    if (session.timeEnded && session.timeEnded !== session.startedAt) {
+                        existing.dataset.guideEnded = String(session.timeEnded);
+                    } else if (session.timeEnded) {
+                        existing.dataset.guideEnded = String(session.timeEnded);
+                    }
                     if (session.anchor && session.anchor.parentNode === container
                             && existing.previousElementSibling !== session.anchor) {
                         if (session.anchor.nextSibling) {
@@ -436,7 +513,6 @@ define([
                 } else {
                     container.appendChild(node);
                 }
-                existingKeys.add(key);
             });
         }
 
@@ -445,142 +521,6 @@ define([
          */
         setGuideSummarySessionsProvider(provider) {
             this._guideSummarySessionsProvider = typeof provider === 'function' ? provider : null;
-        }
-
-        /**
-         * Tag user turns that fall inside known guide sessions (from summary cards /
-         * assistant guide_assistant markers). Never un-tags guide rows, and never uses
-         * the active view filter alone (that would pull in ordinary chat history).
-         *
-         * @private
-         */
-        _retagGuideLanesFromWindows() {
-            const container = this.dom.messagesContainer;
-            if (!container) {
-                return;
-            }
-
-            const windows = [];
-
-            container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide-summary"]').forEach((row) => {
-                const start = parseInt(row.dataset.guideStarted || '0', 10) || 0;
-                const end = parseInt(row.dataset.guideEnded || '0', 10) || 0;
-                if (!row.dataset.guideTitle || !start) {
-                    return;
-                }
-                windows.push({
-                    title: row.dataset.guideTitle,
-                    description: row.dataset.guideDescription || '',
-                    start: start,
-                    end: end || Number.MAX_SAFE_INTEGER,
-                });
-            });
-
-            const assistantMarks = [];
-            container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
-                if (!row.querySelector('.dixeo-tutor-message-assistant')) {
-                    return;
-                }
-                if (row.dataset.lane !== 'guide' || !row.dataset.guideTitle) {
-                    return;
-                }
-                const time = this._rowMessageTime(row);
-                if (!time) {
-                    return;
-                }
-                assistantMarks.push({
-                    title: row.dataset.guideTitle,
-                    description: row.dataset.guideDescription || '',
-                    time: time,
-                });
-            });
-            assistantMarks.sort((a, b) => a.time - b.time);
-
-            let cluster = null;
-            const flushCluster = () => {
-                if (!cluster) {
-                    return;
-                }
-                windows.push({
-                    title: cluster.title,
-                    description: cluster.description,
-                    start: cluster.start,
-                    end: cluster.end,
-                });
-                cluster = null;
-            };
-            assistantMarks.forEach((mark) => {
-                if (!cluster
-                        || cluster.title !== mark.title
-                        || cluster.description !== mark.description) {
-                    flushCluster();
-                    cluster = {
-                        title: mark.title,
-                        description: mark.description,
-                        start: mark.time,
-                        end: mark.time,
-                    };
-                    return;
-                }
-                cluster.end = mark.time;
-            });
-            flushCluster();
-
-            // Extend each cluster so user replies after the last assistant turn still match,
-            // until the next session starts (or +15 minutes for the latest open session).
-            const derived = windows.filter((w) => w.start > 0).sort((a, b) => a.start - b.start);
-            for (let i = 0; i < derived.length; i++) {
-                const next = derived[i + 1];
-                if (next && derived[i].end < next.start) {
-                    derived[i].end = next.start - 1;
-                } else if (!next && derived[i].end < Number.MAX_SAFE_INTEGER) {
-                    derived[i].end = Math.max(derived[i].end, derived[i].end + 15 * 60);
-                }
-            }
-
-            container.querySelectorAll('.dixeo-tutor-message-row').forEach((row) => {
-                if (row.dataset.lane === 'guide-summary' || row.dataset.lane === 'guide') {
-                    // Never demote guide / summary rows back to standard.
-                    return;
-                }
-                // Quiz/lesson cards use the user alignment class but are not guide turns.
-                // Retagging them as lane=guide hides them in standard view.
-                if (row.classList.contains('dixeo-tutor-message-row--quiz-review')
-                        || row.classList.contains('dixeo-tutor-message-row--custom-lesson')) {
-                    return;
-                }
-                if (row.querySelector('.dixeo-tutor-message-assistant')) {
-                    return;
-                }
-
-                const time = this._rowMessageTime(row);
-                if (!time) {
-                    return;
-                }
-                const match = derived.find((w) => {
-                    if (!w.title) {
-                        return false;
-                    }
-                    if (time < w.start) {
-                        return false;
-                    }
-                    if (w.end !== Number.MAX_SAFE_INTEGER && time > w.end) {
-                        return false;
-                    }
-                    return true;
-                });
-
-                if (!match) {
-                    return;
-                }
-                row.dataset.lane = 'guide';
-                row.dataset.guideTitle = match.title;
-                row.dataset.guideDescription = match.description;
-                const bubble = row.querySelector('.dixeo-tutor-message-user');
-                if (bubble) {
-                    bubble.classList.add('dixeo-tutor-message-user--guide');
-                }
-            });
         }
 
         /**
@@ -837,6 +777,8 @@ define([
          * @param {boolean} hasMoreOlder
          */
         syncLoadOlderControl(hasMoreOlder) {
+            // Keep real availability even during review; visibility is gated in
+            // _updateLoadOlderVisibility so exit can show the button again.
             this._hasMoreOlder = !!hasMoreOlder;
             this._ensureLoadOlderSlot();
             this._updateLoadOlderVisibility();
@@ -850,7 +792,7 @@ define([
             if (!this.loadOlderSlot || !this.loadOlderSlot.isConnected) {
                 return;
             }
-            // Review loads the full transcript; never show pagination chrome.
+            // Review hides pagination chrome; availability flag stays on _hasMoreOlder.
             if (this._messageView === 'review') {
                 this.loadOlderSlot.hidden = true;
                 return;
@@ -880,7 +822,8 @@ define([
                     <div class="dixeo-tutor-load-older__loading" role="status" aria-live="polite">
                         <div class="chat-dots"><span></span><span></span><span></span></div>
                     </div>`;
-                slot.hidden = false;
+                // Never surface pagination chrome during guide review.
+                slot.hidden = this._messageView === 'review';
                 return;
             }
 
