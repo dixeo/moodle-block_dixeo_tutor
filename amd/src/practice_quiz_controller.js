@@ -369,6 +369,68 @@ define([
         }
     };
 
+    /**
+     * @private
+     */
+    PracticeQuizController.prototype._ensureQuizModeChrome = function() {
+        if (this.modeController && typeof this.modeController.setMode === 'function') {
+            this.modeController.setMode('quiz', {skipRouting: true});
+        }
+    };
+
+    /**
+     * Resume a quiz that was generated from a job id.
+     *
+     * @param {Object} saved
+     * @returns {Promise<void>}
+     * @private
+     */
+    PracticeQuizController.prototype._resumePlayingFromJob = async function(saved) {
+        this._ensureQuizModeChrome();
+        this.expectedCount = saved.expectedCount || 0;
+        this._resumeJobId = saved.jobId;
+        this._resumeTopicTitle = saved.topictitle || saved.title || '';
+        this._generationToken++;
+        const generationToken = this._generationToken;
+        try {
+            await this.finalizeAndMount(
+                saved.jobId,
+                this._resumeTopicTitle,
+                generationToken,
+                saved.playerState || null
+            );
+        } catch (e) {
+            await this.handleError(e);
+        }
+    };
+
+    /**
+     * Resume a quiz retake opened from a review card (snapshot only).
+     *
+     * @param {Object} saved
+     * @returns {Promise<void>}
+     * @private
+     */
+    PracticeQuizController.prototype._resumePlayingFromSnapshot = async function(saved) {
+        const snapshot = saved.quizSnapshot || {};
+        this._ensureQuizModeChrome();
+        this.expectedCount = saved.expectedCount || 0;
+        this._resumeTopicTitle = saved.topictitle || saved.title || snapshot.title || '';
+        try {
+            await this.mountPlayer(
+                snapshot.title || saved.title || '',
+                snapshot.questionsJson,
+                saved.playerState || null,
+                {
+                    introhtml: snapshot.introhtml || '',
+                    topictitle: this._resumeTopicTitle,
+                }
+            );
+        } catch (e) {
+            await this.handleError(e);
+        }
+    };
+
     PracticeQuizController.prototype.tryResumeFromStorage = async function() {
         const saved = sessionStorage.load(STORAGE_MODE, this.userid, this.courseid);
         if (!saved || !saved.phase) {
@@ -383,55 +445,18 @@ define([
         this.showQuizPane();
 
         if (saved.phase === 'generating' && saved.jobId) {
-            if (this.modeController && typeof this.modeController.setMode === 'function') {
-                this.modeController.setMode('quiz', {skipRouting: true});
-            }
+            this._ensureQuizModeChrome();
             await this.tryResumeGenerating(saved);
             return;
         }
 
         if (saved.phase === 'playing' && saved.jobId) {
-            if (this.modeController && typeof this.modeController.setMode === 'function') {
-                this.modeController.setMode('quiz', {skipRouting: true});
-            }
-            this.expectedCount = saved.expectedCount || 0;
-            this._resumeJobId = saved.jobId;
-            this._resumeTopicTitle = saved.topictitle || saved.title || '';
-            this._generationToken++;
-            const generationToken = this._generationToken;
-            try {
-                await this.finalizeAndMount(
-                    saved.jobId,
-                    this._resumeTopicTitle,
-                    generationToken,
-                    saved.playerState || null
-                );
-            } catch (e) {
-                await this.handleError(e);
-            }
+            await this._resumePlayingFromJob(saved);
             return;
         }
 
         if (saved.phase === 'playing' && saved.quizSnapshot && saved.quizSnapshot.questionsJson) {
-            if (this.modeController && typeof this.modeController.setMode === 'function') {
-                this.modeController.setMode('quiz', {skipRouting: true});
-            }
-            this.expectedCount = saved.expectedCount || 0;
-            this._resumeTopicTitle = saved.topictitle || saved.title
-                || saved.quizSnapshot.title || '';
-            try {
-                await this.mountPlayer(
-                    saved.quizSnapshot.title || saved.title || '',
-                    saved.quizSnapshot.questionsJson,
-                    saved.playerState || null,
-                    {
-                        introhtml: saved.quizSnapshot.introhtml || '',
-                        topictitle: this._resumeTopicTitle,
-                    }
-                );
-            } catch (e) {
-                await this.handleError(e);
-            }
+            await this._resumePlayingFromSnapshot(saved);
         }
     };
 

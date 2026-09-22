@@ -498,19 +498,13 @@ define([
     };
 
     /**
-     * Finish a deferred review resume once conversation history is available.
+     * After loading session history for review: refresh filter, load-older flag, scroll.
      *
+     * @param {{title: string, description?: string, startedAt?: number, timeEnded?: number}} session
+     * @returns {Promise<void>}
      * @private
      */
-    GuideController.prototype._completePendingReviewResume = async function() {
-        const session = this._pendingReviewResume;
-        if (!session) {
-            return;
-        }
-        this._pendingReviewResume = null;
-        if (!this._reviewing) {
-            this._setReviewingChrome(session);
-        }
+    GuideController.prototype._finishReviewEnter = async function(session) {
         await this._loadOlderForGuideSession(session);
         if (this.ui && typeof this.ui.applyMessageView === 'function') {
             this.ui.applyMessageView();
@@ -524,6 +518,23 @@ define([
         if (this.ui && typeof this.ui.scrollToBottom === 'function') {
             this.ui.scrollToBottom();
         }
+    };
+
+    /**
+     * Finish a deferred review resume once conversation history is available.
+     *
+     * @private
+     */
+    GuideController.prototype._completePendingReviewResume = async function() {
+        const session = this._pendingReviewResume;
+        if (!session) {
+            return;
+        }
+        this._pendingReviewResume = null;
+        if (!this._reviewing) {
+            this._setReviewingChrome(session);
+        }
+        await this._finishReviewEnter(session);
     };
 
     GuideController.prototype._enterReviewSession = async function(session, options) {
@@ -541,10 +552,11 @@ define([
         if (!opts.fromResume) {
             this._persistReviewing(session);
         }
-        if (opts.fromResume
-                && this.chatController
-                && typeof this.chatController.isInitialHistoryReady === 'function'
-                && !this.chatController.isInitialHistoryReady()) {
+        const historyNotReady = opts.fromResume
+            && this.chatController
+            && typeof this.chatController.isInitialHistoryReady === 'function'
+            && !this.chatController.isInitialHistoryReady();
+        if (historyNotReady) {
             this._pendingReviewResume = {
                 title: session.title,
                 description: session.description,
@@ -553,19 +565,7 @@ define([
             };
             return;
         }
-        await this._loadOlderForGuideSession(session);
-        if (typeof this.ui.applyMessageView === 'function') {
-            this.ui.applyMessageView();
-        }
-        if (typeof this.ui.syncLoadOlderControl === 'function'
-                && this.chatController
-                && this.chatController.state
-                && typeof this.chatController.state.getHasMoreOlder === 'function') {
-            this.ui.syncLoadOlderControl(this.chatController.state.getHasMoreOlder());
-        }
-        if (typeof this.ui.scrollToBottom === 'function') {
-            this.ui.scrollToBottom();
-        }
+        await this._finishReviewEnter(session);
     };
 
     GuideController.prototype._endSession = function(options) {

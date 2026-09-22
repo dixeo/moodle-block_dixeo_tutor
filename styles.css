@@ -1099,8 +1099,10 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
     margin: 0;
 }
 
-#dixeo-tutor .simplequiz2-embed #simplequiz_container .answer-container:hover:not(.question-success):not(.question-fail),
-.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container .answer-container:hover:not(.question-success):not(.question-fail) {
+#dixeo-tutor .simplequiz2-embed #simplequiz_container
+.answer-container:hover:not(.question-success):not(.question-fail),
+.dixeo-practice-quiz-fullscreen .simplequiz2-embed #simplequiz_container
+.answer-container:hover:not(.question-success):not(.question-fail) {
     background: var(--tutor-mode-footer, #fef3e6);
     border-color: color-mix(in srgb, var(--tutor-mode-header, #dc7800) 35%, #eaecef);
 }
