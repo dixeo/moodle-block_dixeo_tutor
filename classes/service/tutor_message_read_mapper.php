@@ -64,7 +64,7 @@ class tutor_message_read_mapper {
             return $context;
         }
 
-        if (isset($context['body'])) {
+        if (isset($context['body']) || isset($context['events'])) {
             $context['schema'] = tutor_context_schema::SCHEMA_PROACTIVE;
             $context['version'] = 1;
             return $context;

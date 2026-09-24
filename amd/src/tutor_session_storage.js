@@ -4,9 +4,9 @@ define([], function() {
     const PREFIX = 'block_dixeo_tutor_';
 
     /**
-     * Lesson/quiz *bodies* must not be persisted (audit: technical state only).
-     * Progress pointers (playerState) and small lesson snapshots for viewing
-     * resume are allowed — see save()/hasActiveSession.
+     * Lesson/quiz *bodies* must not be persisted at the top level (audit:
+     * technical state only). Nested lessonSnapshot / quizSnapshot for
+     * context-view / retake resume, plus playerState progress, are allowed.
      * @type {string[]}
      */
     const CONTENT_KEYS = ['questionsJson', 'contenthtml', 'introhtml', 'userprompt'];
@@ -142,7 +142,7 @@ define([], function() {
             return false;
         }
         if (saved.phase === 'generating' || saved.phase === 'playing') {
-            return !!saved.jobId;
+            return !!(saved.jobId || saved.quizSnapshot);
         }
         if (saved.phase === 'viewing') {
             return !!(saved.jobId || saved.lessonSnapshot);

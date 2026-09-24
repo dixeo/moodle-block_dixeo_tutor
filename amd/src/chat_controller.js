@@ -566,6 +566,7 @@ define([
                 }
             } finally {
                 this._loadingAllOlder = false;
+                // Review only hides the control; keep the real hasMoreOlder flag.
                 this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             }
         }
