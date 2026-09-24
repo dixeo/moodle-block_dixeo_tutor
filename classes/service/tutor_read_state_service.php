@@ -52,13 +52,13 @@ class tutor_read_state_service {
      *
      * @param int $userid
      * @param int $courseid
-     * @param int $messagetime Unix time of the latest incoming message the user has seen.
+     * @param int $messagetime Unix time of the latest incoming message the user has seen (0 = none).
      * @return int Stored last-read watermark.
      */
     public function mark_read_up_to(int $userid, int $courseid, int $messagetime): int {
         $messagetime = self::normalize_timestamp($messagetime);
         if ($messagetime <= 0) {
-            return $this->mark_all_read($userid, $courseid);
+            return $this->get_last_read($userid, $courseid);
         }
         return $this->set_last_read($userid, $courseid, $messagetime + 1);
     }

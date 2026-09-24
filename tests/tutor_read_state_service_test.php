@@ -132,18 +132,36 @@ final class tutor_read_state_service_test extends \advanced_testcase {
         $this->assertSame(2501, $stored);
     }
 
-    public function test_mark_read_up_to_zero_falls_back_to_mark_all_read(): void {
+    public function test_mark_read_up_to_zero_keeps_current_watermark(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->mock_conversation([
-            ['id' => '1', 'role' => tutor_message::ROLE_ASSISTANT, 'content' => 'Hello', 'time' => 3500],
-        ]);
 
         $this->service->set_last_read((int) $user->id, (int) $course->id, 1000);
         $stored = $this->service->mark_read_up_to((int) $user->id, (int) $course->id, 0);
 
-        $this->assertSame(3501, $stored);
-        $this->assertSame(3501, $this->service->get_last_read((int) $user->id, (int) $course->id));
+        $this->assertSame(1000, $stored);
+    }
+
+    public function test_mark_all_read_without_incoming_message_fetches_once(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $calls = 0;
+        $mock = $this->getMockBuilder(tutor_service::class)
+            ->onlyMethods(['get_conversation'])
+            ->getMock();
+        $mock->method('get_conversation')->willReturnCallback(function () use (&$calls): array {
+            if (++$calls > 1) {
+                throw new \coding_exception('Conversation fetched again');
+            }
+            return [];
+        });
+        service_factory::set_test_tutor_service($mock);
+
+        $this->service->set_last_read((int) $user->id, (int) $course->id, 1000);
+        $stored = $this->service->mark_all_read((int) $user->id, (int) $course->id);
+
+        $this->assertSame(1000, $stored);
+        $this->assertSame(1, $calls);
     }
 }
