@@ -98,6 +98,36 @@ final class tutor_mode_policy_test extends advanced_testcase {
         );
     }
 
+    public function test_simplequiz2_version_requires_embed_player_release(): void {
+        $older = 2026032811.0;
+        $minimum = (float) tutor_mode_policy::MIN_SIMPLEQUIZ2_VERSION;
+
+        $this->assertFalse(tutor_mode_policy::simplequiz2_version_satisfies($older, $older));
+        $this->assertFalse(tutor_mode_policy::simplequiz2_version_satisfies($minimum, $older));
+        $this->assertFalse(tutor_mode_policy::simplequiz2_version_satisfies($older, $minimum));
+        $this->assertTrue(tutor_mode_policy::simplequiz2_version_satisfies($minimum, $minimum));
+        $this->assertTrue(tutor_mode_policy::simplequiz2_version_satisfies($minimum + 1, $minimum + 1));
+    }
+
+    public function test_quiz_runtime_follows_installed_simplequiz2_version(): void {
+        $info = \core_plugin_manager::instance()->get_plugin_info('mod_simplequiz2');
+        if ($info === null) {
+            $this->assertFalse(tutor_mode_policy::is_quiz_runtime_available());
+            return;
+        }
+
+        $expected = tutor_mode_policy::simplequiz2_version_satisfies(
+            (float) $info->versiondisk,
+            (float) $info->versiondb
+        );
+        $this->assertSame($expected, tutor_mode_policy::is_quiz_runtime_available());
+
+        global $CFG;
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/dixeo_tutor/block_dixeo_tutor.php');
+        $this->assertSame($expected, \block_dixeo_tutor::is_simplequiz2_available());
+    }
+
     public function test_require_mode_available_throws_for_disabled_mode(): void {
         set_config(tutor_mode_policy::CONFIG_ENABLED_MODES, 'guide', 'block_dixeo_tutor');
 

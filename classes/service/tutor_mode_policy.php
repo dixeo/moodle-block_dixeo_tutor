@@ -35,6 +35,15 @@ class tutor_mode_policy {
     public const CONFIG_ENABLED_MODES = 'enabledmodes';
 
     /**
+     * mod_simplequiz2 version that defines mod_simplequiz2/embed_player
+     * and the render_embed external function.
+     *
+     * Releases before this (1.0.0 / 2026032811) install the activity
+     * but do not ship that AMD module.
+     */
+    public const MIN_SIMPLEQUIZ2_VERSION = 2026072900;
+
+    /**
      * Optional modes that may be enabled via site admin settings.
      *
      * @return string[]
@@ -57,12 +66,36 @@ class tutor_mode_policy {
     }
 
     /**
-     * Whether practice quiz runtime dependencies are installed.
+     * Whether practice quiz can load mod_simplequiz2/embed_player.
+     *
+     * Requires mod_simplequiz2 to be installed, on disk, and upgraded at
+     * {@see self::MIN_SIMPLEQUIZ2_VERSION} or newer.
      *
      * @return bool
      */
     public static function is_quiz_runtime_available(): bool {
-        return plugin_installation_service::is_component_installed('mod_simplequiz2');
+        if (!plugin_installation_service::is_component_installed('mod_simplequiz2')) {
+            return false;
+        }
+
+        $info = \core_plugin_manager::instance()->get_plugin_info('mod_simplequiz2');
+        if ($info === null || $info->versiondisk === null || $info->versiondb === null) {
+            return false;
+        }
+
+        return self::simplequiz2_version_satisfies((float) $info->versiondisk, (float) $info->versiondb);
+    }
+
+    /**
+     * Whether disk and database versions are new enough for the embed player.
+     *
+     * @param float $versiondisk Version from mod/simplequiz2/version.php.
+     * @param float $versiondb Version recorded after the plugin upgrade.
+     * @return bool
+     */
+    public static function simplequiz2_version_satisfies(float $versiondisk, float $versiondb): bool {
+        $minimum = (float) self::MIN_SIMPLEQUIZ2_VERSION;
+        return $versiondisk >= $minimum && $versiondb >= $minimum;
     }
 
     /**
