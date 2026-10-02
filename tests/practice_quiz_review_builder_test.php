@@ -264,4 +264,88 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
         $this->assertNotNull($shrunk);
         $this->assertArrayNotHasKey('questionsJson', $shrunk);
     }
+
+    /**
+     * An oversized questions JSON string is rejected before the review is built.
+     */
+    public function test_oversized_questions_json_is_rejected_before_build(): void {
+        $service = new practice_quiz_context_service();
+        $questions = [[
+            'text' => str_repeat('z', practice_quiz_context_service::MAX_INPUT_JSON_BYTES),
+            'answers' => [
+                ['text' => 'Yes', 'iscorrect' => 1],
+            ],
+        ]];
+
+        $built = $service->build_review_context([
+            'title' => 'Too big',
+            'questionsjson' => json_encode($questions),
+            'bestattemptjson' => json_encode([
+                'score' => 1,
+                'total' => 1,
+                'answerResults' => [true],
+                'selectedAnswerIds' => [[0]],
+            ]),
+        ]);
+
+        $this->assertNull($built);
+    }
+
+    /**
+     * Question count, answer count, string length, and nesting are capped after decode.
+     */
+    public function test_review_payload_bounds_reject_wide_or_deep_json(): void {
+        $service = new practice_quiz_context_service();
+        $attempt = json_encode([
+            'score' => 0,
+            'total' => 1,
+            'answerResults' => [false],
+            'selectedAnswerIds' => [[]],
+        ]);
+
+        $toomany = [];
+        for ($i = 0; $i < practice_quiz_context_service::MAX_QUESTIONS + 1; $i++) {
+            $toomany[] = [
+                'text' => 'Q',
+                'answers' => [
+                    ['text' => 'A', 'iscorrect' => 1],
+                ],
+            ];
+        }
+        $this->assertNull($service->build_review_context([
+            'questionsjson' => json_encode($toomany),
+            'bestattemptjson' => $attempt,
+        ]));
+
+        $answers = [];
+        for ($i = 0; $i < practice_quiz_context_service::MAX_ANSWERS + 1; $i++) {
+            $answers[] = ['text' => 'A' . $i, 'iscorrect' => $i === 0 ? 1 : 0];
+        }
+        $this->assertNull($service->build_review_context([
+            'questionsjson' => json_encode([[
+                'text' => 'Q',
+                'answers' => $answers,
+            ]]),
+            'bestattemptjson' => $attempt,
+        ]));
+
+        $this->assertNull($service->build_review_context([
+            'questionsjson' => json_encode([[
+                'text' => str_repeat('q', practice_quiz_context_service::MAX_STRING_BYTES + 1),
+                'answers' => [
+                    ['text' => 'A', 'iscorrect' => 1],
+                ],
+            ]]),
+            'bestattemptjson' => $attempt,
+        ]));
+
+        $nested = [];
+        for ($i = 0; $i < practice_quiz_context_service::MAX_JSON_DEPTH + 2; $i++) {
+            $nested = ['nested' => $nested];
+        }
+        $this->assertNull($service->build_review_context([
+            'questionsjson' => json_encode([$nested]),
+            'bestattemptjson' => $attempt,
+        ]));
+    }
 }
