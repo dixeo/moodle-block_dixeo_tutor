@@ -143,12 +143,12 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
-     * Whether mod_simplequiz2 is installed (practice quiz UI dependency).
+     * Whether mod_simplequiz2 is installed and compatible (practice quiz UI dependency).
      *
      * @return bool
      */
     public static function is_simplequiz2_available(): bool {
-        return \local_dixeo\service\plugin_installation_service::is_component_installed('mod_simplequiz2');
+        return \block_dixeo_tutor\service\tutor_mode_policy::is_quiz_runtime_available();
     }
 
     /**
