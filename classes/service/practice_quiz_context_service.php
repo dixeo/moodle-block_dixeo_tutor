@@ -33,6 +33,21 @@ use local_dixeo\dto\tutor_message;
  * Builds and submits practice-quiz review context to the tutor API.
  */
 class practice_quiz_context_service {
+    /** @var int Largest raw questions, attempt, or intro string that will be decoded. */
+    public const MAX_INPUT_JSON_BYTES = 65536;
+
+    /** @var int Maximum JSON nesting accepted by json_decode. */
+    public const MAX_JSON_DEPTH = 16;
+
+    /** @var int Maximum questions, and the maximum length of any array in the payload. */
+    public const MAX_QUESTIONS = 100;
+
+    /** @var int Maximum answers on one question. */
+    public const MAX_ANSWERS = 20;
+
+    /** @var int Maximum bytes of one string field inside the decoded payload. */
+    public const MAX_STRING_BYTES = 32000;
+
     /**
      * Submit a practice quiz review to the tutor.
      *
@@ -88,16 +103,33 @@ class practice_quiz_context_service {
      */
     public function build_review_context(array $payload, int $courseid = 0): ?array {
         $questionsjson = (string) ($payload['questionsjson'] ?? '');
-        $bestjson = $payload['bestattemptjson'] ?? '';
+        $bestjson = (string) ($payload['bestattemptjson'] ?? '');
+        $introhtml = (string) ($payload['introhtml'] ?? '');
 
-        $questions = json_decode($questionsjson, true);
-        $bestattempt = json_decode($bestjson, true);
-
-        if (!is_array($questions) || $questions === []) {
+        if (
+            strlen($questionsjson) > self::MAX_INPUT_JSON_BYTES
+                || strlen($bestjson) > self::MAX_INPUT_JSON_BYTES
+                || strlen($introhtml) > self::MAX_INPUT_JSON_BYTES
+        ) {
             return null;
         }
-        if (!is_array($bestattempt)) {
+
+        $questions = json_decode($questionsjson, true, self::MAX_JSON_DEPTH);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($questions) || $questions === []) {
+            return null;
+        }
+
+        if ($bestjson === '') {
             $bestattempt = [];
+        } else {
+            $bestattempt = json_decode($bestjson, true, self::MAX_JSON_DEPTH);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($bestattempt)) {
+                return null;
+            }
+        }
+
+        if (!$this->review_structure_is_bounded($questions, $bestattempt)) {
+            return null;
         }
 
         $total = (int) ($payload['total'] ?? count($questions));
@@ -119,10 +151,67 @@ class practice_quiz_context_service {
             $title,
             $context,
             $questionsjson,
-            trim((string) ($payload['introhtml'] ?? ''))
+            trim($introhtml)
         );
 
         return $this->shrink_review_context($review);
+    }
+
+    /**
+     * Whether the decoded quiz stays within question, answer, string, and nesting caps.
+     *
+     * @param array $questions Decoded questions.
+     * @param array $bestattempt Decoded best-attempt state.
+     * @return bool
+     */
+    private function review_structure_is_bounded(array $questions, array $bestattempt): bool {
+        if (count($questions) > self::MAX_QUESTIONS) {
+            return false;
+        }
+
+        foreach ($questions as $question) {
+            if (!is_array($question)) {
+                return false;
+            }
+            $answers = $question['answers'] ?? [];
+            if (is_array($answers) && count($answers) > self::MAX_ANSWERS) {
+                return false;
+            }
+        }
+
+        if (!$this->value_is_bounded($questions, 0) || !$this->value_is_bounded($bestattempt, 0)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether a decoded value stays within array length, string size, and depth.
+     *
+     * @param mixed $value Decoded JSON value.
+     * @param int $depth Current nesting depth.
+     * @return bool
+     */
+    private function value_is_bounded($value, int $depth): bool {
+        if ($depth > self::MAX_JSON_DEPTH) {
+            return false;
+        }
+        if (is_string($value)) {
+            return strlen($value) <= self::MAX_STRING_BYTES;
+        }
+        if (!is_array($value)) {
+            return true;
+        }
+        if (count($value) > self::MAX_QUESTIONS) {
+            return false;
+        }
+        foreach ($value as $item) {
+            if (!$this->value_is_bounded($item, $depth + 1)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
