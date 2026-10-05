@@ -27,6 +27,7 @@ namespace block_dixeo_tutor\privacy;
 
 use block_dixeo_tutor\event\privacy_request_failed;
 use block_dixeo_tutor\service\tutor_mode_service;
+use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\service\tutor_read_state_service;
 use block_dixeo_tutor\task\erase_conversations;
 use core_privacy\local\metadata\collection;
@@ -101,6 +102,11 @@ class provider implements
             'privacy:metadata:tutormodeactivity'
         );
 
+        $collection->add_user_preference(
+            tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX,
+            'privacy:metadata:lastproactive'
+        );
+
         return $collection;
     }
 
@@ -114,6 +120,7 @@ class provider implements
         global $DB;
 
         $contextlist = new contextlist();
+        self::add_local_contexts($contextlist, $userid);
         if (!self::is_configured()) {
             return $contextlist;
         }
@@ -152,7 +159,12 @@ class provider implements
      */
     public static function get_users_in_context(userlist $userlist): void {
         $courseid = self::course_id($userlist->get_context());
-        if ($courseid === 0 || !self::is_configured()) {
+        if ($courseid === 0) {
+            return;
+        }
+
+        self::add_local_users($userlist, $courseid);
+        if (!self::is_configured()) {
             return;
         }
 
@@ -173,17 +185,20 @@ class provider implements
      * @param approved_contextlist $contextlist The approved contexts.
      */
     public static function export_user_data(approved_contextlist $contextlist): void {
-        if (!self::is_configured()) {
-            return;
-        }
-
         $userid = (int) $contextlist->get_user()->id;
-        $service = self::service();
+        $configured = self::is_configured();
+        $service = $configured ? self::service() : null;
         $reported = false;
 
         foreach ($contextlist->get_contexts() as $context) {
             $courseid = self::course_id($context);
             if ($courseid === 0) {
+                continue;
+            }
+
+            self::export_pending($context, $userid, $courseid);
+            self::export_proactive_preference($context, $userid, $courseid);
+            if (!$configured) {
                 continue;
             }
 
@@ -218,7 +233,13 @@ class provider implements
      */
     public static function delete_data_for_all_users_in_context(\context $context): void {
         $courseid = self::course_id($context);
-        if ($courseid === 0 || !self::is_configured()) {
+        if ($courseid === 0) {
+            return;
+        }
+
+        self::delete_pending($courseid, null);
+        self::delete_proactive_preference($courseid, null);
+        if (!self::is_configured()) {
             return;
         }
 
@@ -235,16 +256,18 @@ class provider implements
      * @throws api_exception When the API is unreachable, once the retries are queued.
      */
     public static function delete_data_for_user(approved_contextlist $contextlist): void {
-        if (!self::is_configured()) {
-            return;
-        }
-
         $userid = (int) $contextlist->get_user()->id;
         $failure = null;
 
         foreach ($contextlist->get_contexts() as $context) {
             $courseid = self::course_id($context);
             if ($courseid === 0) {
+                continue;
+            }
+
+            self::delete_pending($courseid, $userid);
+            self::delete_proactive_preference($courseid, $userid);
+            if (!self::is_configured()) {
                 continue;
             }
 
@@ -267,11 +290,19 @@ class provider implements
      */
     public static function delete_data_for_users(approved_userlist $userlist): void {
         $courseid = self::course_id($userlist->get_context());
-        if ($courseid === 0 || !self::is_configured()) {
+        if ($courseid === 0) {
             return;
         }
 
         $failure = null;
+        foreach ($userlist->get_userids() as $userid) {
+            self::delete_pending($courseid, (int) $userid);
+            self::delete_proactive_preference($courseid, (int) $userid);
+        }
+        if (!self::is_configured()) {
+            return;
+        }
+
         foreach ($userlist->get_userids() as $userid) {
             $error = self::erase($courseid, (int) $userid);
             $failure ??= $error;
@@ -355,6 +386,161 @@ class provider implements
             'content' => (string) ($message['content'] ?? ''),
             'time' => transform::datetime((int) ($message['time'] ?? 0)),
         ];
+    }
+
+    /**
+     * Add course contexts that hold queued proactive data for a user.
+     *
+     * @param contextlist $contextlist Context list to populate.
+     * @param int $userid User id.
+     */
+    private static function add_local_contexts(contextlist $contextlist, int $userid): void {
+        global $DB;
+
+        $params = [
+            'contextlevel' => CONTEXT_COURSE,
+            'userid' => $userid,
+        ];
+        $contextlist->add_from_sql(
+            "SELECT ctx.id
+               FROM {" . tutor_proactive_context_service::TABLE . "} p
+               JOIN {context} ctx ON ctx.instanceid = p.courseid AND ctx.contextlevel = :contextlevel
+              WHERE p.userid = :userid",
+            $params
+        );
+
+        $prefix = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX;
+        $prefs = $DB->get_records_select(
+            'user_preferences',
+            'userid = :userid AND ' . $DB->sql_like('name', ':prefix', false),
+            [
+                'userid' => $userid,
+                'prefix' => $DB->sql_like_escape($prefix) . '%',
+            ],
+            '',
+            'id, name'
+        );
+        foreach ($prefs as $pref) {
+            $courseid = (int) substr($pref->name, strlen($prefix));
+            if ($courseid > 0) {
+                $contextlist->add_from_sql(
+                    'SELECT id FROM {context} WHERE id = :contextid',
+                    ['contextid' => \context_course::instance($courseid)->id]
+                );
+            }
+        }
+    }
+
+    /**
+     * Add users who have queued proactive data in a course.
+     *
+     * @param userlist $userlist User list to populate.
+     * @param int $courseid Course id.
+     */
+    private static function add_local_users(userlist $userlist, int $courseid): void {
+        $userlist->add_from_sql(
+            'userid',
+            "SELECT userid
+               FROM {" . tutor_proactive_context_service::TABLE . "}
+              WHERE courseid = :courseid",
+            ['courseid' => $courseid]
+        );
+
+        $userlist->add_from_sql(
+            'userid',
+            "SELECT userid
+               FROM {user_preferences}
+              WHERE name = :name",
+            ['name' => tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid]
+        );
+    }
+
+    /**
+     * Export queued proactive context for one user in a course.
+     *
+     * @param \context $context Course context.
+     * @param int $userid User id.
+     * @param int $courseid Course id.
+     */
+    private static function export_pending(\context $context, int $userid, int $courseid): void {
+        global $DB;
+
+        $records = $DB->get_records(tutor_proactive_context_service::TABLE, [
+            'userid' => $userid,
+            'courseid' => $courseid,
+        ]);
+        if ($records === []) {
+            return;
+        }
+
+        $queued = [];
+        foreach ($records as $record) {
+            $queued[] = (object) [
+                'message' => (string) $record->message,
+                'timemodified' => transform::datetime((int) $record->timemodified),
+            ];
+        }
+
+        writer::with_context($context)->export_data(
+            [get_string('privacy:path:pending', 'block_dixeo_tutor')],
+            (object) ['queued' => $queued]
+        );
+    }
+
+    /**
+     * Export the last-proactive timestamp stored for this user and course.
+     *
+     * @param \context $context Course context.
+     * @param int $userid User id.
+     * @param int $courseid Course id.
+     */
+    private static function export_proactive_preference(\context $context, int $userid, int $courseid): void {
+        $name = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid;
+        $value = get_user_preferences($name, null, $userid);
+        if ($value === null) {
+            return;
+        }
+
+        writer::with_context($context)->export_user_preference(
+            'block_dixeo_tutor',
+            $name,
+            transform::datetime((int) $value),
+            get_string('privacy:metadata:lastproactive', 'block_dixeo_tutor')
+        );
+    }
+
+    /**
+     * Delete queued proactive rows for a course, optionally limited to one user.
+     *
+     * @param int $courseid Course id.
+     * @param int|null $userid User id, or null for every user in the course.
+     */
+    private static function delete_pending(int $courseid, ?int $userid): void {
+        global $DB;
+
+        $conditions = ['courseid' => $courseid];
+        if ($userid !== null) {
+            $conditions['userid'] = $userid;
+        }
+        $DB->delete_records(tutor_proactive_context_service::TABLE, $conditions);
+    }
+
+    /**
+     * Remove the last-proactive preference for a course.
+     *
+     * @param int $courseid Course id.
+     * @param int|null $userid User id, or null for every user.
+     */
+    private static function delete_proactive_preference(int $courseid, ?int $userid): void {
+        global $DB;
+
+        $name = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid;
+        if ($userid === null) {
+            $DB->delete_records('user_preferences', ['name' => $name]);
+            return;
+        }
+
+        unset_user_preference($name, $userid);
     }
 
     /**

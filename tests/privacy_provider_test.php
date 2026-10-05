@@ -29,6 +29,7 @@ use block_dixeo_tutor\event\conversation_deleted;
 use block_dixeo_tutor\event\privacy_request_failed;
 use block_dixeo_tutor\external\delete_conversation;
 use block_dixeo_tutor\privacy\provider;
+use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\erase_conversations;
 use core_privacy\local\metadata\collection;
 use core_privacy\local\request\approved_contextlist;
@@ -569,5 +570,50 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
 
         $this->expectException(\require_login_exception::class);
         delete_conversation::execute((int) $course->id);
+    }
+
+    /**
+     * Queued proactive context and the last-proactive preference are exported and erased.
+     */
+    public function test_pending_context_and_preference_are_exported_and_erased(): void {
+        global $DB;
+
+        [$course, $user] = $this->create_course_and_student();
+        $courseid = (int) $course->id;
+        $userid = (int) $user->id;
+        $context = \context_course::instance($courseid);
+
+        $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
+            'userid' => $userid,
+            'courseid' => $courseid,
+            'message' => 'Welcome back',
+            'timemodified' => time(),
+        ]);
+        $preferencename = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid;
+        set_user_preference($preferencename, time(), $userid);
+
+        $service = $this->mock_tutor_service();
+        $service->method('list_conversations')->willReturn([]);
+        $service->method('export_conversation')->willReturn([]);
+
+        $contexts = provider::get_contexts_for_userid($userid);
+        $this->assertEquals([$context->id], array_values($contexts->get_contextids()));
+
+        writer::reset();
+        provider::export_user_data(new approved_contextlist($user, 'block_dixeo_tutor', [$context->id]));
+
+        $pending = writer::with_context($context)->get_data([
+            get_string('privacy:path:pending', 'block_dixeo_tutor'),
+        ]);
+        $this->assertSame('Welcome back', $pending->queued[0]->message);
+        $this->assertNotNull(get_user_preferences($preferencename, null, $userid));
+
+        provider::delete_data_for_user(new approved_contextlist($user, 'block_dixeo_tutor', [$context->id]));
+
+        $this->assertFalse($DB->record_exists(tutor_proactive_context_service::TABLE, [
+            'userid' => $userid,
+            'courseid' => $courseid,
+        ]));
+        $this->assertNull(get_user_preferences($preferencename, null, $userid));
     }
 }

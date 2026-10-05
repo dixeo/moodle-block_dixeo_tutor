@@ -9,7 +9,7 @@ define([], function() {
      * resume are allowed — see save()/hasActiveSession.
      * @type {string[]}
      */
-    const CONTENT_KEYS = ['questionsJson', 'contenthtml', 'introhtml', 'userprompt'];
+    const CONTENT_KEYS = ['questionsJson', 'contenthtml', 'introhtml', 'userprompt', 'learnerrequest'];
 
     /**
      * @param {string} mode quiz|teach
@@ -35,6 +35,10 @@ define([], function() {
         CONTENT_KEYS.forEach(function(key) {
             delete clean[key];
         });
+        if (clean.setupConfig && typeof clean.setupConfig === 'object') {
+            clean.setupConfig = Object.assign({}, clean.setupConfig);
+            delete clean.setupConfig.learnerrequest;
+        }
         return clean;
     };
 
