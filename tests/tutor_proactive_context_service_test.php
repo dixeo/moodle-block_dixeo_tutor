@@ -208,7 +208,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
                         && ($msg->context['userid'] ?? null) === (int) $user->id
                         && ($msg->context['courseid'] ?? null) === (int) $course->id
                         && $msg->message === ''
-                        && str_contains((string) $msg->instructions, 'completed the course')
+                        && ($msg->instructions === null || trim((string) $msg->instructions) === '')
                         && $msg->requireresponse === true;
                 }),
                 $this->anything()
@@ -331,7 +331,9 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
                     return $msg->role === tutor_message::ROLE_SYSTEM
                         && ($msg->context['schema'] ?? '') === tutor_context_schema::SCHEMA_PROACTIVE
                         && $msg->requireresponse === true
-                        && str_contains((string) $msg->instructions, 'Socratic');
+                        && ($msg->instructions === null || trim((string) $msg->instructions) === '')
+                        && ($msg->context['events'][0]['type'] ?? '') === 'guide_started'
+                        && ($msg->context['events'][0]['userPrompt'] ?? '') === 'Explain mitosis';
                 }),
                 tutor_message::MODE_GUIDE,
                 $this->anything()

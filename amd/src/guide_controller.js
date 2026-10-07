@@ -79,7 +79,17 @@ define([
             if (this.ui && typeof this.ui.setReturnToMessageRow === 'function') {
                 this.ui.setReturnToMessageRow(row);
             }
-            this._enterReviewSession(session);
+            let reviewSession = session;
+            if (this.ui && typeof this.ui.getGuideSessionBounds === 'function') {
+                const bounds = this.ui.getGuideSessionBounds(
+                    session.title,
+                    session.description || ''
+                );
+                if (bounds) {
+                    reviewSession = Object.assign({}, session, bounds);
+                }
+            }
+            this._enterReviewSession(reviewSession);
         });
         guideTopicPanel.setRestartHandler((session) => this.openSetupFromSession(session));
         if (this.ui && typeof this.ui.applyMessageView === 'function') {
@@ -434,8 +444,79 @@ define([
         }
         this._clearReviewChrome(true);
         this.restoreEndedSummaryCard();
+        if (this.ui && typeof this.ui.syncLoadOlderControl === 'function'
+                && this.chatController
+                && this.chatController.state
+                && typeof this.chatController.state.getHasMoreOlder === 'function') {
+            this.ui.syncLoadOlderControl(this.chatController.state.getHasMoreOlder());
+        }
         if (this.ui && typeof this.ui.revealAndScrollReturnCard === 'function') {
             await this.ui.revealAndScrollReturnCard(this.chatController);
+        }
+    };
+
+    /**
+     * Load older pages until this guide session's start is in the loaded window.
+     *
+     * @param {{title: string, description?: string}} session
+     * @returns {Promise<void>}
+     * @private
+     */
+    GuideController.prototype._loadOlderForGuideSession = async function(session) {
+        if (!this.chatController || !session || !session.title) {
+            return;
+        }
+        const ui = this.ui;
+        if (typeof this.chatController.loadOlderUntil !== 'function'
+                || !ui
+                || typeof ui.isGuideSessionFullyLoaded !== 'function') {
+            if (typeof this.chatController.loadAllOlderMessages === 'function') {
+                await this.chatController.loadAllOlderMessages();
+            }
+            return;
+        }
+        await this.chatController.loadOlderUntil(function() {
+            return ui.isGuideSessionFullyLoaded(session.title, session.description || '');
+        });
+        // Refresh bounds after paging so the review filter covers the full session.
+        if (typeof ui.getGuideSessionBounds === 'function') {
+            const bounds = ui.getGuideSessionBounds(session.title, session.description || '');
+            if (bounds) {
+                session.startedAt = bounds.startedAt;
+                session.timeEnded = bounds.timeEnded;
+                this._reviewSession = Object.assign({}, this._reviewSession || {}, bounds);
+                if (typeof ui.setMessageView === 'function') {
+                    ui.setMessageView('review', {
+                        title: session.title,
+                        description: session.description,
+                        startedAt: bounds.startedAt,
+                        timeEnded: bounds.timeEnded,
+                    });
+                }
+            }
+        }
+    };
+
+    /**
+     * After loading session history for review: refresh filter, load-older flag, scroll.
+     *
+     * @param {{title: string, description?: string, startedAt?: number, timeEnded?: number}} session
+     * @returns {Promise<void>}
+     * @private
+     */
+    GuideController.prototype._finishReviewEnter = async function(session) {
+        await this._loadOlderForGuideSession(session);
+        if (this.ui && typeof this.ui.applyMessageView === 'function') {
+            this.ui.applyMessageView();
+        }
+        if (this.ui && typeof this.ui.syncLoadOlderControl === 'function'
+                && this.chatController
+                && this.chatController.state
+                && typeof this.chatController.state.getHasMoreOlder === 'function') {
+            this.ui.syncLoadOlderControl(this.chatController.state.getHasMoreOlder());
+        }
+        if (this.ui && typeof this.ui.scrollToBottom === 'function') {
+            this.ui.scrollToBottom();
         }
     };
 
@@ -453,18 +534,7 @@ define([
         if (!this._reviewing) {
             this._setReviewingChrome(session);
         }
-        if (this.chatController && typeof this.chatController.loadAllOlderMessages === 'function') {
-            await this.chatController.loadAllOlderMessages();
-        }
-        if (this.ui && typeof this.ui.applyMessageView === 'function') {
-            this.ui.applyMessageView();
-        }
-        if (this.ui && typeof this.ui.syncLoadOlderControl === 'function') {
-            this.ui.syncLoadOlderControl(false);
-        }
-        if (this.ui && typeof this.ui.scrollToBottom === 'function') {
-            this.ui.scrollToBottom();
-        }
+        await this._finishReviewEnter(session);
     };
 
     GuideController.prototype._enterReviewSession = async function(session, options) {
@@ -482,10 +552,11 @@ define([
         if (!opts.fromResume) {
             this._persistReviewing(session);
         }
-        if (opts.fromResume
-                && this.chatController
-                && typeof this.chatController.isInitialHistoryReady === 'function'
-                && !this.chatController.isInitialHistoryReady()) {
+        const historyNotReady = opts.fromResume
+            && this.chatController
+            && typeof this.chatController.isInitialHistoryReady === 'function'
+            && !this.chatController.isInitialHistoryReady();
+        if (historyNotReady) {
             this._pendingReviewResume = {
                 title: session.title,
                 description: session.description,
@@ -494,18 +565,7 @@ define([
             };
             return;
         }
-        if (this.chatController && typeof this.chatController.loadAllOlderMessages === 'function') {
-            await this.chatController.loadAllOlderMessages();
-        }
-        if (typeof this.ui.applyMessageView === 'function') {
-            this.ui.applyMessageView();
-        }
-        if (typeof this.ui.syncLoadOlderControl === 'function') {
-            this.ui.syncLoadOlderControl(false);
-        }
-        if (typeof this.ui.scrollToBottom === 'function') {
-            this.ui.scrollToBottom();
-        }
+        await this._finishReviewEnter(session);
     };
 
     GuideController.prototype._endSession = function(options) {
@@ -751,6 +811,16 @@ define([
                 && String(row.dataset.guideDescription || '') === String(saved.description || '');
         });
         if (existing) {
+            return;
+        }
+        // Only restore when that session's turns are already in the loaded window.
+        const loadedMatch = Array.from(
+            container.querySelectorAll('.dixeo-tutor-message-row[data-lane="guide"]')
+        ).some((row) => {
+            return String(row.dataset.guideTitle || '') === String(saved.title)
+                && String(row.dataset.guideDescription || '') === String(saved.description || '');
+        });
+        if (!loadedMatch) {
             return;
         }
         this._insertTopicCard({

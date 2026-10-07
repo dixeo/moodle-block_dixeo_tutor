@@ -46,6 +46,20 @@ final class tutor_message_read_mapper_test extends \advanced_testcase {
         $this->assertSame('Legacy proactive line', $messages[0]['context']['body']);
     }
 
+    public function test_normalize_messages_adds_schema_to_events_context(): void {
+        $events = [['type' => 'guide_started', 'time' => 123]];
+        $messages = tutor_message_read_mapper::normalize_messages([
+            [
+                'role' => 'system',
+                'content' => '',
+                'context' => ['events' => $events],
+            ],
+        ]);
+
+        $this->assertSame(tutor_context_schema::SCHEMA_PROACTIVE, $messages[0]['context']['schema']);
+        $this->assertSame($events, $messages[0]['context']['events']);
+    }
+
     public function test_normalize_messages_adds_schema_to_legacy_url_context(): void {
         $messages = tutor_message_read_mapper::normalize_messages([
             [

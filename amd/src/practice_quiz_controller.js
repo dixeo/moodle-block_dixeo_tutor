@@ -245,23 +245,42 @@ define([
 
     /**
      * Persist playing phase + optional in-progress answer pointer.
+     * JobId → re-finalize after reload; quizSnapshot → reopen a context retake.
      *
      * @param {Object|null} [playerState]
      * @private
      */
     PracticeQuizController.prototype._persistPlayingState = function(playerState) {
-        if (!this._resumeJobId) {
-            return;
-        }
         const payload = {
             phase: 'playing',
-            jobId: this._resumeJobId,
             title: this.quizTitle,
-            topictitle: this._resumeTopicTitle,
+            topictitle: this._resumeTopicTitle || this.quizTitle,
             expectedCount: this.expectedCount,
         };
+        if (this._resumeJobId) {
+            payload.jobId = this._resumeJobId;
+        } else if (this.questionsJson) {
+            // Retake from a review card has no generation job — snapshot questions.
+            payload.quizSnapshot = {
+                title: this.quizTitle || '',
+                introhtml: this.introhtml || '',
+                questionsJson: this.questionsJson,
+            };
+        } else {
+            return;
+        }
         if (playerState) {
             payload.playerState = playerState;
+        }
+        if (this.ui && typeof this.ui.getReturnToCard === 'function') {
+            const returnCard = this.ui.getReturnToCard();
+            if (returnCard) {
+                payload.returnCard = returnCard;
+            } else if (this.quizTitle) {
+                payload.returnCard = {type: 'quiz', title: this.quizTitle};
+            }
+        } else if (this.quizTitle) {
+            payload.returnCard = {type: 'quiz', title: this.quizTitle};
         }
         this.persistState(payload);
     };
@@ -337,6 +356,81 @@ define([
         });
     };
 
+    PracticeQuizController.prototype._restoreReturnCardFromStorage = function(saved) {
+        if (!this.ui || typeof this.ui.setReturnToMessageRow !== 'function') {
+            return;
+        }
+        if (saved.returnCard) {
+            this.ui.setReturnToMessageRow(saved.returnCard);
+            return;
+        }
+        if (saved.phase === 'playing' && saved.title) {
+            this.ui.setReturnToMessageRow({type: 'quiz', title: saved.title});
+        }
+    };
+
+    /**
+     * @private
+     */
+    PracticeQuizController.prototype._ensureQuizModeChrome = function() {
+        if (this.modeController && typeof this.modeController.setMode === 'function') {
+            this.modeController.setMode('quiz', {skipRouting: true});
+        }
+    };
+
+    /**
+     * Resume a quiz that was generated from a job id.
+     *
+     * @param {Object} saved
+     * @returns {Promise<void>}
+     * @private
+     */
+    PracticeQuizController.prototype._resumePlayingFromJob = async function(saved) {
+        this._ensureQuizModeChrome();
+        this.expectedCount = saved.expectedCount || 0;
+        this._resumeJobId = saved.jobId;
+        this._resumeTopicTitle = saved.topictitle || saved.title || '';
+        this._generationToken++;
+        const generationToken = this._generationToken;
+        try {
+            await this.finalizeAndMount(
+                saved.jobId,
+                this._resumeTopicTitle,
+                generationToken,
+                saved.playerState || null
+            );
+        } catch (e) {
+            await this.handleError(e);
+        }
+    };
+
+    /**
+     * Resume a quiz retake opened from a review card (snapshot only).
+     *
+     * @param {Object} saved
+     * @returns {Promise<void>}
+     * @private
+     */
+    PracticeQuizController.prototype._resumePlayingFromSnapshot = async function(saved) {
+        const snapshot = saved.quizSnapshot || {};
+        this._ensureQuizModeChrome();
+        this.expectedCount = saved.expectedCount || 0;
+        this._resumeTopicTitle = saved.topictitle || saved.title || snapshot.title || '';
+        try {
+            await this.mountPlayer(
+                snapshot.title || saved.title || '',
+                snapshot.questionsJson,
+                saved.playerState || null,
+                {
+                    introhtml: snapshot.introhtml || '',
+                    topictitle: this._resumeTopicTitle,
+                }
+            );
+        } catch (e) {
+            await this.handleError(e);
+        }
+    };
+
     PracticeQuizController.prototype.tryResumeFromStorage = async function() {
         const saved = sessionStorage.load(STORAGE_MODE, this.userid, this.courseid);
         if (!saved || !saved.phase) {
@@ -347,35 +441,22 @@ define([
             this._setModeSelectorLocked(true);
         }
 
+        this._restoreReturnCardFromStorage(saved);
         this.showQuizPane();
 
         if (saved.phase === 'generating' && saved.jobId) {
-            if (this.modeController && typeof this.modeController.setMode === 'function') {
-                this.modeController.setMode('quiz', {skipRouting: true});
-            }
+            this._ensureQuizModeChrome();
             await this.tryResumeGenerating(saved);
             return;
         }
 
         if (saved.phase === 'playing' && saved.jobId) {
-            if (this.modeController && typeof this.modeController.setMode === 'function') {
-                this.modeController.setMode('quiz', {skipRouting: true});
-            }
-            this.expectedCount = saved.expectedCount || 0;
-            this._resumeJobId = saved.jobId;
-            this._resumeTopicTitle = saved.topictitle || saved.title || '';
-            this._generationToken++;
-            const generationToken = this._generationToken;
-            try {
-                await this.finalizeAndMount(
-                    saved.jobId,
-                    this._resumeTopicTitle,
-                    generationToken,
-                    saved.playerState || null
-                );
-            } catch (e) {
-                await this.handleError(e);
-            }
+            await this._resumePlayingFromJob(saved);
+            return;
+        }
+
+        if (saved.phase === 'playing' && saved.quizSnapshot && saved.quizSnapshot.questionsJson) {
+            await this._resumePlayingFromSnapshot(saved);
         }
     };
 

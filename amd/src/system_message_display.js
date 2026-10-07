@@ -3,6 +3,7 @@ define([], function() {
 
     const SCHEMA_PROACTIVE = 'proactive';
     const SCHEMA_PRACTICE_QUIZ_REVIEW = 'practice_quiz_review';
+    const SCHEMA_CUSTOM_LESSON = 'custom_lesson';
 
     /**
      * @param {object} message
@@ -29,8 +30,16 @@ define([], function() {
         if (!message) {
             return false;
         }
-        return String(message.role || '').toLowerCase() === 'system'
-            && contextSchema(message) === SCHEMA_PROACTIVE;
+        if (String(message.role || '').toLowerCase() !== 'system') {
+            return false;
+        }
+        const schema = contextSchema(message);
+        if (schema === SCHEMA_PROACTIVE) {
+            return true;
+        }
+        // Legacy / incomplete payloads carry events without schema.
+        const ctx = message.context;
+        return typeof ctx === 'object' && ctx !== null && Array.isArray(ctx.events);
     }
 
     /**
@@ -48,13 +57,32 @@ define([], function() {
     }
 
     /**
+     * System rows with no body that are not structured UI cards (quiz/lesson).
+     *
+     * @param {object} message
+     * @returns {boolean}
+     */
+    function isEmptyShellSystemMessage(message) {
+        if (!message || String(message.role || '').toLowerCase() !== 'system') {
+            return false;
+        }
+        const schema = contextSchema(message);
+        if (schema === SCHEMA_PRACTICE_QUIZ_REVIEW || schema === SCHEMA_CUSTOM_LESSON) {
+            return false;
+        }
+        const content = String(message.content || '').trim();
+        const contentHtml = String(message.contenthtml || '').trim();
+        return content === '' && contentHtml === '';
+    }
+
+    /**
      * Whether the message should be omitted from the chat transcript.
      *
      * @param {object} message
      * @returns {boolean}
      */
     function isHiddenSystemMessage(message) {
-        return isProactiveMessage(message);
+        return isProactiveMessage(message) || isEmptyShellSystemMessage(message);
     }
 
     /**
@@ -76,6 +104,7 @@ define([], function() {
         contextSchema,
         isProactiveMessage,
         isPracticeQuizReviewMessage,
+        isEmptyShellSystemMessage,
         isHiddenSystemMessage,
         filterMessagesForDisplay,
     };
