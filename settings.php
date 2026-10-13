@@ -28,6 +28,13 @@ defined('MOODLE_INTERNAL') || die();
 use local_dixeo\dto\tutor_message;
 
 if ($ADMIN->fulltree) {
+    $settings->add(new admin_setting_configcheckbox(
+        'block_dixeo_tutor/tutor_enabled_default',
+        get_string('tutor_enabled_default', 'block_dixeo_tutor'),
+        get_string('tutor_enabled_default_help', 'block_dixeo_tutor'),
+        1
+    ));
+
     // Display mode: in block drawer or in a popup window.
     $settings->add(new admin_setting_configselect(
         'block_dixeo_tutor/displaymode',

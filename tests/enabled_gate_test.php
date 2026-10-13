@@ -77,6 +77,46 @@ final class enabled_gate_test extends \advanced_testcase {
     }
 
     /**
+     * A course can turn the tutor off while Dixeo stays on.
+     * Editing mode explains that. Outside editing mode the block stays empty.
+     */
+    public function test_tutor_disabled_for_the_course_hides_the_block(): void {
+        $this->resetAfterTest();
+        $this->setAdminUser();
+
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $block = $this->load_block($course);
+        $context = \context_course::instance($course->id);
+        $config = \local_dixeo\external\service_factory::get_settings_config();
+        $config->set('block_dixeo_tutor', 'tutor_enabled', $context, '0');
+
+        $this->setUser($student);
+        $block->content = null;
+        $hidden = $block->get_content();
+        $this->assertSame('', $hidden->text);
+        $this->assertFalse(\block_dixeo_tutor::is_tutor_available_on_page($block->page, (int) $student->id));
+
+        $this->setAdminUser();
+        $this->assertSame(get_string('disabled_tutor_course', 'block_dixeo_tutor'), $this->editing_text($block));
+
+        $config->set('block_dixeo_tutor', 'tutor_enabled', $context, '1');
+        $this->setAdminUser();
+        $block->content = null;
+        $teacher = $block->get_content();
+        $this->assertStringContainsString('data-initial="feature:tutor"', $teacher->text);
+        $this->assertStringNotContainsString('data-preferencesonly="1"', $teacher->text);
+
+        $this->setUser($student);
+        $block->content = null;
+        $studentview = $block->get_content();
+        $this->assertStringContainsString('data-preferencesonly="1"', $studentview->text);
+        $this->assertStringContainsString('data-initial="preferences"', $studentview->text);
+        $this->assertStringNotContainsString('local_dixeo_get_settings', $studentview->text);
+        $this->assertTrue(\block_dixeo_tutor::is_tutor_available_on_page($block->page, (int) $student->id));
+    }
+
+    /**
      * Block text while the current user is editing the page.
      *
      * @param \block_base $block

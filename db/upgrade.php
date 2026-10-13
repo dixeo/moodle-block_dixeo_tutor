@@ -55,5 +55,20 @@ function xmldb_block_dixeo_tutor_upgrade($oldversion) {
         upgrade_block_savepoint(true, 2026073101, 'dixeo_tutor');
     }
 
+    if ($oldversion < 2026101300) {
+        // Existing courses keep the tutor on. A later change to the new-course default does not rewrite this row.
+        $courseids = $DB->get_fieldset_select('course', 'id', 'id <> :siteid', ['siteid' => SITEID]);
+        $config = \local_dixeo\external\service_factory::get_settings_config();
+        foreach ($courseids as $courseid) {
+            $context = \context_course::instance((int) $courseid, IGNORE_MISSING);
+            if (!$context) {
+                continue;
+            }
+            $config->set('block_dixeo_tutor', 'tutor_enabled', $context, '1', false);
+        }
+
+        upgrade_block_savepoint(true, 2026101300, 'dixeo_tutor');
+    }
+
     return true;
 }

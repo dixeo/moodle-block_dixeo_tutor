@@ -25,6 +25,13 @@
 defined('MOODLE_INTERNAL') || die();
 
 $observers = [
+    // Copies the Dixeo new-course default onto the course. The site setting authorises the write.
+    [
+        'eventname' => '\core\event\course_created',
+        'callback' => '\block_dixeo_tutor\observer\course_observer::course_created',
+        'internal' => false,
+        'priority' => 0,
+    ],
     [
         'eventname' => '\core\event\course_viewed',
         'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_viewed',

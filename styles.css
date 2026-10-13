@@ -126,6 +126,15 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
     gap: 0.5rem;
 }
 
+#dixeo-tutor .dixeo-tutor-settings,
+#dixeo-tutor .dixeo-tutor-settings:hover,
+#dixeo-tutor .dixeo-tutor-settings:focus {
+    order: 1;
+    color: var(--tutor-text-color) !important;
+    line-height: 1;
+    text-decoration: none;
+}
+
 #dixeo-tutor-header .dixeo-drawer-floating-close {
     float: none;
     flex-shrink: 0;

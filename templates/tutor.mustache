@@ -22,6 +22,24 @@
             {{#mode_selector}}
             {{> block_dixeo_tutor/mode_selector }}
             {{/mode_selector}}
+            <button type="button"
+                    class="btn btn-link p-1 dixeo-tutor-settings"
+                    title="{{#str}}settings_button, local_dixeo{{/str}}"
+                    aria-label="{{#str}}settings_button, local_dixeo{{/str}}"
+                    data-action="local-dixeo-settings-open"
+                    data-course-name="{{coursename}}"
+                    {{#canupdate}}
+                    data-contextid="{{contextid}}"
+                    data-courseid="{{courseid}}"
+                    data-canmanagesync="{{canmanagesync}}"
+                    data-initial="feature:tutor"
+                    {{/canupdate}}
+                    {{^canupdate}}
+                    data-initial="preferences"
+                    data-preferencesonly="1"
+                    {{/canupdate}}>
+                <i class="fa fa-cog" aria-hidden="true"></i>
+            </button>
             <!-- Delete conversation button — disabled for now, re-enable later.
             <button type="button"
                     id="dixeo-tutor-delete"

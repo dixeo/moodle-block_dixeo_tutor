@@ -67,11 +67,16 @@ class tutor_mode_helper {
      *
      * @param string $selectedmode Currently selected tutor mode.
      * @param bool $quizavailable Whether quiz mode may be offered.
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return choicelist
      */
-    public static function build_mode_choicelist(string $selectedmode, bool $quizavailable = true): choicelist {
+    public static function build_mode_choicelist(
+        string $selectedmode,
+        bool $quizavailable = true,
+        int $courseid = 0
+    ): choicelist {
         $selectedmode = tutor_message::normalize_mode($selectedmode);
-        $availablemodes = array_flip(tutor_mode_policy::get_available_modes($quizavailable));
+        $availablemodes = array_flip(tutor_mode_policy::get_available_modes($quizavailable, $courseid));
         $choicelist = new choicelist();
 
         foreach (self::mode_definitions() as $mode) {
@@ -105,14 +110,15 @@ class tutor_mode_helper {
     public static function export_mode_selector(
         \core\output\renderer_base $output,
         string $selectedmode,
-        bool $quizavailable = true
+        bool $quizavailable = true,
+        int $courseid = 0
     ): ?array {
-        if (!tutor_mode_policy::should_show_mode_selector($quizavailable)) {
+        if (!tutor_mode_policy::should_show_mode_selector($quizavailable, $courseid)) {
             return null;
         }
 
-        $selectedmode = tutor_mode_policy::coerce_mode($selectedmode, $quizavailable);
-        $choicelist = self::build_mode_choicelist($selectedmode, $quizavailable);
+        $selectedmode = tutor_mode_policy::coerce_mode($selectedmode, $quizavailable, $courseid);
+        $choicelist = self::build_mode_choicelist($selectedmode, $quizavailable, $courseid);
 
         $dialog = new status(
             $choicelist->get_selected_content($output),
