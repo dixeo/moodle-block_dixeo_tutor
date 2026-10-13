@@ -479,7 +479,7 @@ class block_dixeo_tutor extends block_base {
      * @return bool True on success
      */
     public function instance_create(): bool {
-        global $DB, $USER;
+        global $DB;
 
         // Update the block.
         $bi = $DB->get_record('block_instances', ['id' => $this->instance->id]);
@@ -487,16 +487,6 @@ class block_dixeo_tutor extends block_base {
         $bi->pagetypepattern = '*';
         $bi->defaultweight = 5;
         $DB->update_record('block_instances', $bi);
-
-        $courseid = \local_dixeo\service\file_sync_policy::resolve_courseid_from_block_parent(
-            (int) $this->instance->parentcontextid
-        );
-        if ($courseid !== null) {
-            \local_dixeo\external\service_factory::get_file_sync_service()->opt_in_on_block_added(
-                $courseid,
-                (int) $USER->id
-            );
-        }
 
         return true;
     }
