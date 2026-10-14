@@ -70,5 +70,10 @@ function xmldb_block_dixeo_tutor_upgrade($oldversion) {
         upgrade_block_savepoint(true, 2026101300, 'dixeo_tutor');
     }
 
+    if ($oldversion < 2026101400) {
+        // The course-created observer now runs inside course creation. No schema change.
+        upgrade_block_savepoint(true, 2026101400, 'dixeo_tutor');
+    }
+
     return true;
 }

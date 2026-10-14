@@ -105,6 +105,7 @@ class tutor_mode_helper {
      * @param \core\output\renderer_base $output Output renderer.
      * @param string $selectedmode Currently selected tutor mode.
      * @param bool $quizavailable Whether quiz mode may be offered.
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return array|null Null when only Standard mode is available.
      */
     public static function export_mode_selector(

@@ -31,6 +31,7 @@ class block_dixeo_tutor extends block_base {
      * Returns the list of module types where the tutor should not be displayed.
      * Reads from plugin settings, falling back to default values.
      *
+     * @param \context|null $context Course context, or null for the Dixeo value.
      * @return array List of module names to exclude.
      */
     public static function get_excluded_modules(?\context $context = null): array {
@@ -43,7 +44,7 @@ class block_dixeo_tutor extends block_base {
         if ($setting === '') {
             return ['quiz', 'simplequiz2'];
         }
-        return array_values(array_filter(array_map('trim', explode(',', $setting)), static function(string $part): bool {
+        return array_values(array_filter(array_map('trim', explode(',', $setting)), static function (string $part): bool {
             return $part !== '';
         }));
     }
@@ -53,6 +54,7 @@ class block_dixeo_tutor extends block_base {
      * Uses the block excludedmodules setting plus hardcoded types and certificate plugins.
      *
      * @param string $modname Activity frankenstyle name (e.g. quiz, h5pactivity).
+     * @param \context|null $context Course context, or null for the Dixeo value.
      * @return bool
      */
     public static function is_quiz_topic_excluded(string $modname, ?\context $context = null): bool {

@@ -171,6 +171,7 @@ class tutor_mode_policy {
      *
      * @param string $mode
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return string
      */
     public static function coerce_mode(string $mode, bool $quizavailable = true, int $courseid = 0): string {
@@ -185,6 +186,7 @@ class tutor_mode_policy {
      * Whether the mode selector should be shown (more than Standard alone).
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return bool
      */
     public static function should_show_mode_selector(bool $quizavailable = true, int $courseid = 0): bool {
@@ -196,6 +198,7 @@ class tutor_mode_policy {
      *
      * @param string $mode
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
     public static function require_mode_available(string $mode, bool $quizavailable = true, int $courseid = 0): void {
@@ -208,6 +211,7 @@ class tutor_mode_policy {
      * Assert that quiz mode is available.
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
     public static function require_quiz_mode(bool $quizavailable = true, int $courseid = 0): void {
@@ -218,6 +222,7 @@ class tutor_mode_policy {
      * Assert that teach mode is available.
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
     public static function require_teach_mode(bool $quizavailable = true, int $courseid = 0): void {
@@ -228,6 +233,7 @@ class tutor_mode_policy {
      * Assert that quiz or teach mode is available (for hierarchy lookup).
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
     public static function require_quiz_or_teach_mode(bool $quizavailable = true, int $courseid = 0): void {

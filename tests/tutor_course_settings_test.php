@@ -25,6 +25,8 @@ use local_dixeo\dto\tutor_message;
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
+ * @covers     \block_dixeo_tutor
+ * @covers     \block_dixeo_tutor\service\tutor_mode_policy
  */
 final class tutor_course_settings_test extends \advanced_testcase {
     /**

@@ -156,6 +156,8 @@ final class enabled_gate_test extends \advanced_testcase {
     }
 
     /**
+     * Course page the tutor block can render on.
+     *
      * @param \stdClass $course
      * @param \context_course $context
      * @return \moodle_page
@@ -184,6 +186,8 @@ final class enabled_gate_test extends \advanced_testcase {
     }
 
     /**
+     * Tutor block instance loaded on the page.
+     *
      * @param \moodle_page $page
      * @return \block_dixeo_tutor
      */
