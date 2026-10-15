@@ -126,34 +126,19 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
     gap: 0.5rem;
 }
 
+#dixeo-tutor .dixeo-tutor-settings,
+#dixeo-tutor .dixeo-tutor-settings:hover,
+#dixeo-tutor .dixeo-tutor-settings:focus {
+    order: 1;
+    color: var(--tutor-text-color) !important;
+    line-height: 1;
+    text-decoration: none;
+}
+
 #dixeo-tutor-header .dixeo-drawer-floating-close {
     float: none;
     flex-shrink: 0;
 }
-
-/* Erase conversation: muted at rest, unmistakably destructive once reached.
-   Scoped on #dixeo-tutor to outrank Boost's .btn-link colour, which otherwise
-   paints the icon primary blue. Boost exposes no muted-text variable
-   (--secondary is the #ced4da border grey), hence the literal gray-600.
-   Disabled for now — re-enable with #dixeo-tutor-delete in tutor.mustache.
-#dixeo-tutor .dixeo-tutor-delete {
-    color: #6c757d;
-    line-height: 1;
-    opacity: 0.75;
-    transition: color 0.15s ease-in-out, opacity 0.15s ease-in-out;
-}
-
-#dixeo-tutor .dixeo-tutor-delete:hover:not(:disabled),
-#dixeo-tutor .dixeo-tutor-delete:focus:not(:disabled) {
-    color: var(--danger, #ca3120);
-    opacity: 1;
-    text-decoration: none;
-}
-
-#dixeo-tutor .dixeo-tutor-delete:disabled {
-    opacity: 0.35;
-}
-*/
 
 /* Messages container */
 .dixeo-tutor-chat-pane {
@@ -418,8 +403,7 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
 }
 
 .dixeo-teach-setup__topic-select,
-.dixeo-teach-setup__prompt,
-.dixeo-teach-setup__language-select {
+.dixeo-teach-setup__prompt {
     width: 100%;
 }
 
@@ -1007,8 +991,7 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
     padding: 0.5rem;
 }
 
-.dixeo-quiz-setup__topic-select,
-.dixeo-quiz-setup__language-select {
+.dixeo-quiz-setup__topic-select {
     width: 100%;
 }
 

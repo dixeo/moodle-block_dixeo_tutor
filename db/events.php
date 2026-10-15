@@ -25,6 +25,14 @@
 defined('MOODLE_INTERNAL') || die();
 
 $observers = [
+    // Copies the Dixeo new-course default onto the course as part of course creation.
+    // Internal so the stored switch is visible before the surrounding transaction commits.
+    [
+        'eventname' => '\core\event\course_created',
+        'callback' => '\block_dixeo_tutor\observer\course_observer::course_created',
+        'internal' => true,
+        'priority' => 0,
+    ],
     [
         'eventname' => '\core\event\course_viewed',
         'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_viewed',

@@ -99,13 +99,19 @@ class tutor_mode_policy {
     }
 
     /**
-     * Read optional modes enabled in site admin settings.
+     * Read optional modes enabled for a course, or the Dixeo value when no course is given.
      *
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return string[]
      */
-    public static function get_configured_optional_modes(): array {
-        $raw = get_config('block_dixeo_tutor', self::CONFIG_ENABLED_MODES);
-        if ($raw === false || $raw === null) {
+    public static function get_configured_optional_modes(int $courseid = 0): array {
+        $context = $courseid > SITEID
+            ? \context_course::instance($courseid)
+            : \context_system::instance();
+        $raw = \local_dixeo\external\service_factory::get_settings_config()
+            ->get('block_dixeo_tutor', self::CONFIG_ENABLED_MODES, $context)
+            ->get_value();
+        if ($raw === null) {
             return self::default_optional_modes();
         }
         if ($raw === '') {
@@ -131,12 +137,13 @@ class tutor_mode_policy {
      * Modes available to the current user/session, including Standard.
      *
      * @param bool $quizavailable Whether practice quiz dependencies are installed.
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return string[]
      */
-    public static function get_available_modes(bool $quizavailable = true): array {
+    public static function get_available_modes(bool $quizavailable = true, int $courseid = 0): array {
         $modes = [tutor_message::MODE_NORMAL];
 
-        foreach (self::get_configured_optional_modes() as $mode) {
+        foreach (self::get_configured_optional_modes($courseid) as $mode) {
             if ($mode === tutor_message::MODE_QUIZ && !$quizavailable) {
                 continue;
             }
@@ -151,11 +158,12 @@ class tutor_mode_policy {
      *
      * @param string $mode
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return bool
      */
-    public static function is_mode_available(string $mode, bool $quizavailable = true): bool {
+    public static function is_mode_available(string $mode, bool $quizavailable = true, int $courseid = 0): bool {
         $mode = tutor_message::normalize_mode($mode);
-        return in_array($mode, self::get_available_modes($quizavailable), true);
+        return in_array($mode, self::get_available_modes($quizavailable, $courseid), true);
     }
 
     /**
@@ -163,11 +171,12 @@ class tutor_mode_policy {
      *
      * @param string $mode
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return string
      */
-    public static function coerce_mode(string $mode, bool $quizavailable = true): string {
+    public static function coerce_mode(string $mode, bool $quizavailable = true, int $courseid = 0): string {
         $mode = tutor_message::normalize_mode($mode);
-        if (self::is_mode_available($mode, $quizavailable)) {
+        if (self::is_mode_available($mode, $quizavailable, $courseid)) {
             return $mode;
         }
         return tutor_message::MODE_NORMAL;
@@ -177,10 +186,11 @@ class tutor_mode_policy {
      * Whether the mode selector should be shown (more than Standard alone).
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return bool
      */
-    public static function should_show_mode_selector(bool $quizavailable = true): bool {
-        return count(self::get_available_modes($quizavailable)) > 1;
+    public static function should_show_mode_selector(bool $quizavailable = true, int $courseid = 0): bool {
+        return count(self::get_available_modes($quizavailable, $courseid)) > 1;
     }
 
     /**
@@ -188,10 +198,11 @@ class tutor_mode_policy {
      *
      * @param string $mode
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
-    public static function require_mode_available(string $mode, bool $quizavailable = true): void {
-        if (!self::is_mode_available($mode, $quizavailable)) {
+    public static function require_mode_available(string $mode, bool $quizavailable = true, int $courseid = 0): void {
+        if (!self::is_mode_available($mode, $quizavailable, $courseid)) {
             throw new \invalid_parameter_exception(get_string('error_mode_not_available', 'block_dixeo_tutor'));
         }
     }
@@ -200,32 +211,35 @@ class tutor_mode_policy {
      * Assert that quiz mode is available.
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
-    public static function require_quiz_mode(bool $quizavailable = true): void {
-        self::require_mode_available(tutor_message::MODE_QUIZ, $quizavailable);
+    public static function require_quiz_mode(bool $quizavailable = true, int $courseid = 0): void {
+        self::require_mode_available(tutor_message::MODE_QUIZ, $quizavailable, $courseid);
     }
 
     /**
      * Assert that teach mode is available.
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
-    public static function require_teach_mode(bool $quizavailable = true): void {
-        self::require_mode_available(tutor_message::MODE_TEACH, $quizavailable);
+    public static function require_teach_mode(bool $quizavailable = true, int $courseid = 0): void {
+        self::require_mode_available(tutor_message::MODE_TEACH, $quizavailable, $courseid);
     }
 
     /**
      * Assert that quiz or teach mode is available (for hierarchy lookup).
      *
      * @param bool $quizavailable
+     * @param int $courseid Course whose override applies. Zero reads the Dixeo value.
      * @return void
      */
-    public static function require_quiz_or_teach_mode(bool $quizavailable = true): void {
+    public static function require_quiz_or_teach_mode(bool $quizavailable = true, int $courseid = 0): void {
         if (
-            self::is_mode_available(tutor_message::MODE_QUIZ, $quizavailable)
-            || self::is_mode_available(tutor_message::MODE_TEACH, $quizavailable)
+            self::is_mode_available(tutor_message::MODE_QUIZ, $quizavailable, $courseid)
+            || self::is_mode_available(tutor_message::MODE_TEACH, $quizavailable, $courseid)
         ) {
             return;
         }

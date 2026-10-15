@@ -31,14 +31,22 @@ class block_dixeo_tutor extends block_base {
      * Returns the list of module types where the tutor should not be displayed.
      * Reads from plugin settings, falling back to default values.
      *
+     * @param \context|null $context Course context, or null for the Dixeo value.
      * @return array List of module names to exclude.
      */
-    public static function get_excluded_modules(): array {
-        $setting = get_config('block_dixeo_tutor', 'excludedmodules');
-        if ($setting === false || $setting === '') {
+    public static function get_excluded_modules(?\context $context = null): array {
+        if ($context === null) {
+            $context = \context_system::instance();
+        }
+        $setting = \local_dixeo\external\service_factory::get_settings_config()
+            ->get('block_dixeo_tutor', 'excludedmodules', $context)
+            ->get_value();
+        if ($setting === '') {
             return ['quiz', 'simplequiz2'];
         }
-        return array_map('trim', explode(',', $setting));
+        return array_values(array_filter(array_map('trim', explode(',', $setting)), static function (string $part): bool {
+            return $part !== '';
+        }));
     }
 
     /**
@@ -46,9 +54,10 @@ class block_dixeo_tutor extends block_base {
      * Uses the block excludedmodules setting plus hardcoded types and certificate plugins.
      *
      * @param string $modname Activity frankenstyle name (e.g. quiz, h5pactivity).
+     * @param \context|null $context Course context, or null for the Dixeo value.
      * @return bool
      */
-    public static function is_quiz_topic_excluded(string $modname): bool {
+    public static function is_quiz_topic_excluded(string $modname, ?\context $context = null): bool {
         if ($modname === '') {
             return false;
         }
@@ -59,7 +68,7 @@ class block_dixeo_tutor extends block_base {
         if (in_array($modname, ['h5pactivity'], true)) {
             return true;
         }
-        return in_array($modname, self::get_excluded_modules(), true);
+        return in_array($modname, self::get_excluded_modules($context), true);
     }
 
     /**
@@ -102,7 +111,12 @@ class block_dixeo_tutor extends block_base {
         if ($modname === null || $modname === '') {
             return false;
         }
-        return in_array($modname, self::get_excluded_modules(), true);
+        $context = null;
+        $courseid = (int) ($page->course->id ?? 0);
+        if ($courseid > SITEID) {
+            $context = \context_course::instance($courseid);
+        }
+        return in_array($modname, self::get_excluded_modules($context), true);
     }
 
     /**
@@ -123,6 +137,15 @@ class block_dixeo_tutor extends block_base {
         try {
             $context = \context_course::instance($courseid);
         } catch (\Exception $e) {
+            return false;
+        }
+
+        $config = \local_dixeo\external\service_factory::get_settings_config();
+        if (!$config->enabled_for($context)) {
+            return false;
+        }
+
+        if ($config->get('block_dixeo_tutor', 'tutor_enabled', $context)->get_value() !== '1') {
             return false;
         }
 
@@ -179,6 +202,23 @@ class block_dixeo_tutor extends block_base {
         $this->content = (object)[];
         $this->content->text = '';
         $this->content->footer = '';
+
+        // Dixeo off leaves the block empty, except in editing mode, where it explains why.
+        if (!$this->dixeo_is_enabled()) {
+            if ($this->page->user_is_editing()) {
+                $this->content->text = $this->disabled_block_text();
+            }
+            return $this->content;
+        }
+
+        // A course can turn the tutor off on its own. Editing mode says so; otherwise the block stays empty.
+        if ($this->dixeo_page_context()->contextlevel === CONTEXT_COURSE && !$this->tutor_is_enabled()) {
+            if ($this->page->user_is_editing()) {
+                $this->content->text = get_string('disabled_tutor_course', 'block_dixeo_tutor');
+            }
+            return $this->content;
+        }
+
         $courseid = $this->page->course->id;
 
         // Users without permission to use the tutor get no block at all.
@@ -209,15 +249,18 @@ class block_dixeo_tutor extends block_base {
         $simplequiz2available = self::is_simplequiz2_available();
         $quizmodeavailable = \block_dixeo_tutor\service\tutor_mode_policy::is_mode_available(
             \local_dixeo\dto\tutor_message::MODE_QUIZ,
-            $simplequiz2available
+            $simplequiz2available,
+            $courseid
         );
         $guidemodeavailable = \block_dixeo_tutor\service\tutor_mode_policy::is_mode_available(
             \local_dixeo\dto\tutor_message::MODE_GUIDE,
-            $simplequiz2available
+            $simplequiz2available,
+            $courseid
         );
         $teachmodeavailable = \block_dixeo_tutor\service\tutor_mode_policy::is_mode_available(
             \local_dixeo\dto\tutor_message::MODE_TEACH,
-            $simplequiz2available
+            $simplequiz2available,
+            $courseid
         );
 
         $modeservice = new \block_dixeo_tutor\service\tutor_mode_service();
@@ -225,16 +268,18 @@ class block_dixeo_tutor extends block_base {
         $modeselector = \block_dixeo_tutor\service\tutor_mode_helper::export_mode_selector(
             $OUTPUT,
             $selectedmode,
-            $simplequiz2available
+            $simplequiz2available,
+            $courseid
         );
 
-        $langoptions = \local_dixeo\service\generation_language_helper::build_options((int) $USER->id);
-
+        $coursecontext = \context_course::instance($courseid);
         $templatecontext = [
-            'coursename' => format_string($this->page->course->fullname, true, ['context' => \context_course::instance($courseid)]),
+            'courseid' => $courseid,
+            'contextid' => $coursecontext->id,
+            'canupdate' => has_capability('moodle/course:update', $coursecontext),
+            'canmanagesync' => has_capability('local/dixeo:syncfiles', $coursecontext) ? '1' : '0',
+            'coursename' => format_string($this->page->course->fullname, true, ['context' => $coursecontext]),
             'currentcmid' => $currentcmid,
-            'generationlanguagesjson' => json_encode($langoptions['languages']),
-            'defaultgenerationlanguage' => $langoptions['defaultlanguage'],
             'quizmodeavailable' => $quizmodeavailable,
             'teachmodeavailable' => $teachmodeavailable,
         ];
@@ -246,8 +291,10 @@ class block_dixeo_tutor extends block_base {
         if ($simplequiz2available && $quizmodeavailable) {
             $this->page->requires->css('/mod/simplequiz2/styles.css');
         }
-        $displaymode = get_config('block_dixeo_tutor', 'displaymode');
-        if ($displaymode === false) {
+        $displaymode = \local_dixeo\external\service_factory::get_settings_config()
+            ->get('block_dixeo_tutor', 'displaymode', $coursecontext)
+            ->get_value();
+        if ($displaymode !== 'drawer' && $displaymode !== 'popup') {
             $displaymode = 'popup';
         }
         // Theme Dixeo always presents the tutor in drawer mode.
@@ -257,6 +304,7 @@ class block_dixeo_tutor extends block_base {
         $opentooltip = get_string('tooltip_open_tutor', 'block_dixeo_tutor');
         $hidetooltip = get_string('tooltip_hide_tutor', 'block_dixeo_tutor');
         $readservice = new \block_dixeo_tutor\service\tutor_read_state_service();
+        $this->page->requires->js_call_amd('local_dixeo/settings_modal', 'init');
         $this->page->requires->js_call_amd('block_dixeo_tutor/tutor', 'init', [
             $courseid,
             $USER->id,
@@ -270,6 +318,49 @@ class block_dixeo_tutor extends block_base {
             $modeservice->get_last_activity((int) $USER->id, $courseid),
         ]);
         return $this->content;
+    }
+
+    /**
+     * Whether Dixeo features run on this block's page.
+     *
+     * A page inside a course uses that course. Any other page uses the Dixeo layer.
+     *
+     * @return bool
+     */
+    private function dixeo_is_enabled(): bool {
+        return \local_dixeo\external\service_factory::get_settings_config()->enabled_for($this->dixeo_page_context());
+    }
+
+    /**
+     * Whether this course has the tutor turned on.
+     *
+     * @return bool
+     */
+    private function tutor_is_enabled(): bool {
+        return \local_dixeo\external\service_factory::get_settings_config()
+            ->get('block_dixeo_tutor', 'tutor_enabled', $this->dixeo_page_context())
+            ->get_value() === '1';
+    }
+
+    /**
+     * Editing-mode explanation for why this block is hidden.
+     *
+     * @return string
+     */
+    private function disabled_block_text(): string {
+        return \local_dixeo\external\service_factory::get_settings_config()->disabled_block_text($this->dixeo_page_context());
+    }
+
+    /**
+     * Course context for a page inside a course, otherwise the Dixeo layer.
+     *
+     * @return \context
+     */
+    private function dixeo_page_context(): \context {
+        $courseid = (int) ($this->page->course->id ?? 0);
+        return $courseid > SITEID
+            ? \context_course::instance($courseid)
+            : \context_system::instance();
     }
 
     /**
@@ -350,7 +441,7 @@ class block_dixeo_tutor extends block_base {
             if (!$cm->uservisible) {
                 continue;
             }
-            if (self::is_quiz_topic_excluded($cm->modname)) {
+            if (self::is_quiz_topic_excluded($cm->modname, \context_course::instance($courseid))) {
                 continue;
             }
             $sectionnum = (int) $cm->sectionnum;
@@ -386,7 +477,7 @@ class block_dixeo_tutor extends block_base {
      * @return bool True on success
      */
     public function instance_create(): bool {
-        global $DB, $USER;
+        global $DB;
 
         // Update the block.
         $bi = $DB->get_record('block_instances', ['id' => $this->instance->id]);
@@ -394,16 +485,6 @@ class block_dixeo_tutor extends block_base {
         $bi->pagetypepattern = '*';
         $bi->defaultweight = 5;
         $DB->update_record('block_instances', $bi);
-
-        $courseid = \local_dixeo\service\file_sync_policy::resolve_courseid_from_block_parent(
-            (int) $this->instance->parentcontextid
-        );
-        if ($courseid !== null) {
-            \local_dixeo\external\service_factory::get_file_sync_service()->opt_in_on_block_added(
-                $courseid,
-                (int) $USER->id
-            );
-        }
 
         return true;
     }

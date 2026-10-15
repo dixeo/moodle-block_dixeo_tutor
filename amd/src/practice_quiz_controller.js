@@ -100,7 +100,6 @@ define([
             return {
                 count: savedConfig.count,
                 difficulty: savedConfig.difficulty,
-                language: savedConfig.language,
                 cmid: savedConfig.cmid || currentCmid,
                 topicKey: generationModeController.topicKeyFromConfig(savedConfig),
             };
@@ -116,7 +115,7 @@ define([
                 count: setupConfig.count,
                 difficulty: setupConfig.difficulty,
                 topictitle: setupConfig.topictitle,
-                language: setupConfig.language || '',
+                language: '',
             });
         },
         persistGenerating: function(setupConfig, jobId) {
