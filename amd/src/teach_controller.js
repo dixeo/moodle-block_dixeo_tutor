@@ -95,7 +95,6 @@ define([
         buildReopenInitialValues: function(savedConfig, currentCmid) {
             return {
                 learnerrequest: savedConfig.learnerrequest || '',
-                language: savedConfig.language || '',
                 cmid: savedConfig.cmid || currentCmid,
                 topicKey: generationModeController.topicKeyFromConfig(savedConfig),
             };
@@ -107,7 +106,7 @@ define([
                 cmid: setupConfig.cmid || 0,
                 topictitle: setupConfig.topictitle,
                 learnerrequest: setupConfig.learnerrequest,
-                language: setupConfig.language || '',
+                language: '',
             });
         },
         persistGenerating: function(setupConfig, jobId) {

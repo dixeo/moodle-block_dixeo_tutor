@@ -403,8 +403,7 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
 }
 
 .dixeo-teach-setup__topic-select,
-.dixeo-teach-setup__prompt,
-.dixeo-teach-setup__language-select {
+.dixeo-teach-setup__prompt {
     width: 100%;
 }
 
@@ -992,8 +991,7 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
     padding: 0.5rem;
 }
 
-.dixeo-quiz-setup__topic-select,
-.dixeo-quiz-setup__language-select {
+.dixeo-quiz-setup__topic-select {
     width: 100%;
 }
 

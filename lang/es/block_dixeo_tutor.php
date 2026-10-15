@@ -174,7 +174,6 @@ $string['setting_enabledmodes'] = 'Modos de tutor habilitados';
 $string['setting_enabledmodes_desc'] = 'Seleccione qué modos de tutor opcionales están disponibles. El modo estándar siempre está habilitado y no se puede desactivar.';
 $string['setting_excludedmodules'] = 'Tipos de módulos excluidos';
 $string['setting_excludedmodules_desc'] = 'Lista de tipos de módulos de actividad separados por comas donde el tutor debe ocultarse (ej: quiz,simplequiz2). El tutor no aparecerá en las páginas de estos tipos de actividad.';
-$string['setup_language'] = 'Idioma';
 $string['talktotutor'] = 'Hablar con el tutor';
 $string['task_erase_conversations'] = 'Eliminar las conversaciones del tutor Dixeo';
 $string['teach_generate_error'] = 'No se pudo generar la lección. Inténtalo de nuevo.';

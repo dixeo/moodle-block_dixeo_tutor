@@ -272,8 +272,6 @@ class block_dixeo_tutor extends block_base {
             $courseid
         );
 
-        $langoptions = \local_dixeo\service\generation_language_helper::build_options((int) $USER->id);
-
         $coursecontext = \context_course::instance($courseid);
         $templatecontext = [
             'courseid' => $courseid,
@@ -282,8 +280,6 @@ class block_dixeo_tutor extends block_base {
             'canmanagesync' => has_capability('local/dixeo:syncfiles', $coursecontext) ? '1' : '0',
             'coursename' => format_string($this->page->course->fullname, true, ['context' => $coursecontext]),
             'currentcmid' => $currentcmid,
-            'generationlanguagesjson' => json_encode($langoptions['languages']),
-            'defaultgenerationlanguage' => $langoptions['defaultlanguage'],
             'quizmodeavailable' => $quizmodeavailable,
             'teachmodeavailable' => $teachmodeavailable,
         ];
