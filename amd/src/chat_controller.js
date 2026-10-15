@@ -256,7 +256,14 @@ define([
             this.ui.on(constants.events.ENSURE_VISIBLE_TRANSCRIPT, () => {
                 this._ensureVisibleStandardTranscript();
             });
-            this.ui.on(constants.events.DELETE_CONVERSATION, () => this.handleDeleteConversation());
+            this._onConversationDeleted = (event) => {
+                const courseid = event && event.detail ? Number(event.detail.courseid) : 0;
+                if (!this.state || courseid !== Number(this.state.getCourseId())) {
+                    return;
+                }
+                this.resetAfterConversationDeleted().catch(() => null);
+            };
+            window.addEventListener('dixeo-tutor-conversation-deleted', this._onConversationDeleted);
         }
 
         /**
@@ -608,33 +615,20 @@ define([
         }
 
         /**
-         * Erases the user's conversation, then rebuilds an empty transcript.
+         * Rebuilds an empty transcript after Preferences erased this course's conversation.
          *
-         * The UI is only cleared once the server confirms the erasure: wiping the
-         * transcript on a failed call would show data as gone while it still exists.
+         * The settings modal performs the erasure. This only clears the open tutor.
          */
-        async handleDeleteConversation() {
-            try {
-                await this.api.deleteConversation(this.state.getCourseId());
-            } catch (e) {
-                const message = await str.get_string('deleteconversationfailed', 'block_dixeo_tutor');
-                this.ui.appendErrorMessage(message);
+        async resetAfterConversationDeleted() {
+            if (!this.state) {
                 return;
             }
-
             this._stopPolling();
             this.pendingTempId = null;
             this.state.setPending(false);
             this.state.setLastRenderedId(null);
             this.state.clearAll();
-
-            // Same path as a first load with no history: the transcript is wiped and
-            // rebuilt with the welcome message, and the input is re-enabled.
             await this._handleInitialState({messages: []});
-
-            // The erase button is disabled by the rebuild, so it cannot keep the focus
-            // the confirmation modal hands back to it.
-            this.ui.focusInput();
         }
 
         /**
@@ -1177,6 +1171,9 @@ define([
             if (this._onStorageChange) {
                 window.removeEventListener('storage', this._onStorageChange);
             }
+            if (this._onConversationDeleted) {
+                window.removeEventListener('dixeo-tutor-conversation-deleted', this._onConversationDeleted);
+            }
 
             this.ui.removeAllListeners();
 
@@ -1191,6 +1188,7 @@ define([
             this._onOnline = null;
             this._onBeforeUnload = null;
             this._onStorageChange = null;
+            this._onConversationDeleted = null;
         }
     };
 });
