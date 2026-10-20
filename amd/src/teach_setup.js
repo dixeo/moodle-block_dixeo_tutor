@@ -2,17 +2,10 @@ define([
     'core/str',
     'core/templates',
     'block_dixeo_tutor/tutor_setup_core',
-    'block_dixeo_tutor/setup_language',
-], function(str, Templates, tutorSetupCore, setupLanguage) {
+], function(str, Templates, tutorSetupCore) {
     'use strict';
 
     const SETUP_CLASS = 'dixeo-teach-setup dixeo-tutor-setup';
-
-    const TEACH_LANGUAGE_FIELD = {
-        languageselectid: 'dixeo-teach-setup-language',
-        labelclass: 'dixeo-tutor-setup__label dixeo-teach-setup__label',
-        selectclass: 'dixeo-teach-setup__language-select',
-    };
 
     const bindPromptValidation = function(panel, syncStart) {
         const prompt = panel.querySelector('[data-role="learner-prompt"]');
@@ -36,7 +29,6 @@ define([
             cmid: topic.cmid,
             topictitle: topic.topictitle,
             learnerrequest: learnerrequest,
-            language: setupLanguage.getSelectedLanguage(panel),
         };
     };
 
@@ -62,11 +54,10 @@ define([
      * @param {Function} onStart
      * @param {Function} loadHierarchy
      * @param {number} currentCmid
-     * @param {{learnerrequest?: string, language?: string, topicKey?: string, cmid?: number}} [initialValues]
+     * @param {{learnerrequest?: string, topicKey?: string, cmid?: number}} [initialValues]
      * @return {Promise<void>}
      */
     const openSetup = async function(container, coursename, onCancel, onStart, loadHierarchy, currentCmid, initialValues) {
-        const language = initialValues?.language;
         const promptValue = initialValues?.learnerrequest || '';
 
         tutorSetupCore.showInstantSpinner(container, SETUP_CLASS);
@@ -88,8 +79,6 @@ define([
             startlabel: startLabel,
             cancellabel: cancelLabel,
             startdisabled: true,
-            ...setupLanguage.buildLanguageContext(language),
-            ...TEACH_LANGUAGE_FIELD,
         }).then(function(renderedHtml, renderedJs) {
             container.innerHTML = renderedHtml;
             const panel = container.querySelector('.dixeo-teach-setup');

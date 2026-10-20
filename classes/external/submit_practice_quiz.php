@@ -95,7 +95,7 @@ class submit_practice_quiz extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
-        tutor_mode_policy::require_quiz_mode(tutor_mode_policy::is_quiz_runtime_available());
+        tutor_mode_policy::require_quiz_mode(tutor_mode_policy::is_quiz_runtime_available(), (int) $params['courseid']);
 
         try {
             $service = service_factory::get_practice_quiz_service();

@@ -11,8 +11,6 @@
 <div id="dixeo-tutor" class="card border-0 shadow d-flex flex-column"
      data-course-name="{{coursename}}"
      data-current-cmid="{{currentcmid}}"
-     data-generation-languages="{{generationlanguagesjson}}"
-     data-default-generation-language="{{defaultgenerationlanguage}}"
      data-quiz-mode-available="{{#quizmodeavailable}}1{{/quizmodeavailable}}{{^quizmodeavailable}}0{{/quizmodeavailable}}"
      data-teach-mode-available="{{#teachmodeavailable}}1{{/teachmodeavailable}}{{^teachmodeavailable}}0{{/teachmodeavailable}}"
      data-tutor-mode="{{#mode_selector}}{{currentmode}}{{/mode_selector}}{{^mode_selector}}normal{{/mode_selector}}">
@@ -22,16 +20,24 @@
             {{#mode_selector}}
             {{> block_dixeo_tutor/mode_selector }}
             {{/mode_selector}}
-            <!-- Delete conversation button — disabled for now, re-enable later.
             <button type="button"
-                    id="dixeo-tutor-delete"
-                    class="btn btn-link p-1 dixeo-tutor-delete"
-                    title="{{#str}}deleteconversation, block_dixeo_tutor{{/str}}"
-                    aria-label="{{#str}}deleteconversation, block_dixeo_tutor{{/str}}"
-                    disabled>
-                <i class="fa fa-trash-o" aria-hidden="true"></i>
+                    class="btn btn-link p-1 dixeo-tutor-settings"
+                    title="{{#str}}settings_button, local_dixeo{{/str}}"
+                    aria-label="{{#str}}settings_button, local_dixeo{{/str}}"
+                    data-action="local-dixeo-settings-open"
+                    data-course-name="{{coursename}}"
+                    data-courseid="{{courseid}}"
+                    {{#canupdate}}
+                    data-contextid="{{contextid}}"
+                    data-canmanagesync="{{canmanagesync}}"
+                    data-initial="feature:tutor"
+                    {{/canupdate}}
+                    {{^canupdate}}
+                    data-initial="preferences"
+                    data-preferencesonly="1"
+                    {{/canupdate}}>
+                <i class="fa fa-cog" aria-hidden="true"></i>
             </button>
-            -->
         </div>
     </div>
     <div class="card-body p-0 d-flex flex-column flex-grow-1 dixeo-tutor-body" id="dixeo-tutor-body">

@@ -2,19 +2,12 @@ define([
     'core/str',
     'core/templates',
     'block_dixeo_tutor/tutor_setup_core',
-    'block_dixeo_tutor/setup_language',
-], function(str, Templates, tutorSetupCore, setupLanguage) {
+], function(str, Templates, tutorSetupCore) {
     'use strict';
 
     const DEFAULT_COUNT = 5;
     const DEFAULT_DIFFICULTY = 'medium';
     const SETUP_CLASS = 'dixeo-quiz-setup dixeo-tutor-setup';
-
-    const QUIZ_LANGUAGE_FIELD = {
-        languageselectid: 'dixeo-quiz-setup-language',
-        labelclass: 'dixeo-tutor-setup__label dixeo-quiz-setup__label',
-        selectclass: 'dixeo-quiz-setup__language-select',
-    };
 
     const buildCountOptions = function(count) {
         return [3, 5, 7, 10].map(function(n) {
@@ -78,7 +71,6 @@ define([
             cmid: topic.cmid,
             count: picked.count,
             difficulty: picked.difficulty,
-            language: setupLanguage.getSelectedLanguage(panel),
             topictitle: topic.topictitle,
         };
     };
@@ -102,13 +94,12 @@ define([
      * @param {Function} onStart
      * @param {Function} loadHierarchy
      * @param {number} currentCmid
-     * @param {{count?: number, difficulty?: string, language?: string}} [initialSelections]
+     * @param {{count?: number, difficulty?: string}} [initialSelections]
      * @return {Promise<void>}
      */
     const openSetup = async function(container, coursename, onCancel, onStart, loadHierarchy, currentCmid, initialSelections) {
         const count = initialSelections?.count ?? DEFAULT_COUNT;
         const difficulty = initialSelections?.difficulty ?? DEFAULT_DIFFICULTY;
-        const language = initialSelections?.language;
 
         tutorSetupCore.showInstantSpinner(container, SETUP_CLASS);
 
@@ -126,8 +117,6 @@ define([
             startlabel: startLabel,
             cancellabel: cancelLabel,
             startdisabled: true,
-            ...setupLanguage.buildLanguageContext(language),
-            ...QUIZ_LANGUAGE_FIELD,
         }).then(function(renderedHtml, renderedJs) {
             container.innerHTML = renderedHtml;
             const panel = container.querySelector('.dixeo-quiz-setup');
