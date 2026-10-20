@@ -15,7 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Settings for the Dixeo Tutor block.
+ * The Tutor block has no Moodle admin settings page.
+ *
+ * Its settings are edited in the Dixeo settings modal.
  *
  * @package    block_dixeo_tutor
  * @copyright  2025 Edunao SAS (contact@edunao.com)
@@ -25,47 +27,4 @@
 
 defined('MOODLE_INTERNAL') || die();
 
-use local_dixeo\dto\tutor_message;
-
-if ($ADMIN->fulltree) {
-    \local_dixeo\admin_setting_modal_open::add($settings, 'block_dixeo_tutor');
-
-    $settings->add(new admin_setting_configcheckbox(
-        'block_dixeo_tutor/tutor_enabled_default',
-        get_string('tutor_enabled_default', 'block_dixeo_tutor'),
-        get_string('tutor_enabled_default_help', 'block_dixeo_tutor'),
-        1
-    ));
-
-    // Display mode: in block drawer or in a popup window.
-    $settings->add(new admin_setting_configselect(
-        'block_dixeo_tutor/displaymode',
-        get_string('setting_displaymode', 'block_dixeo_tutor'),
-        get_string('setting_displaymode_desc', 'block_dixeo_tutor'),
-        'popup',
-        [
-            'drawer' => get_string('setting_displaymode_drawer', 'block_dixeo_tutor'),
-            'popup' => get_string('setting_displaymode_popup', 'block_dixeo_tutor'),
-        ]
-    ));
-
-    $settings->add(new admin_setting_configmultiselect(
-        'block_dixeo_tutor/enabledmodes',
-        get_string('setting_enabledmodes', 'block_dixeo_tutor'),
-        get_string('setting_enabledmodes_desc', 'block_dixeo_tutor'),
-        [tutor_message::MODE_GUIDE, tutor_message::MODE_QUIZ, tutor_message::MODE_TEACH],
-        [
-            tutor_message::MODE_GUIDE => get_string('modeguide', 'block_dixeo_tutor'),
-            tutor_message::MODE_QUIZ => get_string('modequiz', 'block_dixeo_tutor'),
-            tutor_message::MODE_TEACH => get_string('modeteach', 'block_dixeo_tutor'),
-        ]
-    ));
-
-    // Excluded module types (comma-separated).
-    $settings->add(new admin_setting_configtextarea(
-        'block_dixeo_tutor/excludedmodules',
-        get_string('setting_excludedmodules', 'block_dixeo_tutor'),
-        get_string('setting_excludedmodules_desc', 'block_dixeo_tutor'),
-        'quiz,simplequiz2'
-    ));
-}
+$settings = null;

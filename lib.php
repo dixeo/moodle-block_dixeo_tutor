@@ -25,14 +25,26 @@
 /**
  * Dixeo settings owned by block_dixeo_tutor.
  *
- * The block admin page edits the Dixeo values. A course row in local_dixeo_setting overrides
- * display mode, enabled modes, and excluded modules. tutor_enabled is stored per course and
- * is not rewritten when the new-course default changes.
+ * Edited in the Dixeo settings modal. A course row in local_dixeo_setting overrides display
+ * mode, enabled modes, and excluded modules. tutor_enabled is stored per course and is not
+ * rewritten when the new-course default changes.
  *
  * @return array[]
  */
 function block_dixeo_tutor_dixeo_settings(): array {
     return [
+        [
+            'key' => 'tutor_enabled_default',
+            'shortname' => 'tutor_enabled_default',
+            'component' => 'block_dixeo_tutor',
+            'type' => 'bool',
+            'default' => '1',
+            'levels' => ['dixeo'],
+            'feature' => 'tutor',
+            'plugingroup' => 'dixeo_tutor',
+            'help' => 'tutor_enabled_default_help',
+            'sensitive' => false,
+        ],
         [
             'key' => 'tutor_enabled',
             'shortname' => 'tutor_enabled',
@@ -83,18 +95,6 @@ function block_dixeo_tutor_dixeo_settings(): array {
             'feature' => 'tutor',
             'plugingroup' => 'dixeo_tutor',
             'help' => 'excludedmodules_help',
-            'sensitive' => false,
-        ],
-        [
-            'key' => 'tutor_enabled_default',
-            'shortname' => 'tutor_enabled_default',
-            'component' => 'block_dixeo_tutor',
-            'type' => 'bool',
-            'default' => '1',
-            'levels' => ['dixeo'],
-            'feature' => 'tutor',
-            'plugingroup' => 'dixeo_tutor',
-            'help' => 'tutor_enabled_default_help',
             'sensitive' => false,
         ],
     ];
