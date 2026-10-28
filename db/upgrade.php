@@ -75,5 +75,32 @@ function xmldb_block_dixeo_tutor_upgrade($oldversion) {
         upgrade_block_savepoint(true, 2026101400, 'dixeo_tutor');
     }
 
+    if ($oldversion < 2026101404) {
+        // Greetings are now decided locally on render: drop the welcome events still queued.
+        $welcometypes = ['first_visit', 'return_visit_warm', 'return_visit_enthusiastic', 'return_visit_delighted'];
+        $records = $DB->get_recordset_select(
+            'block_dixeo_tutor_pending',
+            $DB->sql_like('message', ':pattern'),
+            ['pattern' => '%_visit%']
+        );
+        foreach ($records as $record) {
+            $events = json_decode((string) $record->message, true);
+            if (!is_array($events)) {
+                continue;
+            }
+            $kept = array_values(array_filter($events, static function ($event) use ($welcometypes): bool {
+                return !is_array($event) || !in_array($event['type'] ?? '', $welcometypes, true);
+            }));
+            if (count($kept) === count($events)) {
+                continue;
+            }
+            $record->message = $kept === [] ? '' : json_encode($kept, JSON_UNESCAPED_UNICODE);
+            $DB->update_record('block_dixeo_tutor_pending', $record);
+        }
+        $records->close();
+
+        upgrade_block_savepoint(true, 2026101404, 'dixeo_tutor');
+    }
+
     return true;
 }

@@ -26,7 +26,9 @@
 namespace block_dixeo_tutor\privacy;
 
 use block_dixeo_tutor\event\privacy_request_failed;
+use block_dixeo_tutor\service\tutor_citation_renderer;
 use block_dixeo_tutor\service\tutor_mode_service;
+use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\service\tutor_read_state_service;
 use block_dixeo_tutor\task\erase_conversations;
@@ -103,7 +105,7 @@ class provider implements
         );
 
         $collection->add_user_preference(
-            tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX,
+            tutor_notice_service::PREF_LAST_GREETING_PREFIX,
             'privacy:metadata:lastproactive'
         );
 
@@ -381,9 +383,12 @@ class provider implements
      * @return \stdClass Exportable message.
      */
     private static function export_message(array $message): \stdClass {
+        $role = (string) ($message['role'] ?? '');
+        $content = (string) ($message['content'] ?? '');
+
         return (object) [
-            'role' => (string) ($message['role'] ?? ''),
-            'content' => (string) ($message['content'] ?? ''),
+            'role' => $role,
+            'content' => $role === 'assistant' ? tutor_citation_renderer::strip($content) : $content,
             'time' => transform::datetime((int) ($message['time'] ?? 0)),
         ];
     }
@@ -409,7 +414,7 @@ class provider implements
             $params
         );
 
-        $prefix = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX;
+        $prefix = tutor_notice_service::PREF_LAST_GREETING_PREFIX;
         $prefs = $DB->get_records_select(
             'user_preferences',
             'userid = :userid AND ' . $DB->sql_like('name', ':prefix', false),
@@ -451,7 +456,7 @@ class provider implements
             "SELECT userid
                FROM {user_preferences}
               WHERE name = :name",
-            ['name' => tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid]
+            ['name' => tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid]
         );
     }
 
@@ -495,7 +500,7 @@ class provider implements
      * @param int $courseid Course id.
      */
     private static function export_proactive_preference(\context $context, int $userid, int $courseid): void {
-        $name = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid;
+        $name = tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid;
         $value = get_user_preferences($name, null, $userid);
         if ($value === null) {
             return;
@@ -534,7 +539,7 @@ class provider implements
     private static function delete_proactive_preference(int $courseid, ?int $userid): void {
         global $DB;
 
-        $name = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid;
+        $name = tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid;
         if ($userid === null) {
             $DB->delete_records('user_preferences', ['name' => $name]);
             return;

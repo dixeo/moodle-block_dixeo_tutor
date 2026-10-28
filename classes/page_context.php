@@ -29,11 +29,14 @@ namespace block_dixeo_tutor;
  */
 class page_context {
     /**
-     * Allow only Moodle-site URLs; strip query/fragment; otherwise use a course URL.
+     * Allow only Moodle-site URLs and keep only their numeric id parameter; otherwise use a course URL.
+     *
+     * The id tells the tutor which course, section or activity the student is on: it matches
+     * the section and activity ids of the course context. Every other parameter is dropped.
      *
      * @param string $pageurl Client-supplied page URL (may be empty or hostile).
      * @param int $courseid Course id used for the trusted fallback URL.
-     * @return string Absolute wwwroot URL without query/fragment, or course view URL.
+     * @return string Absolute wwwroot URL with at most its id parameter, or course view URL.
      */
     public static function sanitize_pageurl(string $pageurl, int $courseid): string {
         global $CFG;
@@ -56,6 +59,9 @@ class page_context {
             return $fallback;
         }
 
-        return $normalized;
+        parse_str((string) parse_url($pageurl, PHP_URL_QUERY), $params);
+        $id = filter_var($params['id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+
+        return $id !== false ? $normalized . '?id=' . $id : $normalized;
     }
 }

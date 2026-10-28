@@ -197,6 +197,7 @@ define([
          * @param {boolean} [guidemodeavailable] Whether guide mode is policy-available.
          * @param {boolean} [teachmodeavailable] Whether teach mode is policy-available.
          * @param {number} [lastModeActivity] Unix seconds of last special-mode message/activity.
+         * @param {Array<{content: string, contenthtml: string}>} [notices] Local notices for this page view.
          */
         init: function(
             courseid,
@@ -208,7 +209,8 @@ define([
             quizmodeavailable,
             guidemodeavailable,
             teachmodeavailable,
-            lastModeActivity
+            lastModeActivity,
+            notices
         ) {
             const state = new ChatState(courseid, userid);
             const ui = new ChatUI();
@@ -249,6 +251,7 @@ define([
             unreadCallbacks.onTutorOpened = unreadApi.onTutorOpened;
 
             bindProactiveAutoOpen(ui, popupApi, unreadApi);
+            controller.setNotices(notices);
             controller.initialize();
 
             let quizController = null;

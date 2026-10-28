@@ -35,7 +35,7 @@ use block_dixeo_tutor\service\tutor_context_schema;
 final class tutor_context_schema_test extends \advanced_testcase {
     public function test_proactive_context_shape(): void {
         $events = [
-            ['type' => 'first_visit', 'time' => 1234567890, 'name' => 'Alice'],
+            ['type' => 'guide_started', 'time' => 1234567890],
         ];
         $context = tutor_context_schema::proactive_context($events, 5, 10, 1234567890);
         $this->assertSame(tutor_context_schema::SCHEMA_PROACTIVE, $context['schema']);

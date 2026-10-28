@@ -38,6 +38,7 @@ define([
             this._initialHistoryReady = false;
             this._flushingPending = false;
             this._guideOutboundProvider = null;
+            this._notices = [];
             // Event handler references stored for cleanup in destroy().
             this._onOffline = null;
             this._onOnline = null;
@@ -74,6 +75,7 @@ define([
                 });
                 this._restoreSession();
                 this._syncPendingUi();
+                this._showNotices();
             } catch (e) {
                 if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
                     this._handleConnectionLoss();
@@ -81,6 +83,38 @@ define([
                     this.ui.appendErrorMessage('Failed to initialize chat.');
                 }
             }
+        }
+
+        /**
+         * Notices rendered by the server for this page view, shown once the history is loaded.
+         *
+         * @param {Array<{content: string, contenthtml: string}>} notices
+         */
+        setNotices(notices) {
+            this._notices = Array.isArray(notices) ? notices : [];
+        }
+
+        /**
+         * Add the local notices below the history. They are never sent to the API nor stored, and are
+         * skipped while a reply is still on its way so they cannot land between a question and its answer.
+         * @private
+         */
+        _showNotices() {
+            const notices = this._notices;
+            this._notices = [];
+            if (!notices.length || this.state.isPending()) {
+                return;
+            }
+            const time = Math.floor(Date.now() / 1000);
+            notices.forEach((notice) => {
+                this.ui.appendMessage({
+                    role: 'assistant',
+                    content: notice.content,
+                    contenthtml: notice.contenthtml,
+                    time: time,
+                });
+            });
+            window.dispatchEvent(new CustomEvent(constants.events.NOTICES_SHOWN));
         }
 
         /**
@@ -184,7 +218,7 @@ define([
         }
 
         /**
-         * Submit queued proactive context (welcome, Guide me start, etc.).
+         * Submit queued proactive context (Guide me start, etc.).
          *
          * @param {string} [mode] Current tutor mode after a preference save, if known.
          */

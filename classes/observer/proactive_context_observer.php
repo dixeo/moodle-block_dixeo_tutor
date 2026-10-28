@@ -25,7 +25,6 @@
 namespace block_dixeo_tutor\observer;
 
 use core\event\course_completed;
-use core\event\course_viewed;
 use core\event\user_graded;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 
@@ -33,16 +32,6 @@ use block_dixeo_tutor\service\tutor_proactive_context_service;
  * Thin observer delegating to the block proactive context service.
  */
 class proactive_context_observer {
-    /**
-     * Handle course viewed events.
-     *
-     * @param course_viewed $event
-     * @return void
-     */
-    public static function course_viewed(course_viewed $event): void {
-        (new tutor_proactive_context_service())->handle_course_viewed($event);
-    }
-
     /**
      * Handle course completed events.
      *

@@ -195,6 +195,14 @@ define([
                 evaluateUnread(e.detail?.lastIncomingTime);
             });
 
+            // Local notices have no server time to compare with the read watermark: they are always new.
+            window.addEventListener(constants.events.NOTICES_SHOWN, function() {
+                if (!isTutorUIOpen(popupApi)) {
+                    unread = true;
+                    setBadgeVisible(true);
+                }
+            });
+
             document.addEventListener(DRAWER_SHOWN_EVENT, function(e) {
                 const drawer = e.target;
                 if (!drawer || !drawer.classList.contains('drawer-right')) {

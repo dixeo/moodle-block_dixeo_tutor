@@ -56,23 +56,6 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
     }
 
     /**
-     * Create a course_viewed event for tests.
-     *
-     * @param int $courseid
-     * @param int $userid
-     * @return \core\event\course_viewed
-     */
-    private function create_course_viewed_event(int $courseid, int $userid): \core\event\course_viewed {
-        $this->setUser($userid);
-        $context = \context_course::instance($courseid);
-        return \core\event\course_viewed::create([
-            'context' => $context,
-            'courseid' => $courseid,
-            'userid' => $userid,
-        ]);
-    }
-
-    /**
      * Fetch the pending DB row for a user and course.
      *
      * @param int $userid
@@ -85,22 +68,6 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
             'userid' => $userid,
             'courseid' => $courseid,
         ]) ?: null;
-    }
-
-    /**
-     * Set last proactive course view timestamp.
-     *
-     * @param int $userid
-     * @param int $courseid
-     * @param int $timestamp
-     * @return void
-     */
-    private function set_last_proactive_course_view(int $userid, int $courseid, int $timestamp): void {
-        set_user_preference(
-            tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid,
-            $timestamp,
-            $userid
-        );
     }
 
     /**
@@ -118,63 +85,17 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         return $this->service->decode_queue((string) ($record->message ?? ''));
     }
 
-    public function test_first_course_view_appends_welcome(): void {
+    public function test_course_view_queues_nothing_for_the_api(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/course/lib.php');
+
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->setUser($user);
 
-        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
+        course_view(\context_course::instance((int) $course->id));
 
-        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
-        $this->assertCount(1, $events);
-        $this->assertSame('first_visit', $events[0]['type']);
-        $this->assertSame($user->firstname, $events[0]['name']);
-    }
-
-    public function test_second_view_within_24h_does_not_append_return_line(): void {
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
-
-        $firstevents = $this->decode_pending_events((int) $user->id, (int) $course->id);
-        $this->assertCount(1, $firstevents);
-
-        // First view already set the preference to now; no second line within 24h.
-
-        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
-
-        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
-        $this->assertCount(1, $events);
-        $this->assertSame('first_visit', $events[0]['type']);
-    }
-
-    public function test_return_after_24h_appends_welcome_back_line(): void {
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
-
-        $this->set_last_proactive_course_view((int) $user->id, (int) $course->id, time() - (25 * 3600));
-
-        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
-
-        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
-        $this->assertCount(2, $events);
-        $this->assertSame('return_visit_warm', $events[1]['type']);
-    }
-
-    public function test_return_after_long_gap_uses_delighted_tone(): void {
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
-
-        $this->set_last_proactive_course_view((int) $user->id, (int) $course->id, time() - (31 * DAYSECS));
-
-        $this->service->handle_course_viewed($this->create_course_viewed_event((int) $course->id, (int) $user->id));
-
-        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
-        $this->assertSame('return_visit_delighted', $events[1]['type']);
+        $this->assertSame([], $this->decode_pending_events((int) $user->id, (int) $course->id));
     }
 
     public function test_flush_clears_message_and_submits(): void {
@@ -184,7 +105,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
         $now = time();
-        $events = [['type' => 'course_completed', 'time' => $now]];
+        $events = [['type' => 'guide_started', 'time' => $now]];
         $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
             'userid' => $user->id,
             'courseid' => $course->id,
@@ -223,27 +144,51 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->assertSame('', trim((string) $record->message));
     }
 
-    public function test_should_flush_false_on_excluded_quiz_page(): void {
-        global $PAGE;
+    public function test_flush_sends_only_the_guide_opening_turn(): void {
+        global $DB;
 
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+        $notice = ['type' => 'course_completed', 'time' => time()];
+        $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
+            'userid' => $user->id,
+            'courseid' => $course->id,
+            'message' => json_encode([$notice]),
+            'timemodified' => time(),
+        ]);
 
-        $this->setUser($user);
-        $context = \context_module::instance($quiz->cmid);
-        $PAGE->set_url(new \moodle_url('/mod/quiz/view.php', ['id' => $quiz->cmid]));
-        $PAGE->set_course($course);
-        $PAGE->set_context($context);
-        $PAGE->set_pagetype('mod-quiz-view');
-        $PAGE->blocks->load_blocks();
+        $mock = $this->getMockBuilder(tutor_service::class)
+            ->onlyMethods(['submit'])
+            ->getMock();
+        $mock->expects($this->never())->method('submit');
+        service_factory::set_test_tutor_service($mock);
 
-        $this->assertFalse($this->service->should_flush_immediately((int) $user->id, (int) $course->id));
-        $this->assertFalse(\block_dixeo_tutor::is_tutor_available_on_page($PAGE, (int) $user->id));
+        $this->assertNull($this->service->flush((int) $user->id, (int) $course->id));
+        $this->assertSame([$notice], $this->decode_pending_events((int) $user->id, (int) $course->id));
     }
 
-    public function test_quiz_graded_queues_without_flush_on_excluded_page(): void {
-        global $CFG, $PAGE;
+    public function test_take_notices_keeps_the_guide_opening_turn(): void {
+        global $DB;
+
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $guide = ['type' => 'guide_started', 'time' => 1];
+        $quiz = ['type' => 'quiz_graded', 'time' => 2, 'quizname' => 'Q', 'grade' => 5, 'maxgrade' => 10];
+        $completed = ['type' => 'course_completed', 'time' => 3];
+        $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
+            'userid' => $user->id,
+            'courseid' => $course->id,
+            'message' => json_encode([$guide, $quiz, $completed]),
+            'timemodified' => time(),
+        ]);
+
+        $this->assertSame([$quiz, $completed], $this->service->take_notices((int) $user->id, (int) $course->id));
+        $this->assertSame([$guide], $this->decode_pending_events((int) $user->id, (int) $course->id));
+        $this->assertSame([], $this->service->take_notices((int) $user->id, (int) $course->id));
+    }
+
+    public function test_quiz_graded_queues_a_notice_without_calling_the_api(): void {
+        global $CFG;
 
         require_once($CFG->dirroot . '/mod/quiz/lib.php');
 
@@ -272,14 +217,6 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         ], false);
         $grade->insert();
 
-        $this->setUser($user);
-        $context = \context_module::instance($quiz->cmid);
-        $PAGE->set_url(new \moodle_url('/mod/quiz/view.php', ['id' => $quiz->cmid]));
-        $PAGE->set_course($course);
-        $PAGE->set_context($context);
-        $PAGE->set_pagetype('mod-quiz-view');
-        $PAGE->blocks->load_blocks();
-
         $mock = $this->getMockBuilder(tutor_service::class)
             ->onlyMethods(['submit'])
             ->getMock();
@@ -295,7 +232,8 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->assertCount(1, $events);
         $this->assertSame('quiz_graded', $events[0]['type']);
         $this->assertSame('Quiz 1', $events[0]['quizname']);
-        $this->assertStringContainsString('80', $events[0]['grade']);
+        $this->assertEquals(80, $events[0]['grade']);
+        $this->assertEquals(100, $events[0]['maxgrade']);
     }
 
     public function test_queue_guide_started_appends_once(): void {
@@ -382,7 +320,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->assertNull($record);
     }
 
-    public function test_course_completed_queues_and_defers_flush_to_client(): void {
+    public function test_course_completed_queues_a_notice_without_calling_the_api(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
 
@@ -400,7 +338,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
             'courseid' => $course->id,
             'other' => ['relateduserid' => $user->id],
         ]);
-        $this->assertNull($this->service->handle_course_completed($event));
+        $this->service->handle_course_completed($event);
 
         $record = $this->get_pending_record((int) $user->id, (int) $course->id);
         $this->assertNotNull($record);

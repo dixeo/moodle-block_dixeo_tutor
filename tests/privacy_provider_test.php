@@ -29,6 +29,7 @@ use block_dixeo_tutor\event\conversation_deleted;
 use block_dixeo_tutor\event\privacy_request_failed;
 use block_dixeo_tutor\external\delete_conversation;
 use block_dixeo_tutor\privacy\provider;
+use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\erase_conversations;
 use core_privacy\local\metadata\collection;
@@ -589,7 +590,7 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
             'message' => 'Welcome back',
             'timemodified' => time(),
         ]);
-        $preferencename = tutor_proactive_context_service::PREF_LAST_PROACTIVE_PREFIX . $courseid;
+        $preferencename = tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid;
         set_user_preference($preferencename, time(), $userid);
 
         $service = $this->mock_tutor_service();

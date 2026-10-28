@@ -56,6 +56,8 @@ define([], function() {
             GUIDE_ASSISTANT_CONTEXT: 'dixeo-tutor-guide-assistant-context',
             /** Window CustomEvent: conversation snapshot updated (detail: {lastIncomingTime}). */
             CONVERSATION_SYNCED: 'dixeo-tutor-conversation-synced',
+            /** Window CustomEvent: local notice bubbles (greeting, quiz grade…) were added to the chat. */
+            NOTICES_SHOWN: 'dixeo-tutor-notices-shown',
         }),
     });
 });

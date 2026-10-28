@@ -32,7 +32,6 @@ namespace block_dixeo_tutor;
  * @copyright  2026 Edunao SAS (contact@edunao.com)
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  * @covers     \block_dixeo_tutor::get_content
- * @covers     \block_dixeo_tutor::is_tutor_available_on_page
  */
 final class enabled_gate_test extends \advanced_testcase {
     /**
@@ -51,7 +50,6 @@ final class enabled_gate_test extends \advanced_testcase {
         $this->setUser($student);
         $shown = $block->get_content();
         $this->assertNotSame('', $shown->text);
-        $this->assertTrue(\block_dixeo_tutor::is_tutor_available_on_page($block->page, (int) $student->id));
 
         $this->setAdminUser();
         $config->set('local_dixeo', 'enabled', $coursecontext, '0');
@@ -60,7 +58,6 @@ final class enabled_gate_test extends \advanced_testcase {
         $hidden = $block->get_content();
         $this->assertSame('', $hidden->text);
         $this->assertSame('', $hidden->footer);
-        $this->assertFalse(\block_dixeo_tutor::is_tutor_available_on_page($block->page, (int) $student->id));
 
         $this->setAdminUser();
         $this->assertSame(get_string('disabled_block_course', 'local_dixeo'), $this->editing_text($block));
@@ -71,7 +68,6 @@ final class enabled_gate_test extends \advanced_testcase {
         $block->content = null;
         $forcedoff = $block->get_content();
         $this->assertSame('', $forcedoff->text);
-        $this->assertFalse(\block_dixeo_tutor::is_tutor_available_on_page($block->page, (int) $student->id));
         $this->setAdminUser();
         $this->assertSame(get_string('disabled_block_site', 'local_dixeo'), $this->editing_text($block));
     }
@@ -95,7 +91,6 @@ final class enabled_gate_test extends \advanced_testcase {
         $block->content = null;
         $hidden = $block->get_content();
         $this->assertSame('', $hidden->text);
-        $this->assertFalse(\block_dixeo_tutor::is_tutor_available_on_page($block->page, (int) $student->id));
 
         $this->setAdminUser();
         $this->assertSame(get_string('disabled_tutor_course', 'block_dixeo_tutor'), $this->editing_text($block));
@@ -113,7 +108,6 @@ final class enabled_gate_test extends \advanced_testcase {
         $this->assertStringContainsString('data-preferencesonly="1"', $studentview->text);
         $this->assertStringContainsString('data-initial="preferences"', $studentview->text);
         $this->assertStringNotContainsString('local_dixeo_get_settings', $studentview->text);
-        $this->assertTrue(\block_dixeo_tutor::is_tutor_available_on_page($block->page, (int) $student->id));
     }
 
     /**

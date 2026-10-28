@@ -1366,6 +1366,67 @@ body.darkmode #dixeo-tutor .dixeo-tutor-message-user--guide .dixeo-tutor-message
     bottom: 2px;
 }
 
+/* Course activity cited inline in an assistant answer */
+a.dixeo-tutor-cite {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    margin: 0 2px;
+    padding: 2px 9px 2px 5px;
+    border: 1px solid #c9d3dd;
+    border-radius: 999px;
+    background: #fff;
+    color: #0f4c81;
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.2;
+    text-decoration: none;
+    vertical-align: 1px;
+    white-space: nowrap;
+}
+
+a.dixeo-tutor-cite:hover,
+a.dixeo-tutor-cite:focus-visible {
+    border-color: #0f4c81;
+    color: #0f4c81;
+    text-decoration: none;
+}
+
+a.dixeo-tutor-cite:focus-visible {
+    outline: 2px solid #0f4c81;
+    outline-offset: 2px;
+}
+
+img.dixeo-tutor-cite__icon {
+    flex: none;
+    width: 16px;
+    height: 16px;
+}
+
+span.dixeo-tutor-cite__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+span.dixeo-tutor-cite__detail {
+    flex: none;
+    color: #5d636a;
+    font-weight: 400;
+}
+
+/* The assistant bubble stays light in dark mode: keep the chip colours off the theme's dark link palette. */
+body.darkmode #dixeo-tutor a.dixeo-tutor-cite {
+    background: #fff;
+    border-color: #aab4bf;
+    color: #0f4c81;
+}
+
+body.darkmode #dixeo-tutor a.dixeo-tutor-cite:focus-visible {
+    outline-color: #8cc4ff;
+}
+
 /* Input Area */
 #dixeo-tutor-input {
     border: 1px solid #ccc;

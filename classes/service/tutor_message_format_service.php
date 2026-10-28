@@ -34,6 +34,9 @@ class tutor_message_format_service {
     /**
      * Add a formatted HTML field to each message for chat display.
      *
+     * Citation placeholders of assistant answers become chips in contenthtml and are
+     * stripped from the raw content.
+     *
      * @param array $messages Messages from the tutor API.
      * @param \context $context Course context for filters.
      * @return array Messages with contenthtml added when formatted.
@@ -44,7 +47,14 @@ class tutor_message_format_service {
                 continue;
             }
             $content = (string) ($msg['content'] ?? '');
-            $messages[$i]['contenthtml'] = self::format_message($msg, $content, $context);
+            $html = self::format_message($msg, $content, $context);
+
+            if (($msg['role'] ?? '') === 'assistant') {
+                $html = tutor_citation_renderer::render($html, $msg['sources'] ?? []);
+                $messages[$i]['content'] = tutor_citation_renderer::strip($content);
+            }
+
+            $messages[$i]['contenthtml'] = $html;
         }
 
         return $messages;

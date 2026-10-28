@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Proactive tutor context queue: accumulate structured events and flush to the API.
+ * Proactive tutor queue: local notices and the Guide me opening turn.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
@@ -25,7 +25,6 @@
 namespace block_dixeo_tutor\service;
 
 use core\event\course_completed;
-use core\event\course_viewed;
 use core\event\user_graded;
 use grade_item;
 use block_dixeo_tutor\service\tutor_context_schema;
@@ -36,93 +35,37 @@ use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
 
 /**
- * Manages per-user, per-course queued context for proactive tutor messages.
+ * Manages per-user, per-course queued proactive events, stored as JSON in the DB.
  *
- * Proactive events are queued as JSON in the DB. They are sent to the API only when:
- * - the tutor UI loads on a page where the block would render (client flush), or
- * - an event fires during a request where {@see \block_dixeo_tutor::is_tutor_available_on_page()} is true.
- *
- * Excluded pages (e.g. quiz) never trigger an immediate server flush; the queue is drained on the
- * next course page visit where the tutor is available.
+ * Course completion and quiz grades are notices rendered locally by {@see tutor_notice_service}
+ * the next time the tutor renders. Only the Guide me opening turn is sent to the API, from the
+ * tutor UI (client flush).
  */
 class tutor_proactive_context_service {
     /** @var string Database table owned by this block. */
     public const TABLE = 'block_dixeo_tutor_pending';
 
-    /** @var int Minimum gap between return-visit proactive lines. */
-    private const RETURN_VISIT_GAP = 86400;
-
-    /** @var int Elapsed time above which return-visit tone becomes enthusiastic. */
-    private const RETURN_VISIT_ENTHUSIASTIC = 7 * DAYSECS;
-
-    /** @var int Elapsed time above which return-visit tone becomes especially warm. */
-    private const RETURN_VISIT_DELIGHTED = 30 * DAYSECS;
-
     /** @var int Maximum encoded queue length stored in the pending table. */
     private const MAX_QUEUE_LENGTH = 2000;
 
-    /** @var string User preference prefix: last time a course-view proactive line was queued (per course). */
-    public const PREF_LAST_PROACTIVE_PREFIX = 'block_dixeo_tutor_lastproactive_';
+    /** @var string Only event type sent to the API: the learner asked for a Socratic opening turn. */
+    private const GUIDE_STARTED = 'guide_started';
 
     /** @var array<int, bool> Grade record ids processed in this request (debounce). */
     private static array $processedgrades = [];
 
     /**
-     * Handle course viewed: welcome / return lines and session tracking.
-     *
-     * @param course_viewed $event The event.
-     * @return operation_result|null Flush result when sent immediately.
-     */
-    public function handle_course_viewed(course_viewed $event): ?operation_result {
-        $userid = (int) $event->userid;
-        $courseid = (int) $event->courseid;
-
-        if (!$this->can_use_tutor($userid, $courseid)) {
-            return null;
-        }
-
-        $now = time();
-        // First/return timing uses user_preferences (not user_lastaccess — that is updated in require_login).
-        $lastproactive = $this->get_last_proactive_course_view($userid, $courseid);
-        $record = $this->get_or_create_record($userid, $courseid, $now);
-        $eventsbefore = count($this->decode_queue((string) ($record->message ?? '')));
-
-        if ($lastproactive === 0) {
-            $this->append_event($record, [
-                'type' => 'first_visit',
-                'time' => $now,
-                'name' => $this->get_user_proactive_name($userid),
-            ]);
-        } else if (($now - $lastproactive) >= self::RETURN_VISIT_GAP) {
-            $this->append_event($record, [
-                'type' => $this->get_return_visit_event_type($now - $lastproactive),
-                'time' => $now,
-            ]);
-        }
-
-        $eventsafter = count($this->decode_queue((string) ($record->message ?? '')));
-        if ($eventsafter > $eventsbefore) {
-            $this->mark_proactive_course_view($userid, $courseid, $now);
-        }
-
-        $this->save_record($record);
-
-        // Defer flush to the tutor UI (init on pages where the block renders).
-        return null;
-    }
-
-    /**
      * Handle course completed for the completing user.
      *
      * @param course_completed $event The event.
-     * @return operation_result|null
+     * @return void
      */
-    public function handle_course_completed(course_completed $event): ?operation_result {
+    public function handle_course_completed(course_completed $event): void {
         $userid = (int) $event->relateduserid;
         $courseid = (int) $event->courseid;
 
         if (!$this->can_use_tutor($userid, $courseid)) {
-            return null;
+            return;
         }
 
         $record = $this->get_or_create_record($userid, $courseid, time());
@@ -131,10 +74,6 @@ class tutor_proactive_context_service {
             'time' => time(),
         ]);
         $this->save_record($record);
-
-        // Defer flush to tutor UI (same as course_viewed). Server-side flush empties the queue
-        // before client _flushPendingContext runs, so PROACTIVE_REPLY_READY never fires.
-        return null;
     }
 
     /**
@@ -155,7 +94,7 @@ class tutor_proactive_context_service {
         $now = time();
         $record = $this->get_or_create_record($userid, $courseid, $now);
         foreach ($this->decode_queue((string) ($record->message ?? '')) as $event) {
-            if (is_array($event) && ($event['type'] ?? '') === 'guide_started') {
+            if (($event['type'] ?? '') === self::GUIDE_STARTED) {
                 return;
             }
         }
@@ -166,7 +105,7 @@ class tutor_proactive_context_service {
         }
 
         $event = [
-            'type' => 'guide_started',
+            'type' => self::GUIDE_STARTED,
             'time' => $now,
         ];
         if ($prompt !== '') {
@@ -181,38 +120,38 @@ class tutor_proactive_context_service {
      * Handle quiz grade events for mod_quiz only.
      *
      * @param user_graded $event The event.
-     * @return operation_result|null
+     * @return void
      */
-    public function handle_user_graded(user_graded $event): ?operation_result {
+    public function handle_user_graded(user_graded $event): void {
         $userid = (int) $event->relateduserid;
         $courseid = (int) $event->courseid;
         $gradeid = (int) $event->objectid;
 
         if ($userid <= 0 || $courseid <= 0) {
-            return null;
+            return;
         }
 
         if (isset(self::$processedgrades[$gradeid])) {
-            return null;
+            return;
         }
 
         if (!$this->can_use_tutor($userid, $courseid)) {
-            return null;
+            return;
         }
 
         $itemid = (int) ($event->other['itemid'] ?? 0);
         if ($itemid <= 0) {
-            return null;
+            return;
         }
 
         $gradeitem = grade_item::fetch(['id' => $itemid]);
         if (!$gradeitem || $gradeitem->itemtype !== 'mod' || $gradeitem->itemmodule !== 'quiz') {
-            return null;
+            return;
         }
 
         $finalgrade = $event->other['finalgrade'] ?? null;
         if ($finalgrade === null || $finalgrade === '') {
-            return null;
+            return;
         }
 
         self::$processedgrades[$gradeid] = true;
@@ -229,26 +168,20 @@ class tutor_proactive_context_service {
             'type' => 'quiz_graded',
             'time' => time(),
             'quizname' => $quizname,
-            'grade' => format_float($score, 0),
-            'maxgrade' => format_float($maxgrade, 0),
+            'grade' => $score,
+            'maxgrade' => $maxgrade,
         ]);
         $this->save_record($record);
-
-        if ($this->should_flush_immediately($userid, $courseid)) {
-            return $this->flush($userid, $courseid, $this->current_page_url());
-        }
-
-        return null;
     }
 
     /**
-     * Flush queued context to the tutor API and clear the message field.
+     * Send the queued Guide me opening turn to the tutor API and remove it from the queue.
      *
      * @param int $userid The user id.
      * @param int $courseid The course id.
      * @param string $pageurl Optional page URL for context.
      * @param int $cmid Optional course module id for analytics.
-     * @return operation_result|null Null when queue empty or user cannot use tutor.
+     * @return operation_result|null Null when nothing is queued for the API or user cannot use tutor.
      * @throws api_exception When the remote tutor API rejects the submit payload.
      */
     public function flush(
@@ -266,7 +199,10 @@ class tutor_proactive_context_service {
             return null;
         }
 
-        $events = $this->decode_queue((string) ($record->message ?? ''));
+        $events = array_values(array_filter(
+            $this->decode_queue((string) ($record->message ?? '')),
+            static fn(array $event): bool => ($event['type'] ?? '') === self::GUIDE_STARTED
+        ));
         if ($events === []) {
             return null;
         }
@@ -311,6 +247,37 @@ class tutor_proactive_context_service {
     }
 
     /**
+     * Remove and return the queued notices (every event the API does not handle), oldest first.
+     *
+     * @param int $userid
+     * @param int $courseid
+     * @return array[]
+     */
+    public function take_notices(int $userid, int $courseid): array {
+        $record = $this->get_record($userid, $courseid);
+        if (!$record) {
+            return [];
+        }
+
+        $notices = [];
+        $kept = [];
+        foreach ($this->decode_queue((string) ($record->message ?? '')) as $event) {
+            if (($event['type'] ?? '') === self::GUIDE_STARTED) {
+                $kept[] = $event;
+            } else {
+                $notices[] = $event;
+            }
+        }
+        if ($notices === []) {
+            return [];
+        }
+
+        $record->message = $this->encode_queue($kept);
+        $this->save_record($record);
+        return $notices;
+    }
+
+    /**
      * Whether the user may use the tutor in this course.
      *
      * @param int $userid
@@ -329,109 +296,6 @@ class tutor_proactive_context_service {
         }
 
         return has_capability('block/dixeo_tutor:talktotutor', $context, $userid);
-    }
-
-    /**
-     * Whether queued proactive context may be sent during this HTTP request.
-     * True only when the user is viewing a course page where the tutor block would render
-     * (not e.g. an excluded quiz attempt page).
-     *
-     * @param int $userid
-     * @param int $courseid
-     * @return bool
-     */
-    public function should_flush_immediately(int $userid, int $courseid): bool {
-        global $PAGE;
-
-        if (CLI_SCRIPT || during_initial_install()) {
-            return false;
-        }
-
-        if (empty($PAGE) || !($PAGE instanceof \moodle_page)) {
-            return false;
-        }
-
-        if ((int) $PAGE->course->id !== $courseid) {
-            return false;
-        }
-
-        if (!block_load_class('dixeo_tutor')) {
-            return false;
-        }
-
-        return \block_dixeo_tutor::is_tutor_available_on_page($PAGE, $userid);
-    }
-
-    /**
-     * Current page URL for tutor API context, when available.
-     *
-     * @return string
-     */
-    private function current_page_url(): string {
-        global $PAGE;
-        if (empty($PAGE->url)) {
-            return '';
-        }
-        return $PAGE->url->out(false);
-    }
-
-    /**
-     * Given name for proactive context (firstname, else full name).
-     *
-     * @param int $userid
-     * @return string
-     */
-    private function get_user_proactive_name(int $userid): string {
-        $user = \core_user::get_user($userid, '*', MUST_EXIST);
-        $firstname = trim((string) ($user->firstname ?? ''));
-        if ($firstname !== '') {
-            return $firstname;
-        }
-        $fullname = trim(fullname($user));
-        if ($fullname !== '') {
-            return $fullname;
-        }
-        $username = trim((string) ($user->username ?? ''));
-        return $username !== '' ? $username : get_string('proactive_default_name', 'block_dixeo_tutor');
-    }
-
-    /**
-     * Event type for a return visit, scaled by time since last course view.
-     *
-     * @param int $elapsed Seconds since last proactive course-view line.
-     * @return string
-     */
-    private function get_return_visit_event_type(int $elapsed): string {
-        if ($elapsed >= self::RETURN_VISIT_DELIGHTED) {
-            return 'return_visit_delighted';
-        }
-        if ($elapsed >= self::RETURN_VISIT_ENTHUSIASTIC) {
-            return 'return_visit_enthusiastic';
-        }
-        return 'return_visit_warm';
-    }
-
-    /**
-     * When a course-view proactive line was last queued for this user and course.
-     *
-     * @param int $userid
-     * @param int $courseid
-     * @return int Unix timestamp, or 0 if never.
-     */
-    private function get_last_proactive_course_view(int $userid, int $courseid): int {
-        return (int) get_user_preferences(self::PREF_LAST_PROACTIVE_PREFIX . $courseid, 0, $userid);
-    }
-
-    /**
-     * Record that a course-view proactive line was queued.
-     *
-     * @param int $userid
-     * @param int $courseid
-     * @param int $timestamp
-     * @return void
-     */
-    private function mark_proactive_course_view(int $userid, int $courseid, int $timestamp): void {
-        set_user_preference(self::PREF_LAST_PROACTIVE_PREFIX . $courseid, $timestamp, $userid);
     }
 
     /**

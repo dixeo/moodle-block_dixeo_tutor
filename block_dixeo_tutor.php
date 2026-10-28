@@ -120,52 +120,6 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
-     * Whether the tutor UI is available on this page for the given user (same rules as {@see get_content()}).
-     * Used to decide if queued proactive context may be flushed during the current request.
-     * When false, messages stay queued until the tutor AMD module loads on a qualifying page.
-     *
-     * @param \moodle_page $page Page being rendered (typically global $PAGE).
-     * @param int $userid User who will receive the proactive message.
-     * @return bool
-     */
-    public static function is_tutor_available_on_page(\moodle_page $page, int $userid): bool {
-        $courseid = (int) ($page->course->id ?? 0);
-        if ($courseid <= SITEID || $userid <= 0) {
-            return false;
-        }
-
-        try {
-            $context = \context_course::instance($courseid);
-        } catch (\Exception $e) {
-            return false;
-        }
-
-        $config = \local_dixeo\external\service_factory::get_settings_config();
-        if (!$config->enabled_for($context)) {
-            return false;
-        }
-
-        if ($config->get('block_dixeo_tutor', 'tutor_enabled', $context)->get_value() !== '1') {
-            return false;
-        }
-
-        if (!has_capability('block/dixeo_tutor:talktotutor', $context, $userid)) {
-            return false;
-        }
-
-        if (self::is_current_page_excluded($page)) {
-            return false;
-        }
-
-        if ($page->user_is_editing()) {
-            return false;
-        }
-
-        $page->blocks->load_blocks();
-        return $page->blocks->is_block_present('dixeo_tutor');
-    }
-
-    /**
      * Whether mod_simplequiz2 is installed and compatible (practice quiz UI dependency).
      *
      * @return bool
@@ -304,6 +258,7 @@ class block_dixeo_tutor extends block_base {
         $opentooltip = get_string('tooltip_open_tutor', 'block_dixeo_tutor');
         $hidetooltip = get_string('tooltip_hide_tutor', 'block_dixeo_tutor');
         $readservice = new \block_dixeo_tutor\service\tutor_read_state_service();
+        $notices = (new \block_dixeo_tutor\service\tutor_notice_service())->take_notices((int) $USER->id, $courseid);
         $this->page->requires->js_call_amd('local_dixeo/settings_modal', 'init');
         $this->page->requires->js_call_amd('block_dixeo_tutor/tutor', 'init', [
             $courseid,
@@ -316,6 +271,7 @@ class block_dixeo_tutor extends block_base {
             $guidemodeavailable,
             $teachmodeavailable,
             $modeservice->get_last_activity((int) $USER->id, $courseid),
+            $notices,
         ]);
         return $this->content;
     }

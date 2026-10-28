@@ -77,7 +77,10 @@ define([
             return;
         }
 
-        const text = content.textContent.trim();
+        // Citation chips are links, not part of the answer to copy or read aloud.
+        const answer = content.cloneNode(true);
+        answer.querySelectorAll('.dixeo-tutor-cite').forEach((chip) => chip.remove());
+        const text = answer.textContent.trim();
         if (!text) {
             return;
         }

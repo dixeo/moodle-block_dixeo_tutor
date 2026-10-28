@@ -1,6 +1,9 @@
 define([], function() {
     'use strict';
 
+    /** Citation placeholders of assistant answers, with the whitespace before each (see tutor_citation_renderer). */
+    const CITATION_PATTERN = /(?:\s*\{\{cite:\d+\}\})+/g;
+
     /**
      * Text processing utilities for the tutor.
      * Handles HTML escaping and markdown parsing.
@@ -45,9 +48,12 @@ define([], function() {
         resolveMessageContentHtml: function(msg) {
             const serverHtml = msg && msg.contenthtml ? String(msg.contenthtml).trim() : '';
             const usedServer = serverHtml !== '';
+            const content = msg && msg.role === 'assistant'
+                ? String(msg.content || '').replace(CITATION_PATTERN, '')
+                : (msg ? msg.content : '');
             const resolved = usedServer
                 ? serverHtml
-                : this.parseMarkdownToHtml(msg ? msg.content : '');
+                : this.parseMarkdownToHtml(content);
             return resolved;
         },
 

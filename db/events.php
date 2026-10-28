@@ -34,12 +34,6 @@ $observers = [
         'priority' => 0,
     ],
     [
-        'eventname' => '\core\event\course_viewed',
-        'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_viewed',
-        'internal' => true,
-        'priority' => 0,
-    ],
-    [
         'eventname' => '\core\event\course_completed',
         'callback' => '\block_dixeo_tutor\observer\proactive_context_observer::course_completed',
         'internal' => true,
