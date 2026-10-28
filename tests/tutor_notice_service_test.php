@@ -164,6 +164,7 @@ final class tutor_notice_service_test extends \advanced_testcase {
      * @param float $grade
      * @param float $maxgrade
      * @param string $key
+     * @dataProvider quiz_band_provider
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('quiz_band_provider')]
     public function test_quiz_notice_variant_follows_the_score_band(float $grade, float $maxgrade, string $key): void {

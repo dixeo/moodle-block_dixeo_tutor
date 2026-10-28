@@ -48,9 +48,12 @@ define([], function() {
         resolveMessageContentHtml: function(msg) {
             const serverHtml = msg && msg.contenthtml ? String(msg.contenthtml).trim() : '';
             const usedServer = serverHtml !== '';
-            const content = msg && msg.role === 'assistant'
-                ? String(msg.content || '').replace(CITATION_PATTERN, '')
-                : (msg ? msg.content : '');
+            let content = '';
+            if (msg) {
+                content = msg.role === 'assistant'
+                    ? String(msg.content || '').replace(CITATION_PATTERN, '')
+                    : msg.content;
+            }
             const resolved = usedServer
                 ? serverHtml
                 : this.parseMarkdownToHtml(content);

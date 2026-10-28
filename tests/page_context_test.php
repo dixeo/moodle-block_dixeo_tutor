@@ -54,6 +54,7 @@ final class page_context_test extends \advanced_testcase {
      *
      * @param string $pageurl Client-supplied URL, relative to wwwroot unless absolute.
      * @param string|null $expected Expected path relative to wwwroot, null for the course fallback.
+     * @dataProvider pageurl_provider
      */
     #[\PHPUnit\Framework\Attributes\DataProvider('pageurl_provider')]
     public function test_sanitize_pageurl(string $pageurl, ?string $expected): void {
