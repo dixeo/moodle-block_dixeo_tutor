@@ -29,6 +29,7 @@ use core\event\user_graded;
 use grade_item;
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_mode_service;
+use block_dixeo_tutor\task\post_notice;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
@@ -37,9 +38,9 @@ use local_dixeo\external\service_factory;
 /**
  * Manages per-user, per-course queued proactive events, stored as JSON in the DB.
  *
- * Course completion and quiz grades are notices rendered locally by {@see tutor_notice_service}
- * the next time the tutor renders. Only the Guide me opening turn is sent to the API, from the
- * tutor UI (client flush).
+ * Course completion and quiz grades become tutor notices stored in the conversation by the
+ * {@see \block_dixeo_tutor\task\post_notice} task. Only the Guide me opening turn waits in this queue, until the tutor UI
+ * sends it to the API (client flush).
  */
 class tutor_proactive_context_service {
     /** @var string Database table owned by this block. */
@@ -64,16 +65,14 @@ class tutor_proactive_context_service {
         $userid = (int) $event->relateduserid;
         $courseid = (int) $event->courseid;
 
-        if (!$this->can_use_tutor($userid, $courseid)) {
+        if (!$this->can_use_tutor($userid, $courseid) || !$this->tutor_is_on($courseid)) {
             return;
         }
 
-        $record = $this->get_or_create_record($userid, $courseid, time());
-        $this->append_event($record, [
+        post_notice::queue($userid, $courseid, [
             'type' => 'course_completed',
             'time' => time(),
         ]);
-        $this->save_record($record);
     }
 
     /**
@@ -135,7 +134,7 @@ class tutor_proactive_context_service {
             return;
         }
 
-        if (!$this->can_use_tutor($userid, $courseid)) {
+        if (!$this->can_use_tutor($userid, $courseid) || !$this->tutor_is_on($courseid)) {
             return;
         }
 
@@ -163,15 +162,13 @@ class tutor_proactive_context_service {
         }
         $score = (float) $finalgrade;
 
-        $record = $this->get_or_create_record($userid, $courseid, time());
-        $this->append_event($record, [
+        post_notice::queue($userid, $courseid, [
             'type' => 'quiz_graded',
             'time' => time(),
             'quizname' => $quizname,
             'grade' => $score,
             'maxgrade' => $maxgrade,
         ]);
-        $this->save_record($record);
     }
 
     /**
@@ -247,37 +244,6 @@ class tutor_proactive_context_service {
     }
 
     /**
-     * Remove and return the queued notices (every event the API does not handle), oldest first.
-     *
-     * @param int $userid
-     * @param int $courseid
-     * @return array[]
-     */
-    public function take_notices(int $userid, int $courseid): array {
-        $record = $this->get_record($userid, $courseid);
-        if (!$record) {
-            return [];
-        }
-
-        $notices = [];
-        $kept = [];
-        foreach ($this->decode_queue((string) ($record->message ?? '')) as $event) {
-            if (($event['type'] ?? '') === self::GUIDE_STARTED) {
-                $kept[] = $event;
-            } else {
-                $notices[] = $event;
-            }
-        }
-        if ($notices === []) {
-            return [];
-        }
-
-        $record->message = $this->encode_queue($kept);
-        $this->save_record($record);
-        return $notices;
-    }
-
-    /**
      * Whether the user may use the tutor in this course.
      *
      * @param int $userid
@@ -296,6 +262,19 @@ class tutor_proactive_context_service {
         }
 
         return has_capability('block/dixeo_tutor:talktotutor', $context, $userid);
+    }
+
+    /**
+     * Whether Dixeo and the tutor are turned on in this course.
+     *
+     * @param int $courseid
+     * @return bool
+     */
+    private function tutor_is_on(int $courseid): bool {
+        $context = \context_course::instance($courseid);
+        $config = service_factory::get_settings_config();
+        return $config->enabled_for($context)
+            && $config->get('block_dixeo_tutor', 'tutor_enabled', $context)->get_value() === '1';
     }
 
     /**

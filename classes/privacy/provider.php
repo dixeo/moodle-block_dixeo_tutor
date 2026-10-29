@@ -61,6 +61,12 @@ class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\plugin\provider {
+    /** @var array<string, string> Per-course timestamp preferences (prefix + courseid) and their metadata string. */
+    private const COURSE_TIME_PREFERENCES = [
+        tutor_notice_service::PREF_LAST_GREETING_PREFIX => 'privacy:metadata:lastproactive',
+        tutor_notice_service::PREF_LAST_MESSAGE_PREFIX => 'privacy:metadata:lastmessage',
+    ];
+
     /**
      * Describe stored and transmitted personal data.
      *
@@ -104,10 +110,9 @@ class provider implements
             'privacy:metadata:tutormodeactivity'
         );
 
-        $collection->add_user_preference(
-            tutor_notice_service::PREF_LAST_GREETING_PREFIX,
-            'privacy:metadata:lastproactive'
-        );
+        foreach (self::COURSE_TIME_PREFERENCES as $prefix => $stringid) {
+            $collection->add_user_preference($prefix, $stringid);
+        }
 
         return $collection;
     }
@@ -199,7 +204,7 @@ class provider implements
             }
 
             self::export_pending($context, $userid, $courseid);
-            self::export_proactive_preference($context, $userid, $courseid);
+            self::export_course_preferences($context, $userid, $courseid);
             if (!$configured) {
                 continue;
             }
@@ -240,7 +245,7 @@ class provider implements
         }
 
         self::delete_pending($courseid, null);
-        self::delete_proactive_preference($courseid, null);
+        self::delete_course_preferences($courseid, null);
         if (!self::is_configured()) {
             return;
         }
@@ -268,7 +273,7 @@ class provider implements
             }
 
             self::delete_pending($courseid, $userid);
-            self::delete_proactive_preference($courseid, $userid);
+            self::delete_course_preferences($courseid, $userid);
             if (!self::is_configured()) {
                 continue;
             }
@@ -299,7 +304,7 @@ class provider implements
         $failure = null;
         foreach ($userlist->get_userids() as $userid) {
             self::delete_pending($courseid, (int) $userid);
-            self::delete_proactive_preference($courseid, (int) $userid);
+            self::delete_course_preferences($courseid, (int) $userid);
         }
         if (!self::is_configured()) {
             return;
@@ -414,24 +419,25 @@ class provider implements
             $params
         );
 
-        $prefix = tutor_notice_service::PREF_LAST_GREETING_PREFIX;
-        $prefs = $DB->get_records_select(
-            'user_preferences',
-            'userid = :userid AND ' . $DB->sql_like('name', ':prefix', false),
-            [
-                'userid' => $userid,
-                'prefix' => $DB->sql_like_escape($prefix) . '%',
-            ],
-            '',
-            'id, name'
-        );
-        foreach ($prefs as $pref) {
-            $courseid = (int) substr($pref->name, strlen($prefix));
-            if ($courseid > 0) {
-                $contextlist->add_from_sql(
-                    'SELECT id FROM {context} WHERE id = :contextid',
-                    ['contextid' => \context_course::instance($courseid)->id]
-                );
+        foreach (array_keys(self::COURSE_TIME_PREFERENCES) as $prefix) {
+            $prefs = $DB->get_records_select(
+                'user_preferences',
+                'userid = :userid AND ' . $DB->sql_like('name', ':prefix', false),
+                [
+                    'userid' => $userid,
+                    'prefix' => $DB->sql_like_escape($prefix) . '%',
+                ],
+                '',
+                'id, name'
+            );
+            foreach ($prefs as $pref) {
+                $courseid = (int) substr($pref->name, strlen($prefix));
+                if ($courseid > 0) {
+                    $contextlist->add_from_sql(
+                        'SELECT id FROM {context} WHERE id = :contextid',
+                        ['contextid' => \context_course::instance($courseid)->id]
+                    );
+                }
             }
         }
     }
@@ -451,13 +457,15 @@ class provider implements
             ['courseid' => $courseid]
         );
 
-        $userlist->add_from_sql(
-            'userid',
-            "SELECT userid
-               FROM {user_preferences}
-              WHERE name = :name",
-            ['name' => tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid]
-        );
+        foreach (array_keys(self::COURSE_TIME_PREFERENCES) as $prefix) {
+            $userlist->add_from_sql(
+                'userid',
+                "SELECT userid
+                   FROM {user_preferences}
+                  WHERE name = :name",
+                ['name' => $prefix . $courseid]
+            );
+        }
     }
 
     /**
@@ -493,25 +501,27 @@ class provider implements
     }
 
     /**
-     * Export the last-proactive timestamp stored for this user and course.
+     * Export the per-course timestamps stored for this user and course.
      *
      * @param \context $context Course context.
      * @param int $userid User id.
      * @param int $courseid Course id.
      */
-    private static function export_proactive_preference(\context $context, int $userid, int $courseid): void {
-        $name = tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid;
-        $value = get_user_preferences($name, null, $userid);
-        if ($value === null) {
-            return;
-        }
+    private static function export_course_preferences(\context $context, int $userid, int $courseid): void {
+        foreach (self::COURSE_TIME_PREFERENCES as $prefix => $stringid) {
+            $name = $prefix . $courseid;
+            $value = get_user_preferences($name, null, $userid);
+            if ($value === null) {
+                continue;
+            }
 
-        writer::with_context($context)->export_user_preference(
-            'block_dixeo_tutor',
-            $name,
-            transform::datetime((int) $value),
-            get_string('privacy:metadata:lastproactive', 'block_dixeo_tutor')
-        );
+            writer::with_context($context)->export_user_preference(
+                'block_dixeo_tutor',
+                $name,
+                transform::datetime((int) $value),
+                get_string($stringid, 'block_dixeo_tutor')
+            );
+        }
     }
 
     /**
@@ -531,21 +541,22 @@ class provider implements
     }
 
     /**
-     * Remove the last-proactive preference for a course.
+     * Remove the per-course timestamps of a course.
      *
      * @param int $courseid Course id.
      * @param int|null $userid User id, or null for every user.
      */
-    private static function delete_proactive_preference(int $courseid, ?int $userid): void {
+    private static function delete_course_preferences(int $courseid, ?int $userid): void {
         global $DB;
 
-        $name = tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid;
-        if ($userid === null) {
-            $DB->delete_records('user_preferences', ['name' => $name]);
-            return;
+        foreach (array_keys(self::COURSE_TIME_PREFERENCES) as $prefix) {
+            $name = $prefix . $courseid;
+            if ($userid === null) {
+                $DB->delete_records('user_preferences', ['name' => $name]);
+            } else {
+                unset_user_preference($name, $userid);
+            }
         }
-
-        unset_user_preference($name, $userid);
     }
 
     /**

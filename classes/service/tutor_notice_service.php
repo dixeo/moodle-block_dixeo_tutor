@@ -15,11 +15,12 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Local tutor notices: greeting, course completed, quiz graded.
+ * Tutor notices: greeting, course completed, quiz graded.
  *
- * Notices come from language strings, never from the API: they cost no credit and stay out
- * of the conversation history. They are taken when the tutor renders, so the greeting is
- * only counted once the learner can see it.
+ * Notices come from language strings, never from the AI: they cost no credit. Every notice is
+ * stored in the conversation by the {@see \block_dixeo_tutor\task\post_notice} task, so it stays in
+ * the history and the tutor knows what it said. The greeting is also shown locally when the tutor
+ * renders, right away and only once the learner can see it.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
@@ -29,12 +30,17 @@
 
 namespace block_dixeo_tutor\service;
 
+use block_dixeo_tutor\task\post_notice;
+
 /**
- * Collects the notices due on this page view and renders each one from a random string variant.
+ * Renders tutor notices, each from a random string variant.
  */
 class tutor_notice_service {
     /** @var string User preference prefix: last time the learner was greeted (per course). */
     public const PREF_LAST_GREETING_PREFIX = 'block_dixeo_tutor_lastproactive_';
+
+    /** @var string User preference prefix: last time the learner wrote to the tutor (per course). */
+    public const PREF_LAST_MESSAGE_PREFIX = 'block_dixeo_tutor_lastmessage_';
 
     /** @var int Minimum gap between two greetings in a course. */
     private const GREETING_GAP = DAYSECS;
@@ -50,35 +56,59 @@ class tutor_notice_service {
     ];
 
     /**
-     * Notices to show on this page view, oldest first, removed from the queue.
+     * Notices to show on this page view: the greeting, when one is due.
      *
      * @param int $userid
      * @param int $courseid
      * @return array[] List of {content: string, contenthtml: string}.
      */
     public function take_notices(int $userid, int $courseid): array {
-        $notices = (new tutor_proactive_context_service())->take_notices($userid, $courseid);
         $greeting = $this->take_greeting($userid, $courseid);
-        if ($greeting !== null) {
-            array_unshift($notices, $greeting);
-        }
-        if ($notices === []) {
+        if ($greeting === null) {
             return [];
         }
 
-        $context = \context_course::instance($courseid);
-        $name = s($this->get_first_name($userid));
-        $rendered = [];
-        foreach ($notices as $notice) {
-            $html = $this->render($notice, $name, $context);
-            if ($html !== null) {
-                $rendered[] = [
-                    'content' => trim(\core_text::entities_to_utf8(strip_tags($html))),
-                    'contenthtml' => \html_writer::tag('p', $html),
-                ];
-            }
-        }
-        return $rendered;
+        $html = $this->render($greeting, s($this->get_first_name($userid)), \context_course::instance($courseid));
+        $content = self::plain_text($html);
+        // Shown now, stored for the history and the tutor's next turns with the exact text shown.
+        post_notice::queue($userid, $courseid, $greeting, $content);
+        return [[
+            'content' => $content,
+            'contenthtml' => \html_writer::tag('p', $html),
+        ]];
+    }
+
+    /**
+     * Remember that the learner wrote to the tutor, which allows the next return greeting.
+     *
+     * @param int $userid
+     * @param int $courseid
+     */
+    public static function record_learner_message(int $userid, int $courseid): void {
+        set_user_preference(self::PREF_LAST_MESSAGE_PREFIX . $courseid, time(), $userid);
+    }
+
+    /**
+     * Plain text of a quiz or course completion notice, in the current language.
+     *
+     * @param array $event Queued event.
+     * @param int $userid
+     * @param int $courseid
+     * @return string|null Null for an unknown type.
+     */
+    public function text(array $event, int $userid, int $courseid): ?string {
+        $html = $this->render($event, s($this->get_first_name($userid)), \context_course::instance($courseid));
+        return $html !== null ? self::plain_text($html) : null;
+    }
+
+    /**
+     * Plain text of a rendered notice.
+     *
+     * @param string $html
+     * @return string
+     */
+    private static function plain_text(string $html): string {
+        return trim(\core_text::entities_to_utf8(strip_tags($html)));
     }
 
     /**
@@ -95,9 +125,14 @@ class tutor_notice_service {
         if ($lastgreeting > 0 && ($now - $lastgreeting) < self::GREETING_GAP) {
             return null;
         }
+        // A learner who has not written to the tutor since the last greeting is not greeted again.
+        $lastmessage = (int) get_user_preferences(self::PREF_LAST_MESSAGE_PREFIX . $courseid, 0, $userid);
+        if ($lastgreeting > 0 && $lastmessage < $lastgreeting) {
+            return null;
+        }
 
         set_user_preference($prefname, $now, $userid);
-        return ['type' => $lastgreeting === 0 ? 'first_visit' : 'return_visit'];
+        return ['type' => $lastgreeting === 0 ? 'first_visit' : 'return_visit', 'time' => $now];
     }
 
     /**

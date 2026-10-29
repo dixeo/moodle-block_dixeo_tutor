@@ -102,5 +102,38 @@ function xmldb_block_dixeo_tutor_upgrade($oldversion) {
         upgrade_block_savepoint(true, 2026101404, 'dixeo_tutor');
     }
 
+    if ($oldversion < 2026101407) {
+        // Quiz and completion notices are now stored in the tutor conversation by a task:
+        // hand the ones still queued to it, keeping only Guide me requests in the queue.
+        $noticetypes = ['quiz_graded', 'course_completed'];
+        $records = $DB->get_recordset_select(
+            'block_dixeo_tutor_pending',
+            $DB->sql_isnotempty('block_dixeo_tutor_pending', 'message', true, true)
+        );
+        foreach ($records as $record) {
+            $events = json_decode((string) $record->message, true);
+            if (!is_array($events)) {
+                continue;
+            }
+            $kept = [];
+            foreach ($events as $event) {
+                if (is_array($event) && in_array($event['type'] ?? '', $noticetypes, true)) {
+                    unset($event['notice']);
+                    \block_dixeo_tutor\task\post_notice::queue((int) $record->userid, (int) $record->courseid, $event);
+                } else {
+                    $kept[] = $event;
+                }
+            }
+            if (count($kept) === count($events)) {
+                continue;
+            }
+            $record->message = $kept === [] ? '' : json_encode($kept, JSON_UNESCAPED_UNICODE);
+            $DB->update_record('block_dixeo_tutor_pending', $record);
+        }
+        $records->close();
+
+        upgrade_block_savepoint(true, 2026101407, 'dixeo_tutor');
+    }
+
     return true;
 }

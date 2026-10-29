@@ -28,6 +28,7 @@ namespace block_dixeo_tutor;
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
+use block_dixeo_tutor\task\post_notice;
 use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
@@ -48,11 +49,38 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         block_load_class('dixeo_tutor');
         $this->service = new tutor_proactive_context_service();
         service_factory::reset();
+        set_config('api_key', 'phpunit-api-key', 'local_dixeo');
     }
 
     public function tearDown(): void {
         service_factory::reset();
         parent::tearDown();
+    }
+
+    /**
+     * Turn Dixeo and the tutor on in a course.
+     *
+     * @param \stdClass $course
+     */
+    private function enable_tutor(\stdClass $course): void {
+        $this->setAdminUser();
+        $context = \context_course::instance((int) $course->id);
+        $config = service_factory::get_settings_config();
+        $config->set('local_dixeo', 'enabled', $context, '1');
+        $config->set('block_dixeo_tutor', 'tutor_enabled', $context, '1');
+    }
+
+    /**
+     * Notice events queued for the post_notice task, by learner.
+     *
+     * @return array[] Each {userid, courseid, event}.
+     */
+    private function queued_notices(): array {
+        return array_map(static fn(post_notice $task): array => [
+            'userid' => (int) $task->get_userid(),
+            'courseid' => (int) $task->get_custom_data()->courseid,
+            'event' => (array) $task->get_custom_data()->event,
+        ], array_values(\core\task\manager::get_adhoc_tasks(post_notice::class)));
     }
 
     /**
@@ -167,32 +195,13 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $this->assertSame([$notice], $this->decode_pending_events((int) $user->id, (int) $course->id));
     }
 
-    public function test_take_notices_keeps_the_guide_opening_turn(): void {
-        global $DB;
-
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-        $guide = ['type' => 'guide_started', 'time' => 1];
-        $quiz = ['type' => 'quiz_graded', 'time' => 2, 'quizname' => 'Q', 'grade' => 5, 'maxgrade' => 10];
-        $completed = ['type' => 'course_completed', 'time' => 3];
-        $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
-            'userid' => $user->id,
-            'courseid' => $course->id,
-            'message' => json_encode([$guide, $quiz, $completed]),
-            'timemodified' => time(),
-        ]);
-
-        $this->assertSame([$quiz, $completed], $this->service->take_notices((int) $user->id, (int) $course->id));
-        $this->assertSame([$guide], $this->decode_pending_events((int) $user->id, (int) $course->id));
-        $this->assertSame([], $this->service->take_notices((int) $user->id, (int) $course->id));
-    }
-
-    public function test_quiz_graded_queues_a_notice_without_calling_the_api(): void {
+    public function test_quiz_graded_queues_a_notice_task(): void {
         global $CFG;
 
         require_once($CFG->dirroot . '/mod/quiz/lib.php');
 
         $course = $this->getDataGenerator()->create_course();
+        $this->enable_tutor($course);
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
         $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
 
@@ -217,23 +226,18 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         ], false);
         $grade->insert();
 
-        $mock = $this->getMockBuilder(tutor_service::class)
-            ->onlyMethods(['submit'])
-            ->getMock();
-        $mock->expects($this->never())->method('submit');
-        service_factory::set_test_tutor_service($mock);
-
         $event = \core\event\user_graded::create_from_grade($grade);
         $this->service->handle_user_graded($event);
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertNotNull($record);
-        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
-        $this->assertCount(1, $events);
-        $this->assertSame('quiz_graded', $events[0]['type']);
-        $this->assertSame('Quiz 1', $events[0]['quizname']);
-        $this->assertEquals(80, $events[0]['grade']);
-        $this->assertEquals(100, $events[0]['maxgrade']);
+        $notices = $this->queued_notices();
+        $this->assertCount(1, $notices);
+        $this->assertSame((int) $user->id, $notices[0]['userid']);
+        $this->assertSame((int) $course->id, $notices[0]['courseid']);
+        $this->assertSame('quiz_graded', $notices[0]['event']['type']);
+        $this->assertSame('Quiz 1', $notices[0]['event']['quizname']);
+        $this->assertEquals(80, $notices[0]['event']['grade']);
+        $this->assertEquals(100, $notices[0]['event']['maxgrade']);
+        $this->assertNull($this->get_pending_record((int) $user->id, (int) $course->id));
     }
 
     public function test_queue_guide_started_appends_once(): void {
@@ -289,6 +293,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         require_once($CFG->dirroot . '/mod/assign/lib.php');
 
         $course = $this->getDataGenerator()->create_course();
+        $this->enable_tutor($course);
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
         $assign = $this->getDataGenerator()->create_module('assign', ['course' => $course->id]);
 
@@ -316,34 +321,61 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $event = \core\event\user_graded::create_from_grade($grade);
         $this->service->handle_user_graded($event);
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertNull($record);
+        $this->assertSame([], $this->queued_notices());
     }
 
-    public function test_course_completed_queues_a_notice_without_calling_the_api(): void {
-        $course = $this->getDataGenerator()->create_course();
-        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-
-        $mock = $this->getMockBuilder(tutor_service::class)
-            ->onlyMethods(['submit'])
-            ->getMock();
-        $mock->expects($this->never())->method('submit');
-        service_factory::set_test_tutor_service($mock);
-
-        $context = \context_course::instance((int) $course->id);
-        $event = \core\event\course_completed::create([
+    /**
+     * Fire course completion for a learner.
+     *
+     * @param \stdClass $course
+     * @param \stdClass $user
+     */
+    private function complete_course(\stdClass $course, \stdClass $user): void {
+        $this->service->handle_course_completed(\core\event\course_completed::create([
             'objectid' => 1,
             'relateduserid' => $user->id,
-            'context' => $context,
+            'context' => \context_course::instance((int) $course->id),
             'courseid' => $course->id,
             'other' => ['relateduserid' => $user->id],
-        ]);
-        $this->service->handle_course_completed($event);
+        ]));
+    }
 
-        $record = $this->get_pending_record((int) $user->id, (int) $course->id);
-        $this->assertNotNull($record);
-        $events = $this->decode_pending_events((int) $user->id, (int) $course->id);
-        $this->assertCount(1, $events);
-        $this->assertSame('course_completed', $events[0]['type']);
+    public function test_course_completed_queues_a_notice_task(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $this->enable_tutor($course);
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $this->complete_course($course, $user);
+
+        $notices = $this->queued_notices();
+        $this->assertCount(1, $notices);
+        $this->assertSame('course_completed', $notices[0]['event']['type']);
+    }
+
+    public function test_no_notice_when_the_tutor_is_off_in_the_course(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $this->enable_tutor($course);
+        service_factory::get_settings_config()->set(
+            'block_dixeo_tutor',
+            'tutor_enabled',
+            \context_course::instance((int) $course->id),
+            '0'
+        );
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $this->complete_course($course, $user);
+
+        $this->assertSame([], $this->queued_notices());
+    }
+
+    public function test_no_notice_without_an_api_key(): void {
+        set_config('api_key', '', 'local_dixeo');
+        $course = $this->getDataGenerator()->create_course();
+        $this->enable_tutor($course);
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+
+        $this->complete_course($course, $user);
+
+        $this->assertSame([], $this->queued_notices());
     }
 }

@@ -592,6 +592,8 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
         ]);
         $preferencename = tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid;
         set_user_preference($preferencename, time(), $userid);
+        $messagepreference = tutor_notice_service::PREF_LAST_MESSAGE_PREFIX . $courseid;
+        tutor_notice_service::record_learner_message($userid, $courseid);
 
         $service = $this->mock_tutor_service();
         $service->method('list_conversations')->willReturn([]);
@@ -616,5 +618,6 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
             'courseid' => $courseid,
         ]));
         $this->assertNull(get_user_preferences($preferencename, null, $userid));
+        $this->assertNull(get_user_preferences($messagepreference, null, $userid));
     }
 }

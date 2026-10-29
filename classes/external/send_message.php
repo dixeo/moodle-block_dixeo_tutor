@@ -31,6 +31,7 @@ use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\page_context;
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_mode_service;
+use block_dixeo_tutor\service\tutor_notice_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -148,6 +149,7 @@ class send_message extends external_api {
                     (string) $payload['jobid']
                 )->trigger();
             }
+            tutor_notice_service::record_learner_message((int) $USER->id, $params['courseid']);
             if ($modeservice->is_expirable_mode($resolvedmode)) {
                 $modeservice->touch_activity((int) $USER->id, $params['courseid']);
             }

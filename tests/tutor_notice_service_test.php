@@ -28,9 +28,10 @@ namespace block_dixeo_tutor;
 
 use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
+use block_dixeo_tutor\task\post_notice;
 
 /**
- * Local notices: greeting, course completed, quiz graded.
+ * Tutor notices: greeting shown locally, quiz and completion texts.
  *
  * @covers \block_dixeo_tutor\service\tutor_notice_service
  */
@@ -99,6 +100,20 @@ final class tutor_notice_service_test extends \advanced_testcase {
         $this->assertStringStartsWith('<p>', $notices[0]['contenthtml']);
     }
 
+    public function test_greeting_is_stored_with_the_text_shown(): void {
+        set_config('api_key', 'phpunit-api-key', 'local_dixeo');
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student', ['firstname' => 'Alice']);
+
+        $notices = $this->service->take_notices((int) $user->id, (int) $course->id);
+
+        $tasks = \core\task\manager::get_adhoc_tasks(post_notice::class);
+        $this->assertCount(1, $tasks);
+        $data = reset($tasks)->get_custom_data();
+        $this->assertSame('first_visit', $data->event->type);
+        $this->assertSame($notices[0]['content'], $data->text);
+    }
+
     public function test_no_greeting_within_a_day_then_return_greeting(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student', ['firstname' => 'Bob']);
@@ -107,41 +122,39 @@ final class tutor_notice_service_test extends \advanced_testcase {
         $this->assertSame([], $this->service->take_notices((int) $user->id, (int) $course->id));
 
         $this->set_last_greeting((int) $user->id, (int) $course->id, time() - DAYSECS - 60);
+        tutor_notice_service::record_learner_message((int) $user->id, (int) $course->id);
         $notices = $this->service->take_notices((int) $user->id, (int) $course->id);
         $this->assertCount(1, $notices);
         $this->assertContains($notices[0]['content'], $this->variants('returnvisit', 4, ['name' => 'Bob']));
     }
 
-    public function test_queued_notices_follow_the_greeting_in_order(): void {
+    public function test_a_silent_learner_is_not_greeted_again(): void {
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $this->set_last_greeting((int) $user->id, (int) $course->id, time() - 3 * DAYSECS);
+
+        $this->assertSame([], $this->service->take_notices((int) $user->id, (int) $course->id));
+    }
+
+    public function test_queued_events_are_not_shown_locally(): void {
         global $DB;
 
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student', ['firstname' => 'Cleo']);
+        $this->set_last_greeting((int) $user->id, (int) $course->id, time());
+        $this->queue((int) $user->id, (int) $course->id, [['type' => 'guide_started', 'time' => 2]]);
+
+        $this->assertSame([], $this->service->take_notices((int) $user->id, (int) $course->id));
+        $this->assertSame(1, $DB->count_records(tutor_proactive_context_service::TABLE));
+    }
+
+    public function test_course_completed_text(): void {
         $course = $this->getDataGenerator()->create_course(['shortname' => 'BIO101']);
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student', ['firstname' => 'Cleo']);
-        $this->queue((int) $user->id, (int) $course->id, [
-            ['type' => 'quiz_graded', 'time' => 1, 'quizname' => 'Cells', 'grade' => 9, 'maxgrade' => 10],
-            ['type' => 'guide_started', 'time' => 2],
-            ['type' => 'course_completed', 'time' => 3],
-        ]);
 
-        $notices = $this->service->take_notices((int) $user->id, (int) $course->id);
+        $text = $this->service->text(['type' => 'course_completed', 'time' => 1], (int) $user->id, (int) $course->id);
 
-        $this->assertCount(3, $notices);
-        $this->assertContains($notices[0]['content'], $this->variants('firstvisit', 3, ['name' => 'Cleo']));
-        $this->assertContains($notices[1]['content'], $this->variants('quizgraded_high', 3, [
-            'name' => 'Cleo', 'quiz' => 'Cells', 'grade' => '9', 'maxgrade' => '10',
-        ]));
-        $this->assertContains($notices[2]['content'], $this->variants('coursecompleted', 3, [
-            'name' => 'Cleo', 'course' => 'BIO101',
-        ]));
-
-        // The Guide me turn stays queued for the API; notices are shown once.
-        $this->assertSame([], $this->service->take_notices((int) $user->id, (int) $course->id));
-        $queue = (new tutor_proactive_context_service())->decode_queue((string) $DB->get_field(
-            tutor_proactive_context_service::TABLE,
-            'message',
-            ['userid' => $user->id, 'courseid' => $course->id]
-        ));
-        $this->assertSame('guide_started', $queue[0]['type']);
+        $this->assertContains($text, $this->variants('coursecompleted', 3, ['name' => 'Cleo', 'course' => 'BIO101']));
     }
 
     /**
@@ -170,40 +183,36 @@ final class tutor_notice_service_test extends \advanced_testcase {
     public function test_quiz_notice_variant_follows_the_score_band(float $grade, float $maxgrade, string $key): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student', ['firstname' => 'Dan']);
-        $this->set_last_greeting((int) $user->id, (int) $course->id, time());
-        $this->queue((int) $user->id, (int) $course->id, [
-            ['type' => 'quiz_graded', 'time' => 1, 'quizname' => 'Q1', 'grade' => $grade, 'maxgrade' => $maxgrade],
-        ]);
+        $event = ['type' => 'quiz_graded', 'time' => 1, 'quizname' => 'Q1', 'grade' => $grade, 'maxgrade' => $maxgrade];
 
-        $notices = $this->service->take_notices((int) $user->id, (int) $course->id);
+        $text = $this->service->text($event, (int) $user->id, (int) $course->id);
 
-        $this->assertCount(1, $notices);
-        $this->assertContains($notices[0]['content'], $this->variants($key, 3, [
+        $this->assertContains($text, $this->variants($key, 3, [
             'name' => 'Dan', 'quiz' => 'Q1', 'grade' => format_float($grade, 2, true, true), 'maxgrade' => '10',
         ]));
     }
 
-    public function test_placeholders_are_escaped(): void {
+    public function test_greeting_html_is_escaped_and_text_is_plain(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student', ['firstname' => 'Ann & Bo']);
-        $this->set_last_greeting((int) $user->id, (int) $course->id, time());
-        $this->queue((int) $user->id, (int) $course->id, [
-            ['type' => 'quiz_graded', 'time' => 1, 'quizname' => 'A < B', 'grade' => 1, 'maxgrade' => 10],
-        ]);
 
         $notices = $this->service->take_notices((int) $user->id, (int) $course->id);
+        $text = $this->service->text(
+            ['type' => 'quiz_graded', 'time' => 1, 'quizname' => 'A < B', 'grade' => 1, 'maxgrade' => 10],
+            (int) $user->id,
+            (int) $course->id
+        );
 
         $this->assertStringContainsString('Ann &amp; Bo', $notices[0]['contenthtml']);
-        $this->assertStringContainsString('A &lt; B', $notices[0]['contenthtml']);
         $this->assertStringContainsString('Ann & Bo', $notices[0]['content']);
+        $this->assertStringContainsString('A < B', $text);
+        $this->assertStringContainsString('Ann & Bo', $text);
     }
 
-    public function test_unknown_types_are_dropped(): void {
+    public function test_unknown_types_have_no_text(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
-        $this->set_last_greeting((int) $user->id, (int) $course->id, time());
-        $this->queue((int) $user->id, (int) $course->id, [['type' => 'return_visit_warm', 'time' => 1]]);
 
-        $this->assertSame([], $this->service->take_notices((int) $user->id, (int) $course->id));
+        $this->assertNull($this->service->text(['type' => 'return_visit_warm', 'time' => 1], (int) $user->id, (int) $course->id));
     }
 }
