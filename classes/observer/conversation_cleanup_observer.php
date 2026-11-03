@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Event observers erasing tutor conversations left behind by a deleted course or user.
+ * Event observers erasing tutor data left behind by a deleted course or user.
  *
  * The privacy provider reaches conversations through the course context; once the
  * course is gone there is no context left to walk, so the API copy would survive
@@ -31,6 +31,8 @@
 
 namespace block_dixeo_tutor\observer;
 
+use block_dixeo_tutor\privacy\provider;
+use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\erase_conversations;
 use core\event\course_deleted;
 use core\event\user_deleted;
@@ -45,7 +47,16 @@ class conversation_cleanup_observer {
      * @param course_deleted $event The event.
      */
     public static function course_deleted(course_deleted $event): void {
-        erase_conversations::queue((int) $event->objectid, null);
+        global $DB;
+
+        $courseid = (int) $event->objectid;
+        // Local rows of a deleted course have no context left for the privacy API to find them by.
+        $DB->delete_records(tutor_proactive_context_service::TABLE, ['courseid' => $courseid]);
+        foreach (array_keys(provider::COURSE_PREFERENCES) as $prefix) {
+            $DB->delete_records('user_preferences', ['name' => $prefix . $courseid]);
+        }
+
+        erase_conversations::queue($courseid, null);
     }
 
     /**
@@ -58,6 +69,11 @@ class conversation_cleanup_observer {
      * @param user_deleted $event The event.
      */
     public static function user_deleted(user_deleted $event): void {
+        global $DB;
+
+        // Core removes the user's preferences; the queued Guide me prompts are this block's to remove.
+        $DB->delete_records(tutor_proactive_context_service::TABLE, ['userid' => (int) $event->objectid]);
+
         erase_conversations::queue(null, (int) $event->objectid);
     }
 }

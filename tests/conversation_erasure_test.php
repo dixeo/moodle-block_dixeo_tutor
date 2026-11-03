@@ -25,6 +25,8 @@
 
 namespace block_dixeo_tutor;
 
+use block_dixeo_tutor\privacy\provider;
+use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\erase_conversations;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\external\service_factory;
@@ -227,5 +229,47 @@ final class conversation_erasure_test extends \advanced_testcase {
         delete_user($user);
 
         $this->assertEmpty(\core\task\manager::get_adhoc_tasks(erase_conversations::class));
+    }
+
+    public function test_course_deletion_removes_local_rows_and_preferences(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
+            'userid' => $user->id,
+            'courseid' => $course->id,
+            'message' => '[{"type":"guide_started","time":1}]',
+            'timemodified' => time(),
+        ]);
+        foreach (array_keys(provider::COURSE_PREFERENCES) as $prefix) {
+            set_user_preference($prefix . $course->id, '1', $user->id);
+        }
+
+        delete_course($course, false);
+
+        $this->assertFalse($DB->record_exists(tutor_proactive_context_service::TABLE, ['courseid' => $course->id]));
+        foreach (array_keys(provider::COURSE_PREFERENCES) as $prefix) {
+            $this->assertFalse($DB->record_exists('user_preferences', ['name' => $prefix . $course->id]));
+        }
+    }
+
+    public function test_user_deletion_removes_local_rows(): void {
+        global $DB;
+
+        $this->setAdminUser();
+        $course = $this->getDataGenerator()->create_course();
+        $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $DB->insert_record(tutor_proactive_context_service::TABLE, (object) [
+            'userid' => $user->id,
+            'courseid' => $course->id,
+            'message' => '[{"type":"guide_started","time":1}]',
+            'timemodified' => time(),
+        ]);
+
+        delete_user($user);
+
+        $this->assertFalse($DB->record_exists(tutor_proactive_context_service::TABLE, ['userid' => $user->id]));
     }
 }
