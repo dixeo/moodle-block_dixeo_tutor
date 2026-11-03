@@ -65,4 +65,31 @@ class tutor_access {
             throw new \moodle_exception('consentrequired', 'block_dixeo_tutor');
         }
     }
+
+    /**
+     * Whether data about this learner may be sent to Dixeo from a background path (observer or task).
+     *
+     * Requires an existing course with the tutor on, the tutor capability, and acceptance of
+     * the current Terms of Use. Guests never qualify: no acceptance can be stored for them.
+     *
+     * @param int $userid Learner.
+     * @param int $courseid Course.
+     * @return bool
+     */
+    public static function may_send_for(int $userid, int $courseid): bool {
+        if ($userid <= 0 || $courseid <= SITEID || isguestuser($userid)) {
+            return false;
+        }
+        $context = \context_course::instance($courseid, IGNORE_MISSING);
+        if (!$context instanceof \context_course) {
+            return false;
+        }
+        if (!self::is_usable($context)) {
+            return false;
+        }
+        if (!has_capability('block/dixeo_tutor:talktotutor', $context, $userid)) {
+            return false;
+        }
+        return (new consent_service())->terms_current($userid);
+    }
 }

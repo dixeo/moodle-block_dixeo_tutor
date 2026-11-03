@@ -258,7 +258,11 @@ class block_dixeo_tutor extends block_base {
         $opentooltip = get_string('tooltip_open_tutor', 'block_dixeo_tutor');
         $hidetooltip = get_string('tooltip_hide_tutor', 'block_dixeo_tutor');
         $readservice = new \block_dixeo_tutor\service\tutor_read_state_service();
-        $notices = (new \block_dixeo_tutor\service\tutor_notice_service())->take_notices((int) $USER->id, $courseid);
+        // The greeting carries the learner's first name to Dixeo, so it waits for Terms of Use acceptance.
+        $notices = [];
+        if (!(new \local_dixeo\service\consent_service())->gate_required((int) $USER->id, $coursecontext)) {
+            $notices = (new \block_dixeo_tutor\service\tutor_notice_service())->take_notices((int) $USER->id, $courseid);
+        }
         $this->page->requires->js_call_amd('local_dixeo/settings_modal', 'init');
         $this->page->requires->js_call_amd('block_dixeo_tutor/tutor', 'init', [
             $courseid,

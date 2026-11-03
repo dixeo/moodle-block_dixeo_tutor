@@ -32,6 +32,7 @@ use block_dixeo_tutor\task\post_notice;
 use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
+use local_dixeo\service\consent_service;
 use local_dixeo\service\tutor_service;
 
 /**
@@ -203,6 +204,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $course = $this->getDataGenerator()->create_course();
         $this->enable_tutor($course);
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        (new consent_service())->accept((int) $user->id);
         $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
 
         $gradecategory = \grade_category::fetch_course_category($course->id);
@@ -344,6 +346,7 @@ final class tutor_proactive_context_service_test extends \advanced_testcase {
         $course = $this->getDataGenerator()->create_course();
         $this->enable_tutor($course);
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        (new consent_service())->accept((int) $user->id);
 
         $this->complete_course($course, $user);
 

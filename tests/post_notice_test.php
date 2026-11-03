@@ -29,6 +29,7 @@ use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\task\post_notice;
 use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
+use local_dixeo\service\consent_service;
 use local_dixeo\service\tutor_service;
 
 /**
@@ -62,6 +63,7 @@ final class post_notice_test extends \advanced_testcase {
     public function test_stores_the_notice_as_a_tutor_message_with_its_event(): void {
         $course = $this->getDataGenerator()->create_course(['shortname' => 'BIO101']);
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student', ['firstname' => 'Cleo']);
+        (new consent_service())->accept((int) $user->id);
         $event = ['type' => 'course_completed', 'time' => 1];
         post_notice::queue((int) $user->id, (int) $course->id, $event);
         $task = $this->queued_task();
@@ -92,6 +94,7 @@ final class post_notice_test extends \advanced_testcase {
     public function test_stores_the_text_already_shown_as_is(): void {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        (new consent_service())->accept((int) $user->id);
         $event = ['type' => 'return_visit', 'time' => 1];
         post_notice::queue((int) $user->id, (int) $course->id, $event, 'Hey! Ready to keep going?');
 

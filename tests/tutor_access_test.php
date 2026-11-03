@@ -28,6 +28,8 @@ namespace block_dixeo_tutor;
 use block_dixeo_tutor\external\delete_conversation;
 use block_dixeo_tutor\external\send_message;
 use block_dixeo_tutor\external\start_guide_session;
+use block_dixeo_tutor\service\tutor_proactive_context_service;
+use block_dixeo_tutor\task\post_notice;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\consent_service;
 use local_dixeo\service\tutor_service;
@@ -38,6 +40,8 @@ use local_dixeo\service\tutor_service;
  * @covers \block_dixeo_tutor\tutor_access
  * @covers \block_dixeo_tutor\external\send_message
  * @covers \block_dixeo_tutor\external\start_guide_session
+ * @covers \block_dixeo_tutor\task\post_notice
+ * @covers \block_dixeo_tutor\service\tutor_proactive_context_service
  */
 final class tutor_access_test extends \advanced_testcase {
     protected function setUp(): void {
@@ -149,5 +153,88 @@ final class tutor_access_test extends \advanced_testcase {
         $this->setUser($student);
         $this->assert_refused(fn() => send_message::execute((int) $course->id, 'Hello'), 'consentrequired');
         $this->assert_refused(fn() => start_guide_session::execute((int) $course->id, 'Help me'), 'consentrequired');
+    }
+
+    public function test_quiz_grade_of_a_learner_without_terms_queues_no_notice(): void {
+        global $CFG;
+        require_once($CFG->dirroot . '/mod/quiz/lib.php');
+
+        $course = $this->getDataGenerator()->create_course();
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id]);
+        $gradeitem = new \grade_item([
+            'courseid' => $course->id,
+            'categoryid' => \grade_category::fetch_course_category($course->id)->id,
+            'itemname' => 'Quiz 1',
+            'itemtype' => 'mod',
+            'itemmodule' => 'quiz',
+            'iteminstance' => $quiz->id,
+            'gradetype' => GRADE_TYPE_VALUE,
+            'grademax' => 100,
+        ], false);
+        $gradeitem->insert();
+        $grade = new \grade_grade([
+            'itemid' => $gradeitem->id,
+            'userid' => $student->id,
+            'rawgrade' => 80,
+            'finalgrade' => 80,
+        ], false);
+        $grade->insert();
+
+        (new tutor_proactive_context_service())->handle_user_graded(\core\event\user_graded::create_from_grade($grade));
+
+        $this->assertEmpty(\core\task\manager::get_adhoc_tasks(post_notice::class));
+    }
+
+    public function test_queued_notice_is_not_sent_once_the_terms_are_withdrawn(): void {
+        [$course, $student] = $this->course_and_student();
+        post_notice::queue((int) $student->id, (int) $course->id, ['type' => 'course_completed', 'time' => time()]);
+        (new consent_service())->withdraw_terms((int) $student->id);
+        $this->forbid_tutor_calls();
+
+        $tasks = \core\task\manager::get_adhoc_tasks(post_notice::class);
+        $this->assertCount(1, $tasks);
+        reset($tasks)->execute();
+    }
+
+    public function test_queued_notice_is_not_sent_once_the_tutor_is_off(): void {
+        [$course, $student] = $this->course_and_student();
+        post_notice::queue((int) $student->id, (int) $course->id, ['type' => 'course_completed', 'time' => time()]);
+        $this->setAdminUser();
+        service_factory::get_settings_config()->set(
+            'block_dixeo_tutor',
+            'tutor_enabled',
+            \context_course::instance((int) $course->id),
+            '0'
+        );
+        $this->forbid_tutor_calls();
+
+        $tasks = \core\task\manager::get_adhoc_tasks(post_notice::class);
+        reset($tasks)->execute();
+    }
+
+    public function test_background_sends_require_the_capability(): void {
+        [$course, $student] = $this->course_and_student();
+        $this->assertTrue(tutor_access::may_send_for((int) $student->id, (int) $course->id));
+
+        assign_capability(
+            'block/dixeo_tutor:talktotutor',
+            CAP_PROHIBIT,
+            $this->get_student_roleid(),
+            \context_course::instance((int) $course->id)->id,
+            true
+        );
+        $this->assertFalse(tutor_access::may_send_for((int) $student->id, (int) $course->id));
+        $this->assertFalse(tutor_access::may_send_for((int) $student->id, 999999));
+    }
+
+    /**
+     * Id of the student role.
+     *
+     * @return int
+     */
+    private function get_student_roleid(): int {
+        global $DB;
+        return (int) $DB->get_field('role', 'id', ['shortname' => 'student'], MUST_EXIST);
     }
 }

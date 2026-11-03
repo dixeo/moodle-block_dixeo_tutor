@@ -33,6 +33,7 @@ namespace block_dixeo_tutor\task;
 
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_notice_service;
+use block_dixeo_tutor\tutor_access;
 use core\task\adhoc_task;
 use core\task\manager;
 use local_dixeo\dto\tutor_message;
@@ -92,6 +93,11 @@ class post_notice extends adhoc_task {
         $course = $DB->get_record('course', ['id' => $courseid], 'id, lang');
         $user = \core_user::get_user($userid, 'id, deleted');
         if (!$course || !$user || $user->deleted) {
+            return;
+        }
+
+        // Settings, capability or Terms of Use acceptance may have changed since the notice was queued.
+        if (!tutor_access::may_send_for($userid, $courseid)) {
             return;
         }
 

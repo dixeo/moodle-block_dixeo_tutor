@@ -30,6 +30,7 @@ use grade_item;
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\task\post_notice;
+use block_dixeo_tutor\tutor_access;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
@@ -65,7 +66,7 @@ class tutor_proactive_context_service {
         $userid = (int) $event->relateduserid;
         $courseid = (int) $event->courseid;
 
-        if (!$this->can_use_tutor($userid, $courseid) || !$this->tutor_is_on($courseid)) {
+        if (!tutor_access::may_send_for($userid, $courseid)) {
             return;
         }
 
@@ -134,7 +135,7 @@ class tutor_proactive_context_service {
             return;
         }
 
-        if (!$this->can_use_tutor($userid, $courseid) || !$this->tutor_is_on($courseid)) {
+        if (!tutor_access::may_send_for($userid, $courseid)) {
             return;
         }
 
@@ -262,19 +263,6 @@ class tutor_proactive_context_service {
         }
 
         return has_capability('block/dixeo_tutor:talktotutor', $context, $userid);
-    }
-
-    /**
-     * Whether Dixeo and the tutor are turned on in this course.
-     *
-     * @param int $courseid
-     * @return bool
-     */
-    private function tutor_is_on(int $courseid): bool {
-        $context = \context_course::instance($courseid);
-        $config = service_factory::get_settings_config();
-        return $config->enabled_for($context)
-            && $config->get('block_dixeo_tutor', 'tutor_enabled', $context)->get_value() === '1';
     }
 
     /**
