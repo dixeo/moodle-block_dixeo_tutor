@@ -126,8 +126,9 @@ class job_ownership {
      * @return string
      */
     private static function cache_key(int $userid, int $courseid, string $jobid): string {
-        // Simplekeys allows only a-zA-Z0-9_ (no UUID hyphens).
-        $sid = preg_replace('/[^a-zA-Z0-9_]/', '', session_id() ?: 'nosess') ?: 'nosess';
+        // Simplekeys allows only a-zA-Z0-9_ (no UUID hyphens). The session id is hashed so that
+        // a live session id never appears in the cache store.
+        $sid = substr(hash('sha256', session_id() ?: 'nosess'), 0, 32);
         $job = strtolower(str_replace('-', '', $jobid));
         return $userid . '_' . $courseid . '_' . $job . '_' . $sid;
     }
