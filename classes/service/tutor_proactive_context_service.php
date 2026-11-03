@@ -197,8 +197,23 @@ class tutor_proactive_context_service {
             return null;
         }
 
+        // A prompt queued before the learner deleted the conversation must not recreate it: drop it.
+        $queue = $this->decode_queue((string) ($record->message ?? ''));
+        $erasedat = tutor_erasure_marker::erased_at($userid, $courseid);
+        if ($erasedat > 0) {
+            $kept = array_values(array_filter(
+                $queue,
+                static fn(array $event): bool => (int) ($event['time'] ?? 0) > $erasedat
+            ));
+            if (count($kept) !== count($queue)) {
+                $record->message = $this->encode_queue($kept);
+                $this->save_record($record);
+                $queue = $kept;
+            }
+        }
+
         $events = array_values(array_filter(
-            $this->decode_queue((string) ($record->message ?? '')),
+            $queue,
             static fn(array $event): bool => ($event['type'] ?? '') === self::GUIDE_STARTED
         ));
         if ($events === []) {

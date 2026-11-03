@@ -29,6 +29,7 @@ use block_dixeo_tutor\event\conversation_deleted;
 use block_dixeo_tutor\event\privacy_request_failed;
 use block_dixeo_tutor\external\delete_conversation;
 use block_dixeo_tutor\privacy\provider;
+use block_dixeo_tutor\service\tutor_erasure_marker;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\service\tutor_read_state_service;
 use block_dixeo_tutor\service\tutor_notice_service;
@@ -643,6 +644,7 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
             tutor_read_state_service::PREF_LAST_READ_PREFIX . $courseid => $now,
             tutor_mode_service::PREF_MODE_PREFIX . $courseid => 'guide',
             tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX . $courseid => $now,
+            tutor_erasure_marker::PREF_ERASED_AT_PREFIX . $courseid => $now,
         ];
         $this->assertCount(count(provider::COURSE_PREFERENCES), $preferences);
 

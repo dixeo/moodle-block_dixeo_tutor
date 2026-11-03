@@ -32,6 +32,7 @@
 namespace block_dixeo_tutor\task;
 
 use block_dixeo_tutor\service\tutor_context_schema;
+use block_dixeo_tutor\service\tutor_erasure_marker;
 use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\tutor_access;
 use core\task\adhoc_task;
@@ -72,6 +73,7 @@ class post_notice extends adhoc_task {
             'event' => $event,
             'text' => $text,
             'key' => \core\uuid::generate(),
+            'queuedat' => time(),
         ]);
         manager::queue_adhoc_task($task);
     }
@@ -98,6 +100,11 @@ class post_notice extends adhoc_task {
 
         // Settings, capability or Terms of Use acceptance may have changed since the notice was queued.
         if (!tutor_access::may_send_for($userid, $courseid)) {
+            return;
+        }
+
+        // A conversation deleted after the notice was queued must stay deleted.
+        if (tutor_erasure_marker::is_superseded($userid, $courseid, (int) ($data->queuedat ?? 0))) {
             return;
         }
 

@@ -27,6 +27,7 @@ namespace block_dixeo_tutor\privacy;
 
 use block_dixeo_tutor\event\privacy_request_failed;
 use block_dixeo_tutor\service\tutor_citation_renderer;
+use block_dixeo_tutor\service\tutor_erasure_marker;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
@@ -78,6 +79,7 @@ class provider implements
         tutor_read_state_service::PREF_LAST_READ_PREFIX => ['privacy:metadata:lastread', self::PREF_TIME],
         tutor_mode_service::PREF_MODE_PREFIX => ['privacy:metadata:tutormode', self::PREF_RAW],
         tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX => ['privacy:metadata:tutormodeactivity', self::PREF_TIME],
+        tutor_erasure_marker::PREF_ERASED_AT_PREFIX => ['privacy:metadata:erasedat', self::PREF_TIME],
     ];
 
     /**

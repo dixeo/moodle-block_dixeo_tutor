@@ -26,6 +26,8 @@
 namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\event\conversation_deleted;
+use block_dixeo_tutor\service\tutor_erasure_marker;
+use block_dixeo_tutor\service\tutor_proactive_context_service;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -61,13 +63,21 @@ class delete_conversation extends external_api {
      * @return array Array with the number of conversations deleted.
      */
     public static function execute(int $courseid): array {
-        global $USER;
+        global $DB, $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), ['courseid' => $courseid]);
 
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+
+        // Local leftovers go first: a queued Guide me prompt or notice would otherwise recreate
+        // the conversation right after it is erased.
+        $DB->delete_records(tutor_proactive_context_service::TABLE, [
+            'userid' => (int) $USER->id,
+            'courseid' => (int) $params['courseid'],
+        ]);
+        tutor_erasure_marker::mark((int) $USER->id, (int) $params['courseid']);
 
         $deleted = service_factory::get_tutor_service()->delete_conversations(
             (int) $params['courseid'],
