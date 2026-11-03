@@ -34,6 +34,15 @@ use local_dixeo\service\consent_service;
  * and observers and adhoc tasks run without any page at all.
  */
 class tutor_access {
+    /** @var string Generation scope covering the whole course. */
+    public const SCOPE_COURSE = 'course';
+
+    /** @var string Generation scope covering one section. */
+    public const SCOPE_SECTION = 'section';
+
+    /** @var string Generation scope covering one activity. */
+    public const SCOPE_ACTIVITY = 'activity';
+
     /**
      * Whether Dixeo and the tutor are both turned on for the course.
      *
@@ -91,5 +100,65 @@ class tutor_access {
             return false;
         }
         return (new consent_service())->terms_current($userid);
+    }
+
+    /**
+     * Check a Quiz or Teach generation scope against what the current user may see in the course.
+     *
+     * Mirrors the setup hierarchy ({@see \block_dixeo_tutor::build_practice_quiz_hierarchy()}): only
+     * sections and activities that are visible and available to the user, outside section 0, and
+     * activities whose type is not excluded from topics. The ids that do not belong to the scope
+     * are returned as 0, so a missing id can never fall back to another scope downstream.
+     *
+     * @param int $courseid Course id.
+     * @param string $scope course, section or activity.
+     * @param int $sectionnum Section number for the section scope.
+     * @param int $cmid Course module id for the activity scope.
+     * @return array{0: string, 1: int, 2: int} Normalised scope, section number and cmid.
+     * @throws \invalid_parameter_exception When the scope is unknown.
+     * @throws \moodle_exception When the section or activity is not available, without saying whether it exists.
+     */
+    public static function require_topic_visible(int $courseid, string $scope, int $sectionnum, int $cmid): array {
+        global $CFG;
+
+        $scope = strtolower(trim($scope));
+        if (!in_array($scope, [self::SCOPE_COURSE, self::SCOPE_SECTION, self::SCOPE_ACTIVITY], true)) {
+            throw new \invalid_parameter_exception('Invalid scope');
+        }
+        if ($scope === self::SCOPE_COURSE) {
+            return [$scope, 0, 0];
+        }
+
+        $modinfo = get_fast_modinfo($courseid);
+
+        if ($scope === self::SCOPE_SECTION) {
+            $section = $sectionnum > 0 ? $modinfo->get_section_info($sectionnum, IGNORE_MISSING) : null;
+            if (!$section || !$section->uservisible) {
+                throw new \moodle_exception('error_topic_unavailable', 'block_dixeo_tutor');
+            }
+            return [$scope, (int) $section->section, 0];
+        }
+
+        // Block plugin classes are not autoloaded in web service requests.
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/dixeo_tutor/block_dixeo_tutor.php');
+
+        $cm = null;
+        if ($cmid > 0) {
+            try {
+                $cm = $modinfo->get_cm($cmid);
+            } catch (\moodle_exception $e) {
+                $cm = null;
+            }
+        }
+        if (
+            !$cm
+            || !$cm->uservisible
+            || (int) $cm->sectionnum === 0
+            || \block_dixeo_tutor::is_quiz_topic_excluded($cm->modname, \context_course::instance($courseid))
+        ) {
+            throw new \moodle_exception('error_topic_unavailable', 'block_dixeo_tutor');
+        }
+        return [$scope, 0, (int) $cm->id];
     }
 }

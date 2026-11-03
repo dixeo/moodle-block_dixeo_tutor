@@ -66,6 +66,7 @@ $string['error_job_access'] = 'Der Auftragsstatus konnte nicht abgerufen werden.
 $string['error_mode_not_available'] = 'Der ausgewählte Tutor-Modus ist nicht verfügbar.';
 $string['error_network'] = 'Netzwerkfehler. Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut.';
 $string['error_timeout'] = 'Zeitüberschreitung der Anfrage. Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut.';
+$string['error_topic_unavailable'] = 'Dieses Thema ist nicht verfügbar. Wählen Sie einen anderen Abschnitt oder eine andere Aktivität.';
 $string['errorsendmessage'] = 'Beim Senden Ihrer Nachricht ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.';
 $string['eventconversationdeleted'] = 'Dixeo-Tutor-Konversation gelöscht';
 $string['eventconversationdeleteddesc'] = 'Der Benutzer mit der ID \'{$a->userid}\' hat seine Tutor-Konversation im Kurs \'{$a->courseid}\' gelöscht (deleted={$a->deleted}).';

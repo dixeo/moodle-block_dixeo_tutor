@@ -95,13 +95,21 @@ class submit_teach_lesson extends external_api {
         tutor_access::require_usable($context, (int) $USER->id);
         tutor_mode_policy::require_teach_mode(tutor_mode_policy::is_quiz_runtime_available(), (int) $params['courseid']);
 
+        // The generator reads the full content of the scope, so it must be one the learner can see.
+        [$scope, $sectionnum, $cmid] = tutor_access::require_topic_visible(
+            (int) $params['courseid'],
+            $params['scope'],
+            (int) $params['sectionnum'],
+            (int) $params['cmid']
+        );
+
         try {
             $service = service_factory::get_teach_lesson_service();
             $result = $service->submit_from_setup(
                 (int) $params['courseid'],
-                $params['scope'],
-                (int) $params['sectionnum'],
-                (int) $params['cmid'],
+                $scope,
+                $sectionnum,
+                $cmid,
                 $params['topictitle'],
                 $params['learnerrequest'],
                 $params['language']

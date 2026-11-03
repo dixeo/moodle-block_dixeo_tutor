@@ -28,22 +28,32 @@ namespace block_dixeo_tutor;
 use block_dixeo_tutor\external\delete_conversation;
 use block_dixeo_tutor\external\send_message;
 use block_dixeo_tutor\external\start_guide_session;
+use block_dixeo_tutor\external\submit_practice_quiz;
+use block_dixeo_tutor\external\submit_teach_lesson;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\post_notice;
+use local_dixeo\dto\operation_result;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\consent_service;
+use local_dixeo\service\practice_quiz_service;
+use local_dixeo\service\teach_lesson_service;
 use local_dixeo\service\tutor_service;
 
 /**
  * Web services, observers and tasks enforce what the block UI shows.
  *
  * @covers \block_dixeo_tutor\tutor_access
+ * @covers \block_dixeo_tutor\external\submit_teach_lesson
+ * @covers \block_dixeo_tutor\external\submit_practice_quiz
  * @covers \block_dixeo_tutor\external\send_message
  * @covers \block_dixeo_tutor\external\start_guide_session
  * @covers \block_dixeo_tutor\task\post_notice
  * @covers \block_dixeo_tutor\service\tutor_proactive_context_service
  */
 final class tutor_access_test extends \advanced_testcase {
+    /** @var string Valid UUID for mocked jobs. */
+    private const JOB_ID = '5f38d9aa-f40c-4992-9727-982f050ff9fd';
+
     protected function setUp(): void {
         parent::setUp();
         $this->resetAfterTest();
@@ -84,6 +94,24 @@ final class tutor_access_test extends \advanced_testcase {
     }
 
     /**
+     * Teach generation service that must never be reached.
+     */
+    private function forbid_teach_generation(): void {
+        $service = $this->createMock(teach_lesson_service::class);
+        $service->expects($this->never())->method('submit_from_setup');
+        service_factory::set_test_teach_lesson_service($service);
+    }
+
+    /**
+     * Quiz generation service that must never be reached.
+     */
+    private function forbid_quiz_generation(): void {
+        $service = $this->createMock(practice_quiz_service::class);
+        $service->expects($this->never())->method('submit_from_setup');
+        service_factory::set_test_practice_quiz_service($service);
+    }
+
+    /**
      * Tutor service whose remote calls must never be reached.
      *
      * @return \PHPUnit\Framework\MockObject\MockObject&tutor_service
@@ -94,6 +122,123 @@ final class tutor_access_test extends \advanced_testcase {
         $service->expects($this->never())->method('add_message');
         service_factory::set_test_tutor_service($service);
         return $service;
+    }
+
+    public function test_teach_lesson_refuses_a_hidden_activity(): void {
+        [$course, $student] = $this->course_and_student();
+        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
+        set_coursemodule_visible($page->cmid, 0);
+        $this->forbid_teach_generation();
+
+        $this->setUser($student);
+        $this->assert_refused(
+            fn() => submit_teach_lesson::execute((int) $course->id, 'activity', 0, (int) $page->cmid, 'Topic', 'Teach me'),
+            'error_topic_unavailable'
+        );
+    }
+
+    public function test_practice_quiz_refuses_a_hidden_activity(): void {
+        [$course, $student] = $this->course_and_student();
+        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
+        set_coursemodule_visible($page->cmid, 0);
+        $this->forbid_quiz_generation();
+
+        $this->setUser($student);
+        $this->assert_refused(
+            fn() => submit_practice_quiz::execute((int) $course->id, 'activity', 0, (int) $page->cmid, 5, 'medium', 'Topic'),
+            'error_topic_unavailable'
+        );
+    }
+
+    public function test_hidden_section_is_refused_for_both_generators(): void {
+        [$course, $student] = $this->course_and_student();
+        set_section_visible((int) $course->id, 2, 0);
+        $this->forbid_teach_generation();
+        $this->forbid_quiz_generation();
+
+        $this->setUser($student);
+        $this->assert_refused(
+            fn() => submit_teach_lesson::execute((int) $course->id, 'section', 2, 0, 'Topic', 'Teach me'),
+            'error_topic_unavailable'
+        );
+        $this->assert_refused(
+            fn() => submit_practice_quiz::execute((int) $course->id, 'section', 2, 0, 5, 'medium', 'Topic'),
+            'error_topic_unavailable'
+        );
+    }
+
+    public function test_unknown_activity_gets_the_same_answer_as_a_hidden_one(): void {
+        [$course, $student] = $this->course_and_student();
+        $other = $this->getDataGenerator()->create_course();
+        $foreign = $this->getDataGenerator()->create_module('page', ['course' => $other->id]);
+        $this->forbid_teach_generation();
+
+        $this->setUser($student);
+        $this->assert_refused(
+            fn() => submit_teach_lesson::execute((int) $course->id, 'activity', 0, (int) $foreign->cmid, 'Topic', 'Teach me'),
+            'error_topic_unavailable'
+        );
+        $this->assert_refused(
+            fn() => submit_teach_lesson::execute((int) $course->id, 'activity', 0, 999999, 'Topic', 'Teach me'),
+            'error_topic_unavailable'
+        );
+    }
+
+    public function test_section_scope_without_a_section_cannot_fall_back_to_an_activity(): void {
+        [$course, $student] = $this->course_and_student();
+        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
+        set_coursemodule_visible($page->cmid, 0);
+        $this->forbid_teach_generation();
+
+        $this->setUser($student);
+        $this->assert_refused(
+            fn() => submit_teach_lesson::execute((int) $course->id, 'section', 0, (int) $page->cmid, 'Topic', 'Teach me'),
+            'error_topic_unavailable'
+        );
+    }
+
+    public function test_excluded_activity_type_is_refused(): void {
+        [$course, $student] = $this->course_and_student();
+        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id, 'section' => 1]);
+        $this->forbid_quiz_generation();
+
+        $this->setUser($student);
+        $this->assert_refused(
+            fn() => submit_practice_quiz::execute((int) $course->id, 'activity', 0, (int) $quiz->cmid, 5, 'medium', 'Topic'),
+            'error_topic_unavailable'
+        );
+    }
+
+    public function test_visible_activity_is_generated_with_only_its_cmid(): void {
+        [$course, $student] = $this->course_and_student();
+        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
+
+        $service = $this->createMock(teach_lesson_service::class);
+        $service->expects($this->once())
+            ->method('submit_from_setup')
+            ->with((int) $course->id, 'activity', 0, (int) $page->cmid, 'Topic', 'Teach me', '')
+            ->willReturn(operation_result::pending(self::JOB_ID));
+        service_factory::set_test_teach_lesson_service($service);
+
+        $this->setUser($student);
+        // The section number sent along is ignored for the activity scope.
+        $result = submit_teach_lesson::execute((int) $course->id, 'activity', 2, (int) $page->cmid, 'Topic', 'Teach me');
+        $this->assertSame(self::JOB_ID, $result['jobid']);
+    }
+
+    public function test_visible_section_is_generated(): void {
+        [$course, $student] = $this->course_and_student();
+
+        $service = $this->createMock(practice_quiz_service::class);
+        $service->expects($this->once())
+            ->method('submit_from_setup')
+            ->with((int) $course->id, 'section', 1, 0, 5, 'medium', 'Topic', '')
+            ->willReturn(operation_result::pending(self::JOB_ID));
+        service_factory::set_test_practice_quiz_service($service);
+
+        $this->setUser($student);
+        $result = submit_practice_quiz::execute((int) $course->id, 'section', 1, 0, 5, 'medium', 'Topic');
+        $this->assertSame(self::JOB_ID, $result['jobid']);
     }
 
     public function test_tutor_off_for_the_course_blocks_messages_and_guide_sessions(): void {

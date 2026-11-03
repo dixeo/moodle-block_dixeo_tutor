@@ -66,6 +66,7 @@ $string['error_job_access'] = 'Unable to retrieve job status.';
 $string['error_mode_not_available'] = 'The selected tutor mode is not available.';
 $string['error_network'] = 'Network error occurred. Please check your connection and try again.';
 $string['error_timeout'] = 'Request timed out. Please check your connection and try again.';
+$string['error_topic_unavailable'] = 'This topic is not available. Choose another section or activity.';
 $string['errorsendmessage'] = 'Sorry, there was an error sending your message. Please try again.';
 $string['eventconversationdeleted'] = 'Dixeo tutor conversation deleted';
 $string['eventconversationdeleteddesc'] = 'The user with id \'{$a->userid}\' deleted their tutor conversation in course \'{$a->courseid}\' (deleted={$a->deleted}).';
