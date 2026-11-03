@@ -419,6 +419,20 @@ define([
         }
     };
 
+    /**
+     * Drop the lesson held in memory and close the pane after the conversation was deleted.
+     */
+    TeachController.prototype.forgetSession = function() {
+        this.bgPoller.cancel();
+        if (this.active) {
+            this._cancelTeach();
+            return;
+        }
+        this._openSetupToken++;
+        this._lastSetupConfig = null;
+        this.clearStorage();
+    };
+
     TeachController.prototype.destroy = function() {
         this.bgPoller.cancel();
         teachLessonView.destroy();

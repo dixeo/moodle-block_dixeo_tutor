@@ -7,6 +7,7 @@ define([
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/unread_indicator',
     'block_dixeo_tutor/tutor_mode_controller',
+    'block_dixeo_tutor/tutor_session_storage',
 ], function(
     ChatController,
     ChatState,
@@ -15,7 +16,8 @@ define([
     tutorPanelResize,
     constants,
     unreadIndicator,
-    TutorModeController
+    TutorModeController,
+    tutorSessionStorage
 ) {
     'use strict';
 
@@ -311,6 +313,21 @@ define([
                     modeController.setTeachController(teachController);
                 });
             }
+
+            // Deleting the conversation also forgets the Quiz, Teach and Guide me sessions kept
+            // in this browser, so no lesson content or Guide me summary outlives the conversation.
+            window.addEventListener('dixeo-tutor-conversation-deleted', function(event) {
+                const deletedcourseid = event && event.detail ? Number(event.detail.courseid) : 0;
+                if (deletedcourseid !== Number(courseid)) {
+                    return;
+                }
+                tutorSessionStorage.clearAllModes(userid, courseid);
+                [quizController, teachController, guideController].forEach(function(modeController) {
+                    if (modeController && typeof modeController.forgetSession === 'function') {
+                        modeController.forgetSession();
+                    }
+                });
+            });
 
             const container = document.getElementById('dixeo-tutor');
             if (container) {

@@ -509,6 +509,20 @@ define([
         }
     };
 
+    /**
+     * Drop the quiz held in memory and close the pane after the conversation was deleted.
+     */
+    PracticeQuizController.prototype.forgetSession = function() {
+        this.bgPoller.cancel();
+        if (this.active) {
+            this._cancelQuiz();
+            return;
+        }
+        this._openSetupToken++;
+        this._lastSetupConfig = null;
+        this.clearStorage();
+    };
+
     PracticeQuizController.prototype.destroy = function() {
         this.bgPoller.cancel();
         practiceQuizPanel.destroy();

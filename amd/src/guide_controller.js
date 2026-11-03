@@ -956,6 +956,45 @@ define([
         this._resumeActiveFromStorage(saved);
     };
 
+    /**
+     * Drop the Guide me session and summaries held in memory after the conversation was deleted.
+     */
+    GuideController.prototype.forgetSession = function() {
+        const wasShown = this.active || this.sessionActive || this._reviewing;
+        this._openSetupToken++;
+        this._sessionToken++;
+        this.sessionActive = false;
+        this._reviewing = false;
+        this._reviewSession = null;
+        this._pendingReviewResume = null;
+        this._isUnderstood = false;
+        this._pendingUserPrompt = '';
+        this._sessionTitle = '';
+        this._sessionDescription = '';
+        this._sessionStartedAt = 0;
+        this.clearStorage();
+        if (!wasShown) {
+            return;
+        }
+        this.closeGuidePane();
+        this._setModeSelectorLocked(false);
+        this.clearBannerTopic();
+        const root = document.getElementById('dixeo-tutor');
+        if (root) {
+            root.removeAttribute('data-guide-session');
+        }
+        if (this.ui && typeof this.ui.setMessageView === 'function') {
+            this.ui.setMessageView('standard');
+        }
+        if (this.ui && typeof this.ui.syncGuideCompletionButtons === 'function') {
+            this.ui.syncGuideCompletionButtons();
+        }
+        this._syncModeMessagingLock();
+        if (this.modeController && typeof this.modeController.resetToNormal === 'function') {
+            this.modeController.resetToNormal();
+        }
+    };
+
     GuideController.prototype.destroy = function() {
         // No background pollers to tear down.
     };
