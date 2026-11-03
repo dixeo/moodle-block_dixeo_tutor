@@ -51,4 +51,31 @@ final class tutor_context_schema_test extends \advanced_testcase {
         $this->assertSame(tutor_context_schema::SCHEMA_PAGE, $context['schema']);
         $this->assertSame('https://example.test/page', $context['url']);
     }
+    public function test_clean_html_fields_cleans_stored_lessons_and_reviews(): void {
+        $dirty = '<p>ok</p><script>alert(1)</script><img src=x onerror=alert(1)>';
+
+        $lesson = tutor_context_schema::clean_html_fields([
+            'schema' => tutor_context_schema::SCHEMA_CUSTOM_LESSON,
+            'title' => 'Lesson',
+            'introhtml' => $dirty,
+            'contenthtml' => $dirty,
+        ]);
+        foreach (['introhtml', 'contenthtml'] as $field) {
+            $this->assertStringNotContainsString('<script', $lesson[$field]);
+            $this->assertStringNotContainsString('onerror', $lesson[$field]);
+            $this->assertStringContainsString('<p>ok</p>', $lesson[$field]);
+        }
+
+        $review = tutor_context_schema::clean_html_fields([
+            'schema' => tutor_context_schema::SCHEMA_PRACTICE_QUIZ_REVIEW,
+            'introhtml' => $dirty,
+            'questions' => [['feedbackHtml' => $dirty], ['feedbackHtml' => ['not', 'a', 'string']]],
+        ]);
+        $this->assertStringNotContainsString('<script', $review['introhtml']);
+        $this->assertStringNotContainsString('<script', $review['questions'][0]['feedbackHtml']);
+        $this->assertSame('', $review['questions'][1]['feedbackHtml']);
+
+        $page = ['schema' => tutor_context_schema::SCHEMA_PAGE, 'url' => '<b>x</b>'];
+        $this->assertSame($page, tutor_context_schema::clean_html_fields($page));
+    }
 }

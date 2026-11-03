@@ -131,4 +131,38 @@ class tutor_context_schema {
 
         return $context;
     }
+
+    /**
+     * Clean the HTML fields of a stored lesson or quiz review context before it goes to the browser.
+     *
+     * The browser renders these fields unescaped. Contexts stored before the write path cleaned
+     * them, or altered on the way, must not reach the page as raw HTML.
+     *
+     * @param array $context Decoded message context.
+     * @return array The same context with introhtml, contenthtml and feedbackHtml values cleaned.
+     */
+    public static function clean_html_fields(array $context): array {
+        $schema = $context['schema'] ?? '';
+        if ($schema !== self::SCHEMA_CUSTOM_LESSON && $schema !== self::SCHEMA_PRACTICE_QUIZ_REVIEW) {
+            return $context;
+        }
+
+        foreach (['introhtml', 'contenthtml'] as $field) {
+            if (array_key_exists($field, $context)) {
+                $context[$field] = is_string($context[$field]) ? clean_text($context[$field], FORMAT_HTML) : '';
+            }
+        }
+
+        if (isset($context['questions']) && is_array($context['questions'])) {
+            foreach ($context['questions'] as $i => $question) {
+                if (is_array($question) && array_key_exists('feedbackHtml', $question)) {
+                    $context['questions'][$i]['feedbackHtml'] = is_string($question['feedbackHtml'])
+                        ? clean_text($question['feedbackHtml'], FORMAT_HTML)
+                        : '';
+                }
+            }
+        }
+
+        return $context;
+    }
 }
