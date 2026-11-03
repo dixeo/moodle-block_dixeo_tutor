@@ -135,5 +135,19 @@ function xmldb_block_dixeo_tutor_upgrade($oldversion) {
         upgrade_block_savepoint(true, 2026101407, 'dixeo_tutor');
     }
 
+    if ($oldversion < 2026110300) {
+        // Privacy requests treat a missing API key as "nothing remote" only on a site that never
+        // sent tutor data. A site with a key, or with tutor usage on record, is assumed to have sent some.
+        $hastransferred = !empty(get_config('local_dixeo', 'api_key'));
+        if (!$hastransferred && $DB->get_manager()->table_exists('local_dixeo_tutor_usage_event')) {
+            $hastransferred = $DB->record_exists('local_dixeo_tutor_usage_event', []);
+        }
+        if ($hastransferred && !get_config('block_dixeo_tutor', 'hastransferred')) {
+            set_config('hastransferred', time(), 'block_dixeo_tutor');
+        }
+
+        upgrade_block_savepoint(true, 2026110300, 'dixeo_tutor');
+    }
+
     return true;
 }

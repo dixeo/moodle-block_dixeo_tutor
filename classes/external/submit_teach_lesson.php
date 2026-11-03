@@ -26,6 +26,7 @@ namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\job_ownership;
+use block_dixeo_tutor\remote_state;
 use block_dixeo_tutor\service\tutor_mode_policy;
 use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
@@ -117,6 +118,7 @@ class submit_teach_lesson extends external_api {
         );
 
         try {
+            remote_state::record_transfer();
             $service = service_factory::get_teach_lesson_service();
             $result = $service->submit_from_setup(
                 (int) $params['courseid'],

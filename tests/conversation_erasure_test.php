@@ -230,6 +230,47 @@ final class conversation_erasure_test extends \advanced_testcase {
 
         $this->assertEmpty(\core\task\manager::get_adhoc_tasks(erase_conversations::class));
     }
+    public function test_a_missing_key_after_a_transfer_keeps_the_erasure_queued(): void {
+        set_config(remote_state::CONFIG_TRANSFERRED, time(), 'block_dixeo_tutor');
+        set_config('api_key', '', 'local_dixeo');
+        $this->mock_tutor_service()->expects($this->never())->method('delete_conversations');
+
+        erase_conversations::queue(7, 9);
+        $tasks = \core\task\manager::get_adhoc_tasks(erase_conversations::class);
+        $this->assertCount(1, $tasks);
+
+        $this->expectException(api_exception::class);
+        $this->execute_task(reset($tasks));
+    }
+
+    public function test_the_last_failed_attempt_notifies_administrators(): void {
+        $this->mock_tutor_service()->method('delete_conversations')->willThrowException(
+            new api_exception('connection_error', 'Failed to connect to Dixeo API', 0)
+        );
+        $sink = $this->redirectMessages();
+
+        $task = $this->task_for(3, null);
+        $task->set_attempts_available(2);
+        try {
+            $this->execute_task($task);
+        } catch (api_exception $e) {
+            $this->assertSame([], $sink->get_messages());
+        }
+
+        $task->set_attempts_available(1);
+        try {
+            $this->execute_task($task);
+            $this->fail('The failure must propagate');
+        } catch (api_exception $e) {
+            $this->assertDebuggingCalled();
+            $messages = array_filter($sink->get_messages(), static fn($m) => $m->eventtype === 'privacyfailure');
+            $this->assertNotEmpty($messages);
+            $this->assertStringContainsString(
+                get_string('privacyfailure_body_erasure_abandoned', 'block_dixeo_tutor', get_string('unknownuser')),
+                reset($messages)->fullmessage
+            );
+        }
+    }
 
     public function test_course_deletion_removes_local_rows_and_preferences(): void {
         global $DB;

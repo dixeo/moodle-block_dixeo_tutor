@@ -27,6 +27,7 @@ namespace block_dixeo_tutor\service;
 use core\event\course_completed;
 use core\event\user_graded;
 use grade_item;
+use block_dixeo_tutor\remote_state;
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\task\post_notice;
@@ -224,6 +225,7 @@ class tutor_proactive_context_service {
         $modeservice = new tutor_mode_service();
         $mode = $modeservice->get_mode($userid, $courseid);
 
+        remote_state::record_transfer();
         try {
             $result = service_factory::get_tutor_service()->submit(
                 $courseid,

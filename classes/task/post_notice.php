@@ -31,6 +31,7 @@
 
 namespace block_dixeo_tutor\task;
 
+use block_dixeo_tutor\remote_state;
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_erasure_marker;
 use block_dixeo_tutor\service\tutor_notice_service;
@@ -138,6 +139,7 @@ class post_notice extends adhoc_task {
             return;
         }
 
+        remote_state::record_transfer();
         service_factory::get_tutor_service()->add_message(
             $courseid,
             $userid,

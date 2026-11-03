@@ -26,7 +26,8 @@
  * spends one attempt per failure; the default budget of 12 attempts is exhausted after
  * about 2.4 days, so {@see queue()} raises it to {@see RETRY_ATTEMPTS}, which spans
  * roughly 20 days of outage. Past that the task stops being picked up, stays visible as
- * failed in the task admin, and core purges it 4 weeks after its first run.
+ * failed in the task admin, and core purges it 4 weeks after its first run; administrators
+ * are notified when the last attempt fails.
  *
  * @package    block_dixeo_tutor
  * @copyright  2026 Edunao SAS (contact@edunao.com)
@@ -36,8 +37,11 @@
 
 namespace block_dixeo_tutor\task;
 
+use block_dixeo_tutor\privacy\provider;
+use block_dixeo_tutor\remote_state;
 use core\task\adhoc_task;
 use core\task\manager;
+use local_dixeo\api\exception\api_exception;
 use local_dixeo\external\service_factory;
 
 /**
@@ -66,9 +70,9 @@ class erase_conversations extends adhoc_task {
      * @param int|null $userid The user to erase, or null for every user.
      */
     public static function queue(?int $courseid, ?int $userid): void {
-        // Without a key the site never sent anything, and the task would spend every
-        // attempt on an authentication error it can only lose.
-        if (!service_factory::get_client()->is_configured()) {
+        // A site that never sent anything has nothing to erase. A site that did, but lost
+        // its key, still queues: the task waits for the key instead of forgetting the erasure.
+        if (remote_state::current() === remote_state::NEVER) {
             return;
         }
 
@@ -84,15 +88,29 @@ class erase_conversations extends adhoc_task {
      *
      * Failures are deliberately left to propagate: the adhoc runner reschedules the
      * task, which is the only thing that turns a failed erasure into a retried one.
+     * A missing API key fails the same way, so the erasure stays queued until the key
+     * is back. When the last attempt fails, administrators are notified, because the
+     * runner will not pick the task up again.
      *
-     * @throws \local_dixeo\api\exception\api_exception When the API refuses or is down.
+     * @throws api_exception When the API refuses, is down, or has no key.
      */
     public function execute(): void {
         $data = $this->get_custom_data();
         $courseid = isset($data->courseid) ? (int) $data->courseid : null;
         $userid = isset($data->userid) ? (int) $data->userid : null;
 
-        $deleted = service_factory::get_tutor_service()->delete_conversations($courseid, $userid);
+        try {
+            if (!service_factory::get_client()->is_configured()) {
+                throw remote_state::not_configured_exception();
+            }
+            $deleted = service_factory::get_tutor_service()->delete_conversations($courseid, $userid);
+        } catch (api_exception $e) {
+            // The runner decrements the attempts after this run fails.
+            if ($this->get_attempts_available() <= 1) {
+                provider::report_failure($e, (int) $userid, 'privacyfailure_body_erasure_abandoned');
+            }
+            throw $e;
+        }
 
         mtrace("erase_conversations: erased {$deleted} conversation(s) " .
             '(courseid=' . ($courseid ?? 'all') . ', userid=' . ($userid ?? 'all') . ')');

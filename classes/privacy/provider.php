@@ -26,6 +26,7 @@
 namespace block_dixeo_tutor\privacy;
 
 use block_dixeo_tutor\event\privacy_request_failed;
+use block_dixeo_tutor\remote_state;
 use block_dixeo_tutor\service\tutor_citation_renderer;
 use block_dixeo_tutor\service\tutor_erasure_marker;
 use block_dixeo_tutor\service\tutor_mode_service;
@@ -53,8 +54,10 @@ use local_dixeo\service\tutor_service;
  * methods translate Moodle privacy vocabulary to the tutor API protocol.
  *
  * Erasure additionally queues {@see erase_conversations} whenever the API is out of
- * reach, because core has no retry of its own for a failed privacy callback. On a site
- * with no API key every conversation method is inert: nothing was ever sent.
+ * reach, because core has no retry of its own for a failed privacy callback. A missing
+ * API key only means "nothing remote" when the site never sent anything
+ * ({@see remote_state}): once data was transferred, a missing key is treated as an
+ * unreachable API, never as an empty result.
  *
  * An export cannot be replayed that way, because the archive is assembled only once, so
  * the read paths settle for visibility instead: {@see self::report_failure()}.
@@ -138,7 +141,12 @@ class provider implements
 
         $contextlist = new contextlist();
         self::add_local_contexts($contextlist, $userid);
-        if (!self::is_configured()) {
+        $state = remote_state::current();
+        if ($state === remote_state::NEVER) {
+            return $contextlist;
+        }
+        if ($state === remote_state::UNREACHABLE) {
+            self::report_failure(remote_state::not_configured_exception(), $userid);
             return $contextlist;
         }
 
@@ -181,7 +189,12 @@ class provider implements
         }
 
         self::add_local_users($userlist, $courseid);
-        if (!self::is_configured()) {
+        $state = remote_state::current();
+        if ($state === remote_state::NEVER) {
+            return;
+        }
+        if ($state === remote_state::UNREACHABLE) {
+            self::report_failure(remote_state::not_configured_exception(), 0);
             return;
         }
 
@@ -203,9 +216,14 @@ class provider implements
      */
     public static function export_user_data(approved_contextlist $contextlist): void {
         $userid = (int) $contextlist->get_user()->id;
-        $configured = self::is_configured();
+        $state = remote_state::current();
+        $configured = $state === remote_state::READY;
         $service = $configured ? self::service() : null;
         $reported = false;
+        if ($state === remote_state::UNREACHABLE) {
+            self::report_failure(remote_state::not_configured_exception(), $userid);
+            $reported = true;
+        }
 
         foreach ($contextlist->get_contexts() as $context) {
             $courseid = self::course_id($context);
@@ -257,7 +275,7 @@ class provider implements
         self::delete_pending($courseid, null);
         self::delete_course_preferences($courseid, null);
         post_notice::discard($courseid, null);
-        if (!self::is_configured()) {
+        if (remote_state::current() === remote_state::NEVER) {
             return;
         }
 
@@ -286,7 +304,7 @@ class provider implements
             self::delete_pending($courseid, $userid);
             self::delete_course_preferences($courseid, $userid);
             post_notice::discard($courseid, $userid);
-            if (!self::is_configured()) {
+            if (remote_state::current() === remote_state::NEVER) {
                 continue;
             }
 
@@ -319,7 +337,7 @@ class provider implements
             self::delete_course_preferences($courseid, (int) $userid);
             post_notice::discard($courseid, (int) $userid);
         }
-        if (!self::is_configured()) {
+        if (remote_state::current() === remote_state::NEVER) {
             return;
         }
 
@@ -339,13 +357,20 @@ class provider implements
      * {@see \core_privacy\manager} catches everything a provider throws, logs it as
      * debugging and carries on marking the request complete. Without the queued task
      * the user would be told their data is gone while it still sits in the API, with
-     * nothing left to replay the call.
+     * nothing left to replay the call. A missing API key on a site that transferred
+     * data counts as unreachable: the retry waits for the key to come back.
      *
      * @param int|null $courseid The course to erase, or null for every course.
      * @param int|null $userid The user to erase, or null for every user.
      * @return api_exception|null The failure to re-throw once every scope is handled.
      */
     private static function erase(?int $courseid, ?int $userid): ?api_exception {
+        if (remote_state::current() === remote_state::UNREACHABLE) {
+            erase_conversations::queue($courseid, $userid);
+            $failure = remote_state::not_configured_exception();
+            self::report_failure($failure, (int) $userid);
+            return $failure;
+        }
         try {
             self::service()->delete_conversations($courseid, $userid);
             return null;
@@ -362,16 +387,24 @@ class provider implements
      * marks the request complete, and an export archive is assembled only once. Without
      * this the officer would read the outage as "this user holds no tutor data".
      *
+     * Also used by {@see erase_conversations} when its last retry fails.
+     *
      * @param api_exception $e The API failure.
      * @param int $userid The subject of the request, or 0 when it targets a whole context.
+     * @param string|null $bodyid Language string for the notification body; chosen from the failure when null.
      */
-    private static function report_failure(api_exception $e, int $userid): void {
+    public static function report_failure(api_exception $e, int $userid, ?string $bodyid = null): void {
         privacy_request_failed::create_for_user($userid, $e->get_error_code())->trigger();
 
+        if ($bodyid === null) {
+            $bodyid = $e->get_error_code() === remote_state::ERROR_NOT_CONFIGURED
+                ? 'privacyfailure_body_nokey'
+                : 'privacyfailure_body';
+        }
         $user = $userid > 0 ? \core_user::get_user($userid) : false;
         $subject = get_string('privacyfailure_subject', 'block_dixeo_tutor');
         $body = get_string(
-            'privacyfailure_body',
+            $bodyid,
             'block_dixeo_tutor',
             $user ? fullname($user) : get_string('unknownuser')
         );
@@ -593,17 +626,5 @@ class provider implements
      */
     private static function service(): tutor_service {
         return service_factory::get_tutor_service();
-    }
-
-    /**
-     * Whether this site has an API relationship with Dixeo at all.
-     *
-     * Without a key nothing was ever sent, so there is nothing to find, export or
-     * erase, and calling the API would only raise an authentication error.
-     *
-     * @return bool True when the Dixeo API is configured.
-     */
-    private static function is_configured(): bool {
-        return service_factory::get_client()->is_configured();
     }
 }

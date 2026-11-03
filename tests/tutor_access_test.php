@@ -224,6 +224,7 @@ final class tutor_access_test extends \advanced_testcase {
         // The section number sent along is ignored for the activity scope.
         $result = submit_teach_lesson::execute((int) $course->id, 'activity', 2, (int) $page->cmid, 'Topic', 'Teach me');
         $this->assertSame(self::JOB_ID, $result['jobid']);
+        $this->assertNotEmpty(get_config('block_dixeo_tutor', remote_state::CONFIG_TRANSFERRED));
     }
 
     public function test_visible_section_is_generated(): void {

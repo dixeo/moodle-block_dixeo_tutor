@@ -627,6 +627,59 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
     /**
      * A site that sent data and then lost its key reports the request instead of answering "nothing".
      */
+    public function test_a_missing_key_after_a_transfer_is_reported_on_the_read_paths(): void {
+        [$course, $user] = $this->create_course_and_student();
+        $context = \context_course::instance($course->id);
+        set_config(remote_state::CONFIG_TRANSFERRED, time(), 'block_dixeo_tutor');
+        set_config('api_key', '', 'local_dixeo');
+
+        $service = $this->mock_tutor_service();
+        $service->expects($this->never())->method('list_conversations');
+        $service->expects($this->never())->method('export_conversation');
+
+        $events = $this->redirectEvents();
+        $messages = $this->redirectMessages();
+
+        provider::get_contexts_for_userid((int) $user->id);
+        $userlist = new userlist($context, 'block_dixeo_tutor');
+        provider::get_users_in_context($userlist);
+        provider::export_user_data(new approved_contextlist($user, 'block_dixeo_tutor', [$context->id]));
+
+        $this->assertDebuggingCalledCount(3);
+        $failures = $this->failure_events($events);
+        $this->assertCount(3, $failures);
+        $this->assertSame(remote_state::ERROR_NOT_CONFIGURED, $failures[0]->other['errorcode']);
+        $notifications = $this->failure_notifications($messages);
+        $this->assertNotEmpty($notifications);
+        $this->assertStringContainsString(
+            get_string('privacyfailure_body_nokey', 'block_dixeo_tutor', fullname($user)),
+            $notifications[0]->fullmessage
+        );
+    }
+
+    /**
+     * Erasure on a site that lost its key queues a retry and fails instead of completing silently.
+     */
+    public function test_a_missing_key_after_a_transfer_queues_the_erasure_and_fails(): void {
+        [$course, $user] = $this->create_course_and_student();
+        $context = \context_course::instance($course->id);
+        set_config(remote_state::CONFIG_TRANSFERRED, time(), 'block_dixeo_tutor');
+        set_config('api_key', '', 'local_dixeo');
+        $this->mock_tutor_service()->expects($this->never())->method('delete_conversations');
+        $events = $this->redirectEvents();
+        $this->redirectMessages();
+
+        try {
+            provider::delete_data_for_user(new approved_contextlist($user, 'block_dixeo_tutor', [$context->id]));
+            $this->fail('Erasure completed without reaching the API');
+        } catch (api_exception $e) {
+            $this->assertSame(remote_state::ERROR_NOT_CONFIGURED, $e->get_error_code());
+        }
+
+        $this->assertDebuggingCalled();
+        $this->assertSame([[(int) $course->id, (int) $user->id]], $this->queued_erasure_scopes());
+        $this->assertNotEmpty($this->failure_events($events));
+    }
 
     /**
      * Every per-course preference is found, exported and erased per user, per user list and per context.
