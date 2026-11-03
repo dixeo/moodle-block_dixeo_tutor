@@ -79,6 +79,31 @@ class post_notice extends adhoc_task {
     }
 
     /**
+     * Drop queued notices that were not sent yet, for privacy erasure.
+     *
+     * The task custom data holds the notice text, which includes the learner's first name.
+     *
+     * @param int|null $courseid Course whose notices go, or null for every course.
+     * @param int|null $userid Learner whose notices go, or null for every learner.
+     */
+    public static function discard(?int $courseid, ?int $userid): void {
+        global $DB;
+
+        $conditions = ['classname' => manager::get_canonical_class_name(self::class)];
+        if ($userid !== null) {
+            $conditions['userid'] = $userid;
+        }
+        $records = $DB->get_records('task_adhoc', $conditions, '', 'id, customdata');
+        foreach ($records as $record) {
+            $data = json_decode((string) $record->customdata);
+            if ($courseid !== null && (int) ($data->courseid ?? 0) !== $courseid) {
+                continue;
+            }
+            $DB->delete_records('task_adhoc', ['id' => $record->id]);
+        }
+    }
+
+    /**
      * Render the notice and store it in the conversation.
      *
      * @throws \local_dixeo\api\exception\api_exception When the API refuses or is down, for a retry.

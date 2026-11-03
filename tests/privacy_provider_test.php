@@ -32,6 +32,7 @@ use block_dixeo_tutor\privacy\provider;
 use block_dixeo_tutor\service\tutor_erasure_marker;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\service\tutor_read_state_service;
+use block_dixeo_tutor\task\post_notice;
 use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\erase_conversations;
@@ -707,6 +708,24 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
 
         $contextids = provider::get_contexts_for_userid((int) $user->id)->get_contextids();
         $this->assertEquals([\context_course::instance($course->id)->id], array_values($contextids));
+    }
+
+    /**
+     * Erasure also drops notices still waiting in the task queue, which carry the learner's name.
+     */
+    public function test_erasure_discards_queued_notices(): void {
+        [$course, $user] = $this->create_course_and_student();
+        $other = $this->getDataGenerator()->create_course();
+        post_notice::queue((int) $user->id, (int) $course->id, ['type' => 'course_completed', 'time' => time()]);
+        post_notice::queue((int) $user->id, (int) $other->id, ['type' => 'course_completed', 'time' => time()]);
+        $this->mock_tutor_service()->method('delete_conversations')->willReturn(0);
+
+        $context = \context_course::instance($course->id);
+        provider::delete_data_for_user(new approved_contextlist($user, 'block_dixeo_tutor', [$context->id]));
+
+        $remaining = \core\task\manager::get_adhoc_tasks(post_notice::class);
+        $this->assertCount(1, $remaining);
+        $this->assertSame((int) $other->id, (int) reset($remaining)->get_custom_data()->courseid);
     }
 
     /**

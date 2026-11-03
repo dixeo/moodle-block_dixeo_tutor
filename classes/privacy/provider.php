@@ -33,6 +33,7 @@ use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\service\tutor_read_state_service;
 use block_dixeo_tutor\task\erase_conversations;
+use block_dixeo_tutor\task\post_notice;
 use core_privacy\local\metadata\collection;
 use core_privacy\local\request\approved_contextlist;
 use core_privacy\local\request\approved_userlist;
@@ -255,6 +256,7 @@ class provider implements
 
         self::delete_pending($courseid, null);
         self::delete_course_preferences($courseid, null);
+        post_notice::discard($courseid, null);
         if (!self::is_configured()) {
             return;
         }
@@ -283,6 +285,7 @@ class provider implements
 
             self::delete_pending($courseid, $userid);
             self::delete_course_preferences($courseid, $userid);
+            post_notice::discard($courseid, $userid);
             if (!self::is_configured()) {
                 continue;
             }
@@ -314,6 +317,7 @@ class provider implements
         foreach ($userlist->get_userids() as $userid) {
             self::delete_pending($courseid, (int) $userid);
             self::delete_course_preferences($courseid, (int) $userid);
+            post_notice::discard($courseid, (int) $userid);
         }
         if (!self::is_configured()) {
             return;
