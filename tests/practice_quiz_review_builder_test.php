@@ -368,4 +368,44 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
             'bestattemptjson' => $attempt,
         ]));
     }
+    /**
+     * Intro and question feedback sent back by the browser are cleaned; an oversized title is refused.
+     */
+    public function test_build_review_context_cleans_html_and_caps_the_title(): void {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        $payload = [
+            'title' => 'Sample quiz',
+            'questionsjson' => json_encode([
+                (object) [
+                    'text' => 'Sample question?',
+                    'correctfeedback' => '<p>Well done</p><script>alert(1)</script>',
+                    'incorrectfeedback' => '',
+                    'partiallycorrectfeedback' => '',
+                    'answers' => [
+                        (object) ['text' => 'Yes', 'iscorrect' => 1],
+                    ],
+                ],
+            ]),
+            'bestattemptjson' => json_encode([
+                'score' => 1,
+                'total' => 1,
+                'answerResults' => [true],
+                'selectedAnswerIds' => [[0]],
+            ]),
+            'introhtml' => '<p>Intro</p><img src=x onerror=alert(1)><script>alert(1)</script>',
+        ];
+
+        $service = new practice_quiz_context_service();
+        $context = $service->build_review_context($payload, (int) $course->id);
+        $this->assertNotNull($context);
+        $this->assertStringNotContainsString('<script', $context['introhtml']);
+        $this->assertStringNotContainsString('onerror', $context['introhtml']);
+        $this->assertStringContainsString('Intro', $context['introhtml']);
+        $this->assertStringNotContainsString('<script', $context['questions'][0]['feedbackHtml']);
+        $this->assertStringContainsString('Well done', $context['questions'][0]['feedbackHtml']);
+
+        $payload['title'] = str_repeat('t', practice_quiz_context_service::MAX_TITLE_BYTES + 1);
+        $this->assertNull($service->build_review_context($payload, (int) $course->id));
+    }
 }

@@ -27,6 +27,7 @@ namespace block_dixeo_tutor;
 
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\teach_lesson_context_service;
+use block_dixeo_tutor\service\tutor_context_size_helper;
 use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
@@ -122,5 +123,29 @@ final class teach_lesson_context_service_test extends \advanced_testcase {
 
         $this->assertNotNull($result);
         $this->assertSame('lesson-job-id', $result->jobid);
+    }
+    public function test_build_lesson_context_removes_script_from_the_html(): void {
+        $context = $this->service->build_lesson_context([
+            'title' => 'Lesson',
+            'introhtml' => '<p>Intro</p><script>alert(1)</script>',
+            'contenthtml' => '<p>x</p><script>alert(1)</script><img src=x onerror=alert(1)>',
+        ]);
+
+        $this->assertNotNull($context);
+        $this->assertStringNotContainsString('<script', $context['contenthtml']);
+        $this->assertStringNotContainsString('onerror', $context['contenthtml']);
+        $this->assertStringContainsString('<p>x</p>', $context['contenthtml']);
+        $this->assertStringNotContainsString('<script', $context['introhtml']);
+    }
+
+    public function test_build_lesson_context_refuses_oversized_title_or_content(): void {
+        $this->assertNull($this->service->build_lesson_context([
+            'title' => str_repeat('t', teach_lesson_context_service::MAX_TITLE_BYTES + 1),
+            'contenthtml' => '<p>Core</p>',
+        ]));
+        $this->assertNull($this->service->build_lesson_context([
+            'title' => 'Big',
+            'contenthtml' => str_repeat('x', tutor_context_size_helper::MAX_CONTEXT_JSON_LENGTH + 1),
+        ]));
     }
 }

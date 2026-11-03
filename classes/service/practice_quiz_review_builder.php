@@ -200,9 +200,11 @@ class practice_quiz_review_builder {
     }
 
     /**
-     * Format stored feedback HTML for safe display in the review panel.
+     * Format feedback HTML for safe display in the review panel.
      *
-     * @param string $rawfeedback Stored feedback HTML.
+     * The questions arrive from the browser, so their feedback is cleaned like any user HTML.
+     *
+     * @param string $rawfeedback Feedback HTML from the submitted questions.
      * @param \context|null $context Course context for format_text filters.
      * @return string
      */
@@ -211,11 +213,10 @@ class practice_quiz_review_builder {
             return '';
         }
         if ($context === null) {
-            return trim($rawfeedback);
+            return trim(clean_text($rawfeedback, FORMAT_HTML));
         }
 
         return trim(format_text($rawfeedback, FORMAT_HTML, [
-            'noclean' => true,
             'para' => false,
             'filter' => true,
             'context' => $context,

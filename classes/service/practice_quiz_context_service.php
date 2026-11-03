@@ -48,6 +48,9 @@ class practice_quiz_context_service {
     /** @var int Maximum bytes of one string field inside the decoded payload. */
     public const MAX_STRING_BYTES = 32000;
 
+    /** @var int Largest quiz title accepted, in bytes. */
+    public const MAX_TITLE_BYTES = 255;
+
     /**
      * Whether every question of a generated quiz has at most MAX_ANSWERS answers.
      *
@@ -117,6 +120,9 @@ class practice_quiz_context_service {
     /**
      * Build structured review context from client payload.
      *
+     * Sizes are checked on the raw input before anything is decoded or encoded. The intro comes
+     * back from the browser and is rendered unescaped when the review is reopened, so it is cleaned.
+     *
      * @param array $payload Must include title, questionsjson, bestattemptjson; optional exitscore, total, introhtml.
      * @param int $courseid Course ID for feedback formatting context.
      * @return array|null Review context object or null when invalid.
@@ -125,11 +131,13 @@ class practice_quiz_context_service {
         $questionsjson = (string) ($payload['questionsjson'] ?? '');
         $bestjson = (string) ($payload['bestattemptjson'] ?? '');
         $introhtml = (string) ($payload['introhtml'] ?? '');
+        $title = (string) ($payload['title'] ?? '');
 
         if (
             strlen($questionsjson) > self::MAX_INPUT_JSON_BYTES
                 || strlen($bestjson) > self::MAX_INPUT_JSON_BYTES
                 || strlen($introhtml) > self::MAX_INPUT_JSON_BYTES
+                || strlen($title) > self::MAX_TITLE_BYTES
         ) {
             return null;
         }
@@ -154,7 +162,6 @@ class practice_quiz_context_service {
 
         $total = (int) ($payload['total'] ?? count($questions));
         $exitscore = (int) ($payload['exitscore'] ?? ($bestattempt['score'] ?? 0));
-        $title = (string) ($payload['title'] ?? '');
 
         $context = null;
         if ($courseid > 0) {
@@ -171,7 +178,7 @@ class practice_quiz_context_service {
             $title,
             $context,
             $questionsjson,
-            trim($introhtml)
+            trim(clean_text($introhtml, FORMAT_HTML))
         );
 
         return $this->shrink_review_context($review);

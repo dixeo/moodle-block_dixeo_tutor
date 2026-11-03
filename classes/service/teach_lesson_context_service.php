@@ -33,6 +33,9 @@ use local_dixeo\external\service_factory;
  * Builds and submits custom lesson context to the tutor API.
  */
 class teach_lesson_context_service {
+    /** @var int Largest lesson title accepted, in bytes. */
+    public const MAX_TITLE_BYTES = 255;
+
     /**
      * Submit a completed custom lesson to the tutor conversation.
      *
@@ -79,13 +82,31 @@ class teach_lesson_context_service {
     /**
      * Build structured custom lesson context from client payload.
      *
+     * Sizes are checked on the raw input, before any copy, cleaning or encoding. A title or body
+     * that cannot fit the context is refused; an intro that cannot fit is dropped, as the context
+     * would drop it anyway. The HTML comes back from the browser and is rendered unescaped when the
+     * lesson is reopened from the conversation, so it is cleaned here instead of being trusted.
+     *
      * @param array $payload Must include title, introhtml, contenthtml.
      * @return array|null Context object or null when invalid or too large.
      */
     public function build_lesson_context(array $payload): ?array {
-        $title = trim((string) ($payload['title'] ?? ''));
-        $introhtml = trim((string) ($payload['introhtml'] ?? ''));
-        $contenthtml = trim((string) ($payload['contenthtml'] ?? ''));
+        $rawtitle = (string) ($payload['title'] ?? '');
+        $rawintro = (string) ($payload['introhtml'] ?? '');
+        $rawcontent = (string) ($payload['contenthtml'] ?? '');
+        if (
+            strlen($rawtitle) > self::MAX_TITLE_BYTES
+            || strlen($rawcontent) > tutor_context_size_helper::MAX_CONTEXT_JSON_LENGTH
+        ) {
+            return null;
+        }
+        if (strlen($rawintro) > tutor_context_size_helper::MAX_CONTEXT_JSON_LENGTH) {
+            $rawintro = '';
+        }
+
+        $title = trim($rawtitle);
+        $introhtml = trim(clean_text($rawintro, FORMAT_HTML));
+        $contenthtml = trim(clean_text($rawcontent, FORMAT_HTML));
 
         if ($contenthtml === '') {
             return null;
