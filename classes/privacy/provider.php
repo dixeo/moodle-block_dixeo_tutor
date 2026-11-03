@@ -61,10 +61,23 @@ class provider implements
     \core_privacy\local\metadata\provider,
     \core_privacy\local\request\core_userlist_provider,
     \core_privacy\local\request\plugin\provider {
-    /** @var array<string, string> Per-course timestamp preferences (prefix + courseid) and their metadata string. */
-    private const COURSE_TIME_PREFERENCES = [
-        tutor_notice_service::PREF_LAST_GREETING_PREFIX => 'privacy:metadata:lastproactive',
-        tutor_notice_service::PREF_LAST_MESSAGE_PREFIX => 'privacy:metadata:lastmessage',
+    /** @var string Preference value exported as a date. */
+    private const PREF_TIME = 'time';
+
+    /** @var string Preference value exported as stored. */
+    private const PREF_RAW = 'raw';
+
+    /**
+     * @var array<string, array{0: string, 1: string}> Per-course preferences (prefix + courseid):
+     * metadata string and how the value is exported. Every prefix ends with an underscore, so
+     * none is a LIKE prefix of another.
+     */
+    public const COURSE_PREFERENCES = [
+        tutor_notice_service::PREF_LAST_GREETING_PREFIX => ['privacy:metadata:lastproactive', self::PREF_TIME],
+        tutor_notice_service::PREF_LAST_MESSAGE_PREFIX => ['privacy:metadata:lastmessage', self::PREF_TIME],
+        tutor_read_state_service::PREF_LAST_READ_PREFIX => ['privacy:metadata:lastread', self::PREF_TIME],
+        tutor_mode_service::PREF_MODE_PREFIX => ['privacy:metadata:tutormode', self::PREF_RAW],
+        tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX => ['privacy:metadata:tutormodeactivity', self::PREF_TIME],
     ];
 
     /**
@@ -80,6 +93,7 @@ class provider implements
                 'userid' => 'privacy:metadata:pending_userid',
                 'courseid' => 'privacy:metadata:pending_courseid',
                 'message' => 'privacy:metadata:pending_message',
+                'timemodified' => 'privacy:metadata:pending_timemodified',
             ],
             'privacy:metadata:pendingpurpose'
         );
@@ -91,26 +105,19 @@ class provider implements
                 'courseid' => 'privacy:metadata:courseid',
                 'message' => 'privacy:metadata:message',
                 'pageurl' => 'privacy:metadata:pageurl',
+                'cmid' => 'privacy:metadata:cmid',
+                'mode' => 'privacy:metadata:mode',
+                'firstname' => 'privacy:metadata:firstname',
+                'notice' => 'privacy:metadata:notice',
+                'grades' => 'privacy:metadata:grades',
+                'quizattempt' => 'privacy:metadata:quizattempt',
+                'lessoncontent' => 'privacy:metadata:lessoncontent',
+                'guideprompt' => 'privacy:metadata:guideprompt',
             ],
             'privacy:metadata:externalpurpose'
         );
 
-        $collection->add_user_preference(
-            tutor_read_state_service::PREF_LAST_READ_PREFIX,
-            'privacy:metadata:lastread'
-        );
-
-        $collection->add_user_preference(
-            tutor_mode_service::PREF_MODE_PREFIX,
-            'privacy:metadata:tutormode'
-        );
-
-        $collection->add_user_preference(
-            tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX,
-            'privacy:metadata:tutormodeactivity'
-        );
-
-        foreach (self::COURSE_TIME_PREFERENCES as $prefix => $stringid) {
+        foreach (self::COURSE_PREFERENCES as $prefix => [$stringid]) {
             $collection->add_user_preference($prefix, $stringid);
         }
 
@@ -419,7 +426,7 @@ class provider implements
             $params
         );
 
-        foreach (array_keys(self::COURSE_TIME_PREFERENCES) as $prefix) {
+        foreach (array_keys(self::COURSE_PREFERENCES) as $prefix) {
             $prefs = $DB->get_records_select(
                 'user_preferences',
                 'userid = :userid AND ' . $DB->sql_like('name', ':prefix', false),
@@ -431,11 +438,15 @@ class provider implements
                 'id, name'
             );
             foreach ($prefs as $pref) {
-                $courseid = (int) substr($pref->name, strlen($prefix));
-                if ($courseid > 0) {
+                $suffix = substr($pref->name, strlen($prefix));
+                if (!ctype_digit($suffix) || (int) $suffix <= SITEID) {
+                    continue;
+                }
+                $coursecontext = \context_course::instance((int) $suffix, IGNORE_MISSING);
+                if ($coursecontext) {
                     $contextlist->add_from_sql(
                         'SELECT id FROM {context} WHERE id = :contextid',
-                        ['contextid' => \context_course::instance($courseid)->id]
+                        ['contextid' => $coursecontext->id]
                     );
                 }
             }
@@ -457,7 +468,7 @@ class provider implements
             ['courseid' => $courseid]
         );
 
-        foreach (array_keys(self::COURSE_TIME_PREFERENCES) as $prefix) {
+        foreach (array_keys(self::COURSE_PREFERENCES) as $prefix) {
             $userlist->add_from_sql(
                 'userid',
                 "SELECT userid
@@ -501,14 +512,14 @@ class provider implements
     }
 
     /**
-     * Export the per-course timestamps stored for this user and course.
+     * Export the per-course preferences stored for this user and course.
      *
      * @param \context $context Course context.
      * @param int $userid User id.
      * @param int $courseid Course id.
      */
     private static function export_course_preferences(\context $context, int $userid, int $courseid): void {
-        foreach (self::COURSE_TIME_PREFERENCES as $prefix => $stringid) {
+        foreach (self::COURSE_PREFERENCES as $prefix => [$stringid, $type]) {
             $name = $prefix . $courseid;
             $value = get_user_preferences($name, null, $userid);
             if ($value === null) {
@@ -518,7 +529,7 @@ class provider implements
             writer::with_context($context)->export_user_preference(
                 'block_dixeo_tutor',
                 $name,
-                transform::datetime((int) $value),
+                $type === self::PREF_TIME ? transform::datetime((int) $value) : (string) $value,
                 get_string($stringid, 'block_dixeo_tutor')
             );
         }
@@ -541,7 +552,7 @@ class provider implements
     }
 
     /**
-     * Remove the per-course timestamps of a course.
+     * Remove the per-course preferences of a course.
      *
      * @param int $courseid Course id.
      * @param int|null $userid User id, or null for every user.
@@ -549,7 +560,7 @@ class provider implements
     private static function delete_course_preferences(int $courseid, ?int $userid): void {
         global $DB;
 
-        foreach (array_keys(self::COURSE_TIME_PREFERENCES) as $prefix) {
+        foreach (array_keys(self::COURSE_PREFERENCES) as $prefix) {
             $name = $prefix . $courseid;
             if ($userid === null) {
                 $DB->delete_records('user_preferences', ['name' => $name]);

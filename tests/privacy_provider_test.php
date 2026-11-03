@@ -29,6 +29,8 @@ use block_dixeo_tutor\event\conversation_deleted;
 use block_dixeo_tutor\event\privacy_request_failed;
 use block_dixeo_tutor\external\delete_conversation;
 use block_dixeo_tutor\privacy\provider;
+use block_dixeo_tutor\service\tutor_mode_service;
+use block_dixeo_tutor\service\tutor_read_state_service;
 use block_dixeo_tutor\service\tutor_notice_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\erase_conversations;
@@ -619,5 +621,108 @@ final class privacy_provider_test extends \core_privacy\tests\provider_testcase 
         ]));
         $this->assertNull(get_user_preferences($preferencename, null, $userid));
         $this->assertNull(get_user_preferences($messagepreference, null, $userid));
+    }
+    /**
+     * A site that sent data and then lost its key reports the request instead of answering "nothing".
+     */
+
+    /**
+     * Every per-course preference is found, exported and erased per user, per user list and per context.
+     */
+    public function test_every_course_preference_is_found_exported_and_erased(): void {
+        global $DB;
+
+        [$course, $user] = $this->create_course_and_student();
+        $userid = (int) $user->id;
+        $courseid = (int) $course->id;
+        $context = \context_course::instance($courseid);
+        $now = time();
+        $preferences = [
+            tutor_notice_service::PREF_LAST_GREETING_PREFIX . $courseid => $now,
+            tutor_notice_service::PREF_LAST_MESSAGE_PREFIX . $courseid => $now,
+            tutor_read_state_service::PREF_LAST_READ_PREFIX . $courseid => $now,
+            tutor_mode_service::PREF_MODE_PREFIX . $courseid => 'guide',
+            tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX . $courseid => $now,
+        ];
+        $this->assertCount(count(provider::COURSE_PREFERENCES), $preferences);
+
+        $service = $this->mock_tutor_service();
+        $service->method('list_conversations')->willReturn([]);
+        $service->method('export_conversation')->willReturn([]);
+        $service->method('delete_conversations')->willReturn(0);
+
+        foreach ($preferences as $name => $value) {
+            // Each preference alone is enough to find the course.
+            set_user_preference($name, $value, $userid);
+            $this->assertEquals([$context->id], array_values(provider::get_contexts_for_userid($userid)->get_contextids()));
+            $userlist = new userlist($context, 'block_dixeo_tutor');
+            provider::get_users_in_context($userlist);
+            $this->assertEquals([$userid], $userlist->get_userids());
+            unset_user_preference($name, $userid);
+        }
+
+        foreach ($preferences as $name => $value) {
+            set_user_preference($name, $value, $userid);
+        }
+        writer::reset();
+        provider::export_user_data(new approved_contextlist($user, 'block_dixeo_tutor', [$context->id]));
+        $exported = writer::with_context($context)->get_user_context_preferences('block_dixeo_tutor');
+        foreach (array_keys($preferences) as $name) {
+            $this->assertObjectHasProperty($name, $exported);
+        }
+        $this->assertSame('guide', $exported->{tutor_mode_service::PREF_MODE_PREFIX . $courseid}->value);
+
+        provider::delete_data_for_user(new approved_contextlist($user, 'block_dixeo_tutor', [$context->id]));
+        foreach (array_keys($preferences) as $name) {
+            $this->assertNull(get_user_preferences($name, null, $userid));
+        }
+
+        foreach ($preferences as $name => $value) {
+            set_user_preference($name, $value, $userid);
+        }
+        provider::delete_data_for_users(new approved_userlist($context, 'block_dixeo_tutor', [$userid]));
+        foreach (array_keys($preferences) as $name) {
+            $this->assertNull(get_user_preferences($name, null, $userid));
+        }
+
+        foreach ($preferences as $name => $value) {
+            set_user_preference($name, $value, $userid);
+        }
+        provider::delete_data_for_all_users_in_context($context);
+        foreach (array_keys($preferences) as $name) {
+            $this->assertFalse($DB->record_exists('user_preferences', ['userid' => $userid, 'name' => $name]));
+        }
+    }
+
+    /**
+     * Mode and mode-activity prefixes do not shadow each other when courses are discovered.
+     */
+    public function test_a_preference_prefix_never_matches_another_one(): void {
+        [$course, $user] = $this->create_course_and_student();
+        set_user_preference(tutor_mode_service::PREF_LAST_ACTIVITY_PREFIX . $course->id, time(), $user->id);
+        set_user_preference(tutor_mode_service::PREF_MODE_PREFIX . 'notanumber', 'guide', $user->id);
+        $this->mock_tutor_service()->method('list_conversations')->willReturn([]);
+
+        $contextids = provider::get_contexts_for_userid((int) $user->id)->get_contextids();
+        $this->assertEquals([\context_course::instance($course->id)->id], array_values($contextids));
+    }
+
+    /**
+     * Everything sent to Dixeo is declared, with a readable string for each field.
+     */
+    public function test_metadata_declares_every_transferred_field(): void {
+        $items = provider::get_metadata(new collection('block_dixeo_tutor'))->get_collection();
+        foreach ($items as $item) {
+            if ($item instanceof \core_privacy\local\metadata\types\external_location && $item->get_name() === 'dixeo_api') {
+                $fields = $item->get_privacy_fields();
+            }
+            if ($item instanceof \core_privacy\local\metadata\types\database_table) {
+                $this->assertArrayHasKey('timemodified', $item->get_privacy_fields());
+            }
+        }
+        foreach (['firstname', 'notice', 'grades', 'quizattempt', 'lessoncontent', 'guideprompt', 'cmid', 'mode'] as $field) {
+            $this->assertArrayHasKey($field, $fields);
+            $this->assertTrue(get_string_manager()->string_exists($fields[$field], 'block_dixeo_tutor'));
+        }
     }
 }
