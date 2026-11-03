@@ -42,11 +42,31 @@ class practice_quiz_context_service {
     /** @var int Maximum questions, and the maximum length of any array in the payload. */
     public const MAX_QUESTIONS = 100;
 
-    /** @var int Maximum answers on one question. */
-    public const MAX_ANSWERS = 20;
+    /** @var int Maximum answers on one question; the mod_simplequiz2 embed player accepts at most 5. */
+    public const MAX_ANSWERS = 5;
 
     /** @var int Maximum bytes of one string field inside the decoded payload. */
     public const MAX_STRING_BYTES = 32000;
+
+    /**
+     * Whether every question of a generated quiz has at most MAX_ANSWERS answers.
+     *
+     * @param string $questionsjson JSON array of simplequiz2 questions.
+     * @return bool
+     */
+    public static function questions_within_answer_limit(string $questionsjson): bool {
+        $questions = json_decode($questionsjson, true);
+        if (!is_array($questions)) {
+            return false;
+        }
+        foreach ($questions as $question) {
+            $answers = is_array($question) ? ($question['answers'] ?? []) : null;
+            if (!is_array($answers) || count($answers) > self::MAX_ANSWERS) {
+                return false;
+            }
+        }
+        return true;
+    }
 
     /**
      * Submit a practice quiz review to the tutor.
