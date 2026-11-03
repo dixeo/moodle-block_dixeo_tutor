@@ -289,6 +289,11 @@ define([
     }
 
     /**
+     * Plain-text feedback for the outcome of one question.
+     *
+     * Only plain text is returned: browser-held quiz JSON is never inserted as HTML. The
+     * template escapes it, and the canonical server message carries the formatted feedback.
+     *
      * @param {object} question
      * @param {{isCorrect: boolean, hasPartial: boolean}} grading
      * @returns {{plain: string, html: string}}
@@ -305,7 +310,7 @@ define([
         }
         return {
             plain: htmlToPlain(raw),
-            html: String(raw).trim(),
+            html: '',
         };
     }
 

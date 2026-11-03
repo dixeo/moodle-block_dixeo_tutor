@@ -72,6 +72,56 @@ class practice_quiz_context_service {
     }
 
     /**
+     * Clean every HTML field of a generated quiz before it is handed to the browser.
+     *
+     * The question, answer and feedback strings come from the AI generator and are later
+     * inserted as HTML by the review panel and the client helpers, so they are purified here.
+     * Filters are not applied: the embed player and the review builder run format_text()
+     * with the course context when they render these fields.
+     *
+     * @param string $questionsjson JSON array of simplequiz2 questions.
+     * @return string JSON array with non-array items dropped and non-string HTML fields set to ''.
+     */
+    public static function clean_generated_questions(string $questionsjson): string {
+        $questions = json_decode($questionsjson, true);
+        if (!is_array($questions)) {
+            return '[]';
+        }
+
+        $clean = static fn($value): string => is_string($value) ? clean_text($value, FORMAT_HTML) : '';
+        $htmlfields = ['text', 'correctfeedback', 'partiallycorrectfeedback', 'incorrectfeedback'];
+
+        $result = [];
+        foreach ($questions as $question) {
+            if (!is_array($question)) {
+                continue;
+            }
+            foreach ($htmlfields as $field) {
+                if (array_key_exists($field, $question)) {
+                    $question[$field] = $clean($question[$field]);
+                }
+            }
+            if (array_key_exists('answers', $question)) {
+                $answers = is_array($question['answers']) ? $question['answers'] : [];
+                foreach ($answers as $key => $answer) {
+                    if (is_array($answer)) {
+                        if (array_key_exists('text', $answer)) {
+                            $answers[$key]['text'] = $clean($answer['text']);
+                        }
+                    } else {
+                        $answers[$key] = ['text' => $clean($answer), 'iscorrect' => 0];
+                    }
+                }
+                $question['answers'] = $answers;
+            }
+            $result[] = $question;
+        }
+
+        $json = json_encode($result);
+        return $json === false ? '[]' : $json;
+    }
+
+    /**
      * Submit a practice quiz review to the tutor.
      *
      * @param int $courseid

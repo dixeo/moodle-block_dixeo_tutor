@@ -63,13 +63,15 @@ define([], function() {
         /**
          * Convert HTML to plain text for previews and TTS.
          *
+         * Parses into a separate inert document, so scripts do not run and resources
+         * (for example images with event handlers) are not loaded.
+         *
          * @param {string} html
          * @returns {string}
          */
         htmlToPlain: function(html) {
-            const div = document.createElement('div');
-            div.innerHTML = html || '';
-            return (div.textContent || div.innerText || '').trim();
+            const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+            return (doc.body ? doc.body.textContent || '' : '').trim();
         },
 
         /**

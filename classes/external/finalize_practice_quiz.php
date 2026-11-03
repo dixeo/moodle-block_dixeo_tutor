@@ -107,6 +107,12 @@ class finalize_practice_quiz extends external_api {
                 ];
             }
 
+            if (!empty($result['success'])) {
+                $result['questions'] = practice_quiz_context_service::clean_generated_questions(
+                    (string) $result['questions']
+                );
+            }
+
             return $result;
         } catch (api_exception $e) {
             return client_response::finalize_practice_quiz_error($e);
