@@ -12,6 +12,47 @@ define([], function() {
     const CONTENT_KEYS = ['questionsJson', 'contenthtml', 'introhtml', 'userprompt', 'learnerrequest'];
 
     /**
+     * Saved sessions older than this are discarded on load, so lesson content and Guide me
+     * summaries do not linger on a shared device.
+     * @type {number}
+     */
+    const TTL_MS = 24 * 60 * 60 * 1000;
+
+    /**
+     * Ended Guide me sessions kept for review cards; older ones are dropped.
+     * @type {number}
+     */
+    const MAX_ENDED_SESSIONS = 10;
+
+    /**
+     * Whether a parsed record still holds content that must not be persisted.
+     *
+     * @param {Object} parsed
+     * @return {boolean}
+     */
+    const hasLegacyContent = function(parsed) {
+        const topLevel = CONTENT_KEYS.some(function(k) {
+            return Object.prototype.hasOwnProperty.call(parsed, k);
+        });
+        const nested = !!(parsed.setupConfig && typeof parsed.setupConfig === 'object'
+            && Object.prototype.hasOwnProperty.call(parsed.setupConfig, 'learnerrequest'));
+        const tooManyEnded = Array.isArray(parsed.endedSessions) && parsed.endedSessions.length > MAX_ENDED_SESSIONS;
+        return topLevel || nested || tooManyEnded;
+    };
+
+    /**
+     * Whether a saved record is past its time to live. Records without a timestamp come from
+     * older builds and count as expired.
+     *
+     * @param {Object} parsed
+     * @return {boolean}
+     */
+    const isExpired = function(parsed) {
+        const savedAt = Number(parsed.savedAt);
+        return !savedAt || Date.now() - savedAt > TTL_MS;
+    };
+
+    /**
      * @param {string} mode quiz|teach
      * @param {number} userid
      * @param {number} courseid
@@ -39,11 +80,15 @@ define([], function() {
             clean.setupConfig = Object.assign({}, clean.setupConfig);
             delete clean.setupConfig.learnerrequest;
         }
+        if (Array.isArray(clean.endedSessions) && clean.endedSessions.length > MAX_ENDED_SESSIONS) {
+            clean.endedSessions = clean.endedSessions.slice(-MAX_ENDED_SESSIONS);
+        }
         return clean;
     };
 
     /**
-     * Remove older builds that stored quiz/lesson bodies in localStorage.
+     * Remove expired records, and rewrite records from older builds that stored quiz/lesson
+     * bodies or the learner's free-text request in localStorage.
      * @private
      */
     const clearLegacyContentKeys = function() {
@@ -62,10 +107,9 @@ define([], function() {
                     if (!parsed || typeof parsed !== 'object') {
                         continue;
                     }
-                    const hadContent = CONTENT_KEYS.some(function(k) {
-                        return Object.prototype.hasOwnProperty.call(parsed, k);
-                    });
-                    if (hadContent) {
+                    if (isExpired(parsed)) {
+                        localStorage.removeItem(key);
+                    } else if (hasLegacyContent(parsed)) {
                         localStorage.setItem(key, JSON.stringify(sanitizePersisted(parsed)));
                     }
                 } catch (e) {
@@ -86,12 +130,23 @@ define([], function() {
      * @return {Object|null}
      */
     const load = function(mode, userid, courseid) {
+        const key = storageKey(mode, userid, courseid);
         try {
-            const raw = localStorage.getItem(storageKey(mode, userid, courseid));
+            const raw = localStorage.getItem(key);
             if (!raw) {
                 return null;
             }
-            return sanitizePersisted(JSON.parse(raw));
+            const parsed = JSON.parse(raw);
+            if (!parsed || typeof parsed !== 'object' || isExpired(parsed)) {
+                localStorage.removeItem(key);
+                return null;
+            }
+            const clean = sanitizePersisted(parsed);
+            const serialised = JSON.stringify(clean);
+            if (serialised !== raw) {
+                localStorage.setItem(key, serialised);
+            }
+            return clean;
         } catch (e) {
             return null;
         }
@@ -99,7 +154,7 @@ define([], function() {
 
     /**
      * Persist technical resume fields (phase, jobId, titles/counts, playerState,
-     * lessonSnapshot for context viewing).
+     * lessonSnapshot for context viewing), stamped with the save time for expiry.
      *
      * @param {string} mode
      * @param {number} userid
@@ -109,10 +164,8 @@ define([], function() {
      */
     const save = function(mode, userid, courseid, data) {
         try {
-            localStorage.setItem(
-                storageKey(mode, userid, courseid),
-                JSON.stringify(sanitizePersisted(data))
-            );
+            const record = Object.assign({}, sanitizePersisted(data), {savedAt: Date.now()});
+            localStorage.setItem(storageKey(mode, userid, courseid), JSON.stringify(record));
         } catch (e) {
             // Quota or private mode — session continues without persistence.
         }
@@ -160,10 +213,24 @@ define([], function() {
         return false;
     };
 
+    /**
+     * Remove the saved Quiz, Teach and Guide me sessions of a course.
+     *
+     * @param {number} userid
+     * @param {number} courseid
+     * @return {void}
+     */
+    const clearAllModes = function(userid, courseid) {
+        ['quiz', 'teach', 'guide'].forEach(function(mode) {
+            clear(mode, userid, courseid);
+        });
+    };
+
     return {
         load: load,
         save: save,
         clear: clear,
+        clearAllModes: clearAllModes,
         hasActiveSession: hasActiveSession,
     };
 });
