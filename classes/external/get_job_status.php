@@ -28,6 +28,7 @@ namespace block_dixeo_tutor\external;
 use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\job_status_audit;
+use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -69,6 +70,7 @@ class get_job_status extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_access::require_usable($context, (int) $USER->id);
 
         // Harden jobid and bind it to the session that issued it (defense-in-depth vs IDOR).
         job_ownership::require_valid_jobid($params['jobid']);

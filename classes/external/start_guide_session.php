@@ -29,6 +29,7 @@ use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\page_context;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
+use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -76,6 +77,7 @@ class start_guide_session extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_access::require_usable($context, (int) $USER->id);
 
         $prompt = trim($params['userprompt']);
         if ($prompt === '') {

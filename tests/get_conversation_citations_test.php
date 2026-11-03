@@ -47,7 +47,9 @@ final class get_conversation_citations_test extends \advanced_testcase {
         $this->resetAfterTest();
 
         $course = $this->getDataGenerator()->create_course();
-        $this->setUser($this->getDataGenerator()->create_and_enrol($course, 'student'));
+        $student = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        (new \local_dixeo\service\consent_service())->accept((int) $student->id);
+        $this->setUser($student);
 
         $source = [
             'cmid' => 4,

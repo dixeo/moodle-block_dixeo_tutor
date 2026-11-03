@@ -41,6 +41,7 @@ $string['aria_your_message'] = 'Tu mensaje';
 $string['assistanttitle'] = 'Pregunta a Ed';
 $string['check_for_updates'] = 'Buscar actualizaciones';
 $string['connection_lost'] = 'Conexión perdida. Intentando reconectar...';
+$string['consentrequired'] = 'Acepta las condiciones de uso actuales de Dixeo en la página del curso para usar el tutor.';
 $string['custom_lesson_label'] = 'Lección personalizada';
 $string['custom_lesson_view'] = 'Ver lección';
 $string['deleteconversation'] = 'Eliminar mi conversación';

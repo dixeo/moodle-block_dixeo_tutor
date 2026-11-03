@@ -25,6 +25,7 @@
 namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\service\tutor_mode_policy;
+use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
@@ -53,7 +54,7 @@ class get_course_hierarchy extends external_api {
      * @return array
      */
     public static function execute(int $courseid): array {
-        global $CFG, $PAGE;
+        global $CFG, $PAGE, $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
@@ -62,6 +63,7 @@ class get_course_hierarchy extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_access::require_usable($context, (int) $USER->id);
         tutor_mode_policy::require_quiz_or_teach_mode(
             tutor_mode_policy::is_quiz_runtime_available(),
             (int) $params['courseid']

@@ -29,6 +29,7 @@ use block_dixeo_tutor\event\conversation_viewed;
 use block_dixeo_tutor\service\tutor_message_read_mapper;
 use block_dixeo_tutor\service\tutor_message_format_service;
 use block_dixeo_tutor\service\tutor_read_state_service;
+use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_multiple_structure;
@@ -82,6 +83,7 @@ class get_conversation extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_access::require_usable($context, (int) $USER->id);
 
         try {
             $service = service_factory::get_tutor_service();

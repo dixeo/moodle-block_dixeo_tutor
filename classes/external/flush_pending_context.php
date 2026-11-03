@@ -28,6 +28,7 @@ use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\page_context;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
+use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -71,6 +72,7 @@ class flush_pending_context extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_access::require_usable($context, (int) $USER->id);
 
         $pagecontext = page_context::sanitize_pageurl($params['pageurl'] ?? '', (int) $params['courseid']);
         $sanitizedcmid = \local_dixeo\service\tutor_usage_recorder::sanitize_cmid(

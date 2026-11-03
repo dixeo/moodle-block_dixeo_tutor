@@ -25,6 +25,7 @@
 namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\service\tutor_read_state_service;
+use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -69,6 +70,7 @@ class mark_messages_read extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
+        tutor_access::require_usable($context, (int) $USER->id);
 
         $service = new tutor_read_state_service();
         if ($params['lastincomingtime'] > 0) {

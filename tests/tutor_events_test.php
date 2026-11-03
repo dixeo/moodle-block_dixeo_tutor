@@ -82,6 +82,7 @@ final class tutor_events_test extends \advanced_testcase {
     private function create_course_and_student(): array {
         $course = $this->getDataGenerator()->create_course();
         $user = $this->getDataGenerator()->create_and_enrol($course, 'student');
+        (new \local_dixeo\service\consent_service())->accept((int) $user->id);
         $this->setUser($user);
         return [$course, $user];
     }
