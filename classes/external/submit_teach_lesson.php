@@ -39,6 +39,12 @@ use local_dixeo\external\service_factory;
  * Web service: start teach lesson generation for the tutor.
  */
 class submit_teach_lesson extends external_api {
+    /** @var int Largest topic label accepted, in bytes. */
+    private const MAX_TOPIC_TITLE_BYTES = 255;
+
+    /** @var int Largest learner request accepted, in bytes; same limit as a chat message. */
+    private const MAX_LEARNER_REQUEST_BYTES = 2000;
+
     /**
      * Describe the parameters.
      *
@@ -94,6 +100,13 @@ class submit_teach_lesson extends external_api {
         require_capability('block/dixeo_tutor:talktotutor', $context);
         tutor_access::require_usable($context, (int) $USER->id);
         tutor_mode_policy::require_teach_mode(tutor_mode_policy::is_quiz_runtime_available(), (int) $params['courseid']);
+
+        if (strlen($params['topictitle']) > self::MAX_TOPIC_TITLE_BYTES) {
+            throw new \invalid_parameter_exception('Topic title is too long');
+        }
+        if (strlen($params['learnerrequest']) > self::MAX_LEARNER_REQUEST_BYTES) {
+            throw new \invalid_parameter_exception('Learning request cannot exceed 2000 characters');
+        }
 
         // The generator reads the full content of the scope, so it must be one the learner can see.
         [$scope, $sectionnum, $cmid] = tutor_access::require_topic_visible(

@@ -241,6 +241,27 @@ final class tutor_access_test extends \advanced_testcase {
         $this->assertSame(self::JOB_ID, $result['jobid']);
     }
 
+    public function test_oversized_learner_request_and_topic_are_refused(): void {
+        [$course, $student] = $this->course_and_student();
+        $this->forbid_teach_generation();
+        $this->forbid_quiz_generation();
+
+        $this->setUser($student);
+        $calls = [
+            fn() => submit_teach_lesson::execute((int) $course->id, 'course', 0, 0, 'Topic', str_repeat('a', 2001)),
+            fn() => submit_teach_lesson::execute((int) $course->id, 'course', 0, 0, str_repeat('t', 256), 'Teach me'),
+            fn() => submit_practice_quiz::execute((int) $course->id, 'course', 0, 0, 5, 'medium', str_repeat('t', 256)),
+        ];
+        foreach ($calls as $call) {
+            try {
+                $call();
+                $this->fail('An oversized field was accepted');
+            } catch (\invalid_parameter_exception $e) {
+                $this->assertSame('invalidparameter', $e->errorcode);
+            }
+        }
+    }
+
     public function test_tutor_off_for_the_course_blocks_messages_and_guide_sessions(): void {
         [$course, $student] = $this->course_and_student();
         $this->setAdminUser();
