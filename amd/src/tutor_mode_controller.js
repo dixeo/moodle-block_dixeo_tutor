@@ -31,6 +31,9 @@ define([
         this.teachController = options.teachController || null;
         this.guideController = options.guideController || null;
         this._persistCount = 0;
+        this._persistInFlight = false;
+        this._latestMode = null;
+        this._dispatchedMode = null;
         this._externalSelectorLocked = false;
         this._messagingLockHandler = null;
         this._afterPersistHandler = null;
@@ -327,8 +330,31 @@ define([
         }
     };
 
+    /**
+     * Save the mode preference.
+     *
+     * Only one save is in flight. A mode chosen while that save is running is
+     * written after it returns, so an older response cannot become the stored mode.
+     *
+     * @param {string} mode
+     * @return {void}
+     */
     TutorModeController.prototype._persistMode = function(mode) {
+        this._latestMode = mode;
+        if (this._persistInFlight) {
+            return;
+        }
         this._beginPersist();
+        this._dispatchPersistedMode();
+    };
+
+    /**
+     * Send the latest requested mode. The selector stays locked across a follow-up save.
+     */
+    TutorModeController.prototype._dispatchPersistedMode = function() {
+        const mode = this._latestMode;
+        this._dispatchedMode = mode;
+        this._persistInFlight = true;
         ajax.call([{
             methodname: 'block_dixeo_tutor_set_tutor_mode',
             args: {
@@ -338,9 +364,14 @@ define([
         }])[0].fail(function() {
             // Preference sync failure is non-fatal; client mode still applies this session.
         }).always(() => {
-            this._endPersist();
-            if (typeof this._afterPersistHandler === 'function') {
-                this._afterPersistHandler(this.currentMode);
+            if (this._latestMode !== this._dispatchedMode) {
+                this._dispatchPersistedMode();
+            } else {
+                this._persistInFlight = false;
+                this._endPersist();
+                if (typeof this._afterPersistHandler === 'function') {
+                    this._afterPersistHandler(this.currentMode);
+                }
             }
         });
     };

@@ -103,7 +103,7 @@ define([
                 this.strings.connectionLost = 'Connection lost. Attempting to reconnect...';
                 this.strings.yourMessage = 'Your message';
                 this.strings.assistantMessage = 'Assistant message';
-                this.strings.messageTooLong = 'Message cannot exceed {a} characters.';
+                this.strings.messageTooLong = 'Message cannot exceed {$a} characters.';
                 this.strings.loadOlder = 'Load older messages';
                 this.strings.ariaLoadOlder = 'Load older messages';
                 this.strings.ariaReadMessage = 'Read message aloud';
@@ -1724,7 +1724,7 @@ define([
                 warningElement.id = 'dixeo-length-warning';
                 warningElement.className = 'text-warning small mt-1';
                 const msgTemplate = this.strings.messageTooLong || `Message cannot exceed ${maxLength} characters.`;
-                warningElement.textContent = msgTemplate.replace('{a}', maxLength);
+                warningElement.textContent = msgTemplate.replace('{$a}', String(maxLength));
                 textarea.parentNode.insertBefore(warningElement, textarea.nextSibling);
 
                 setTimeout(() => {
