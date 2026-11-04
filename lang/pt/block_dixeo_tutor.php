@@ -66,7 +66,6 @@ $string['error_job_access'] = 'Não foi possível obter o estado do trabalho.';
 $string['error_mode_not_available'] = 'O modo de tutor selecionado não está disponível.';
 $string['error_network'] = 'Ocorreu um erro de rede. Por favor, verifique a sua ligação e tente novamente.';
 $string['error_timeout'] = 'O pedido expirou. Por favor, verifique a sua ligação e tente novamente.';
-$string['error_topic_unavailable'] = 'Este tema não está disponível. Escolha outra secção ou atividade.';
 $string['errorsendmessage'] = 'Ocorreu um erro ao enviar a sua mensagem. Por favor, tente novamente.';
 $string['eventconversationdeleted'] = 'Conversa do tutor Dixeo eliminada';
 $string['eventconversationdeleteddesc'] = 'O utilizador com id \'{$a->userid}\' eliminou a sua conversa do tutor na disciplina \'{$a->courseid}\' (deleted={$a->deleted}).';

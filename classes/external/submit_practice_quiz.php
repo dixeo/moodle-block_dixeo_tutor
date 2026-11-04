@@ -83,7 +83,7 @@ class submit_practice_quiz extends external_api {
         string $topictitle = '',
         string $language = ''
     ): array {
-        global $USER;
+        global $CFG, $USER;
 
         $params = self::validate_parameters(self::execute_parameters(), [
             'courseid' => $courseid,
@@ -106,25 +106,24 @@ class submit_practice_quiz extends external_api {
             throw new \invalid_parameter_exception('Topic title is too long');
         }
 
-        // The generator reads the full content of the scope, so it must be one the learner can see.
-        [$scope, $sectionnum, $cmid] = tutor_access::require_topic_visible(
-            (int) $params['courseid'],
-            $params['scope'],
-            (int) $params['sectionnum'],
-            (int) $params['cmid']
-        );
+        // The generation service refuses a scope the learner cannot see, and activity types the tutor never offers.
+        // Block plugin classes are not autoloaded in web service requests.
+        require_once($CFG->dirroot . '/blocks/moodleblock.class.php');
+        require_once($CFG->dirroot . '/blocks/dixeo_tutor/block_dixeo_tutor.php');
+        $excludedmodnames = \block_dixeo_tutor::get_topic_excluded_modnames($context);
 
         try {
             $service = service_factory::get_practice_quiz_service();
             $result = $service->submit_from_setup(
                 (int) $params['courseid'],
-                $scope,
-                $sectionnum,
-                $cmid,
+                $params['scope'],
+                (int) $params['sectionnum'],
+                (int) $params['cmid'],
                 (int) $params['count'],
                 $params['difficulty'],
                 $params['topictitle'],
-                $params['language']
+                $params['language'],
+                $excludedmodnames
             );
 
             $payload = $result->to_array();

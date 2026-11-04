@@ -66,7 +66,6 @@ $string['error_job_access'] = 'Impossible de récupérer le statut du travail.';
 $string['error_mode_not_available'] = 'Le mode de tuteur sélectionné n\'est pas disponible.';
 $string['error_network'] = 'Une erreur réseau est survenue. Veuillez vérifier votre connexion et réessayer.';
 $string['error_timeout'] = 'La requête a expiré. Veuillez vérifier votre connexion et réessayer.';
-$string['error_topic_unavailable'] = 'Ce sujet n\'est pas disponible. Choisissez une autre section ou activité.';
 $string['errorsendmessage'] = "Désolé, une erreur s'est produite lors de l'envoi de votre message. Veuillez réessayer.";
 $string['eventconversationdeleted'] = 'Conversation du tuteur Dixeo supprimée';
 $string['eventconversationdeleteddesc'] = 'L\'utilisateur avec l\'id \'{$a->userid}\' a supprimé sa conversation du tuteur dans le cours \'{$a->courseid}\' (deleted={$a->deleted}).';

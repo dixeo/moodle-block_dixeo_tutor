@@ -50,6 +50,25 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
+     * Installed activity module names that can never be a Quiz or Teach topic.
+     *
+     * The list is what {@see self::is_quiz_topic_excluded()} refuses, so the generation service
+     * applies the same rule as the topic dropdown.
+     *
+     * @param \context|null $context Course context, or null for the Dixeo value.
+     * @return string[] Module names such as quiz or h5pactivity.
+     */
+    public static function get_topic_excluded_modnames(?\context $context = null): array {
+        $excluded = [];
+        foreach (array_keys(\core_component::get_plugin_list('mod')) as $modname) {
+            if (self::is_quiz_topic_excluded($modname, $context)) {
+                $excluded[] = $modname;
+            }
+        }
+        return $excluded;
+    }
+
+    /**
      * Whether an activity module type is omitted from the practice-quiz topic dropdown.
      * Uses the block excludedmodules setting plus hardcoded types and certificate plugins.
      *

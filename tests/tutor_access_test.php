@@ -124,121 +124,85 @@ final class tutor_access_test extends \advanced_testcase {
         return $service;
     }
 
-    public function test_teach_lesson_refuses_a_hidden_activity(): void {
-        [$course, $student] = $this->course_and_student();
-        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
-        set_coursemodule_visible($page->cmid, 0);
-        $this->forbid_teach_generation();
 
-        $this->setUser($student);
-        $this->assert_refused(
-            fn() => submit_teach_lesson::execute((int) $course->id, 'activity', 0, (int) $page->cmid, 'Topic', 'Teach me'),
-            'error_topic_unavailable'
-        );
-    }
 
-    public function test_practice_quiz_refuses_a_hidden_activity(): void {
-        [$course, $student] = $this->course_and_student();
-        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
-        set_coursemodule_visible($page->cmid, 0);
-        $this->forbid_quiz_generation();
 
-        $this->setUser($student);
-        $this->assert_refused(
-            fn() => submit_practice_quiz::execute((int) $course->id, 'activity', 0, (int) $page->cmid, 5, 'medium', 'Topic'),
-            'error_topic_unavailable'
-        );
-    }
 
-    public function test_hidden_section_is_refused_for_both_generators(): void {
-        [$course, $student] = $this->course_and_student();
-        set_section_visible((int) $course->id, 2, 0);
-        $this->forbid_teach_generation();
-        $this->forbid_quiz_generation();
 
-        $this->setUser($student);
-        $this->assert_refused(
-            fn() => submit_teach_lesson::execute((int) $course->id, 'section', 2, 0, 'Topic', 'Teach me'),
-            'error_topic_unavailable'
-        );
-        $this->assert_refused(
-            fn() => submit_practice_quiz::execute((int) $course->id, 'section', 2, 0, 5, 'medium', 'Topic'),
-            'error_topic_unavailable'
-        );
-    }
 
-    public function test_unknown_activity_gets_the_same_answer_as_a_hidden_one(): void {
-        [$course, $student] = $this->course_and_student();
-        $other = $this->getDataGenerator()->create_course();
-        $foreign = $this->getDataGenerator()->create_module('page', ['course' => $other->id]);
-        $this->forbid_teach_generation();
-
-        $this->setUser($student);
-        $this->assert_refused(
-            fn() => submit_teach_lesson::execute((int) $course->id, 'activity', 0, (int) $foreign->cmid, 'Topic', 'Teach me'),
-            'error_topic_unavailable'
-        );
-        $this->assert_refused(
-            fn() => submit_teach_lesson::execute((int) $course->id, 'activity', 0, 999999, 'Topic', 'Teach me'),
-            'error_topic_unavailable'
-        );
-    }
-
-    public function test_section_scope_without_a_section_cannot_fall_back_to_an_activity(): void {
-        [$course, $student] = $this->course_and_student();
-        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
-        set_coursemodule_visible($page->cmid, 0);
-        $this->forbid_teach_generation();
-
-        $this->setUser($student);
-        $this->assert_refused(
-            fn() => submit_teach_lesson::execute((int) $course->id, 'section', 0, (int) $page->cmid, 'Topic', 'Teach me'),
-            'error_topic_unavailable'
-        );
-    }
-
-    public function test_excluded_activity_type_is_refused(): void {
-        [$course, $student] = $this->course_and_student();
-        $quiz = $this->getDataGenerator()->create_module('quiz', ['course' => $course->id, 'section' => 1]);
-        $this->forbid_quiz_generation();
-
-        $this->setUser($student);
-        $this->assert_refused(
-            fn() => submit_practice_quiz::execute((int) $course->id, 'activity', 0, (int) $quiz->cmid, 5, 'medium', 'Topic'),
-            'error_topic_unavailable'
-        );
-    }
-
-    public function test_visible_activity_is_generated_with_only_its_cmid(): void {
+    /**
+     * The teach external forwards the scope with the activity types the tutor never offers as topics.
+     */
+    public function test_teach_lesson_passes_the_topic_exclusions(): void {
         [$course, $student] = $this->course_and_student();
         $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
 
         $service = $this->createMock(teach_lesson_service::class);
         $service->expects($this->once())
             ->method('submit_from_setup')
-            ->with((int) $course->id, 'activity', 0, (int) $page->cmid, 'Topic', 'Teach me', '')
+            ->with(
+                (int) $course->id,
+                'activity',
+                2,
+                (int) $page->cmid,
+                'Topic',
+                'Teach me',
+                '',
+                $this->callback(fn(array $excluded): bool => in_array('quiz', $excluded, true)
+                    && in_array('h5pactivity', $excluded, true) && !in_array('page', $excluded, true))
+            )
             ->willReturn(operation_result::pending(self::JOB_ID));
         service_factory::set_test_teach_lesson_service($service);
 
         $this->setUser($student);
-        // The section number sent along is ignored for the activity scope.
         $result = submit_teach_lesson::execute((int) $course->id, 'activity', 2, (int) $page->cmid, 'Topic', 'Teach me');
         $this->assertSame(self::JOB_ID, $result['jobid']);
     }
 
-    public function test_visible_section_is_generated(): void {
+    /**
+     * The quiz external forwards the scope with the same topic exclusions.
+     */
+    public function test_practice_quiz_passes_the_topic_exclusions(): void {
         [$course, $student] = $this->course_and_student();
 
         $service = $this->createMock(practice_quiz_service::class);
         $service->expects($this->once())
             ->method('submit_from_setup')
-            ->with((int) $course->id, 'section', 1, 0, 5, 'medium', 'Topic', '')
+            ->with(
+                (int) $course->id,
+                'section',
+                1,
+                0,
+                5,
+                'medium',
+                'Topic',
+                '',
+                $this->callback(fn(array $excluded): bool => in_array('quiz', $excluded, true))
+            )
             ->willReturn(operation_result::pending(self::JOB_ID));
         service_factory::set_test_practice_quiz_service($service);
 
         $this->setUser($student);
         $result = submit_practice_quiz::execute((int) $course->id, 'section', 1, 0, 5, 'medium', 'Topic');
         $this->assertSame(self::JOB_ID, $result['jobid']);
+    }
+
+    /**
+     * A hidden activity is refused by the generation service before any remote call.
+     */
+    public function test_hidden_activity_is_refused_end_to_end(): void {
+        [$course, $student] = $this->course_and_student();
+        $page = $this->getDataGenerator()->create_module('page', ['course' => $course->id, 'section' => 1]);
+        set_coursemodule_visible($page->cmid, 0);
+        $client = $this->createMock(\local_dixeo\api\client::class);
+        $client->expects($this->never())->method('post');
+        service_factory::set_test_client($client);
+
+        $this->setUser($student);
+        $this->assert_refused(
+            fn() => submit_teach_lesson::execute((int) $course->id, 'activity', 0, (int) $page->cmid, 'Topic', 'Teach me'),
+            'error:scope_unavailable'
+        );
     }
 
     public function test_oversized_learner_request_and_topic_are_refused(): void {

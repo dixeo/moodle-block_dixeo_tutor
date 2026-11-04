@@ -66,7 +66,6 @@ $string['error_job_access'] = 'Impossibile recuperare lo stato del lavoro.';
 $string['error_mode_not_available'] = 'La modalità tutor selezionata non è disponibile.';
 $string['error_network'] = 'Si è verificato un errore di rete. Per favore, verifica la tua connessione e riprova.';
 $string['error_timeout'] = 'La richiesta è scaduta. Per favore, verifica la tua connessione e riprova.';
-$string['error_topic_unavailable'] = 'Questo argomento non è disponibile. Scegli un\'altra sezione o attività.';
 $string['errorsendmessage'] = "Si è verificato un errore nell'invio del messaggio. Per favore, riprova.";
 $string['eventconversationdeleted'] = 'Conversazione del tutor Dixeo eliminata';
 $string['eventconversationdeleteddesc'] = 'L\'utente con id \'{$a->userid}\' ha eliminato la propria conversazione del tutor nel corso \'{$a->courseid}\' (deleted={$a->deleted}).';
