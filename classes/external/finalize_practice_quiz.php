@@ -26,7 +26,6 @@ namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\job_ownership;
-use block_dixeo_tutor\service\practice_quiz_context_service;
 use block_dixeo_tutor\service\tutor_mode_policy;
 use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
@@ -92,26 +91,6 @@ class finalize_practice_quiz extends external_api {
                 $expected,
                 (int) $params['courseid']
             );
-
-            // The embed player refuses questions with more answers than it supports.
-            if (
-                !empty($result['success'])
-                && !practice_quiz_context_service::questions_within_answer_limit((string) $result['questions'])
-            ) {
-                return [
-                    'success' => false,
-                    'error' => get_string('quiz_generate_error', 'block_dixeo_tutor'),
-                    'title' => '',
-                    'introhtml' => '',
-                    'questions' => '[]',
-                ];
-            }
-
-            if (!empty($result['success'])) {
-                $result['questions'] = practice_quiz_context_service::clean_generated_questions(
-                    (string) $result['questions']
-                );
-            }
 
             return $result;
         } catch (api_exception $e) {

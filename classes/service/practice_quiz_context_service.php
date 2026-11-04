@@ -27,6 +27,7 @@ namespace block_dixeo_tutor\service;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
 use local_dixeo\external\service_factory;
+use local_dixeo\service\simplequiz2_question_transformer;
 use local_dixeo\service\tutor_context_cleaner;
 use local_dixeo\dto\tutor_message;
 
@@ -43,84 +44,11 @@ class practice_quiz_context_service {
     /** @var int Maximum questions, and the maximum length of any array in the payload. */
     public const MAX_QUESTIONS = 100;
 
-    /** @var int Maximum answers on one question; the mod_simplequiz2 embed player accepts at most 5. */
-    public const MAX_ANSWERS = 5;
-
     /** @var int Maximum bytes of one string field inside the decoded payload. */
     public const MAX_STRING_BYTES = 32000;
 
     /** @var int Largest quiz title accepted, in bytes. */
     public const MAX_TITLE_BYTES = 255;
-
-    /**
-     * Whether every question of a generated quiz has at most MAX_ANSWERS answers.
-     *
-     * @param string $questionsjson JSON array of simplequiz2 questions.
-     * @return bool
-     */
-    public static function questions_within_answer_limit(string $questionsjson): bool {
-        $questions = json_decode($questionsjson, true);
-        if (!is_array($questions)) {
-            return false;
-        }
-        foreach ($questions as $question) {
-            $answers = is_array($question) ? ($question['answers'] ?? []) : null;
-            if (!is_array($answers) || count($answers) > self::MAX_ANSWERS) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Clean every HTML field of a generated quiz before it is handed to the browser.
-     *
-     * The question, answer and feedback strings come from the AI generator and are later
-     * inserted as HTML by the review panel and the client helpers, so they are purified here.
-     * Filters are not applied: the embed player and the review builder run format_text()
-     * with the course context when they render these fields.
-     *
-     * @param string $questionsjson JSON array of simplequiz2 questions.
-     * @return string JSON array with non-array items dropped and non-string HTML fields set to ''.
-     */
-    public static function clean_generated_questions(string $questionsjson): string {
-        $questions = json_decode($questionsjson, true);
-        if (!is_array($questions)) {
-            return '[]';
-        }
-
-        $clean = static fn($value): string => is_string($value) ? clean_text($value, FORMAT_HTML) : '';
-        $htmlfields = ['text', 'correctfeedback', 'partiallycorrectfeedback', 'incorrectfeedback'];
-
-        $result = [];
-        foreach ($questions as $question) {
-            if (!is_array($question)) {
-                continue;
-            }
-            foreach ($htmlfields as $field) {
-                if (array_key_exists($field, $question)) {
-                    $question[$field] = $clean($question[$field]);
-                }
-            }
-            if (array_key_exists('answers', $question)) {
-                $answers = is_array($question['answers']) ? $question['answers'] : [];
-                foreach ($answers as $key => $answer) {
-                    if (is_array($answer)) {
-                        if (array_key_exists('text', $answer)) {
-                            $answers[$key]['text'] = $clean($answer['text']);
-                        }
-                    } else {
-                        $answers[$key] = ['text' => $clean($answer), 'iscorrect' => 0];
-                    }
-                }
-                $question['answers'] = $answers;
-            }
-            $result[] = $question;
-        }
-
-        $json = json_encode($result);
-        return $json === false ? '[]' : $json;
-    }
 
     /**
      * Submit a practice quiz review to the tutor.
@@ -252,7 +180,7 @@ class practice_quiz_context_service {
                 return false;
             }
             $answers = $question['answers'] ?? [];
-            if (is_array($answers) && count($answers) > self::MAX_ANSWERS) {
+            if (is_array($answers) && count($answers) > simplequiz2_question_transformer::max_answers()) {
                 return false;
             }
         }

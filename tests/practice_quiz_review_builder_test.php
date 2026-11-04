@@ -293,25 +293,6 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
     }
 
     /**
-     * Generated quizzes are limited to the answer count the embed player accepts.
-     */
-    public function test_questions_within_answer_limit(): void {
-        $this->assertSame(5, practice_quiz_context_service::MAX_ANSWERS);
-
-        $question = fn(int $answers): array => [
-            'text' => 'Q',
-            'answers' => array_fill(0, $answers, ['text' => 'A', 'iscorrect' => 0]),
-        ];
-        $this->assertTrue(practice_quiz_context_service::questions_within_answer_limit(
-            json_encode([$question(4), $question(5)])
-        ));
-        $this->assertFalse(practice_quiz_context_service::questions_within_answer_limit(
-            json_encode([$question(4), $question(6)])
-        ));
-        $this->assertFalse(practice_quiz_context_service::questions_within_answer_limit('not json'));
-    }
-
-    /**
      * Question count, answer count, string length, and nesting are capped after decode.
      */
     public function test_review_payload_bounds_reject_wide_or_deep_json(): void {
@@ -338,7 +319,7 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
         ]));
 
         $answers = [];
-        for ($i = 0; $i < practice_quiz_context_service::MAX_ANSWERS + 1; $i++) {
+        for ($i = 0; $i < \local_dixeo\service\simplequiz2_question_transformer::max_answers() + 1; $i++) {
             $answers[] = ['text' => 'A' . $i, 'iscorrect' => $i === 0 ? 1 : 0];
         }
         $this->assertNull($service->build_review_context([
