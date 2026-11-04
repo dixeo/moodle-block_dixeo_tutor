@@ -25,6 +25,8 @@
 namespace block_dixeo_tutor;
 
 use local_dixeo\api\exception\api_exception;
+use local_dixeo\dto\job_status;
+use local_dixeo\external\response_factory;
 
 /**
  * Maps verbose API errors to controlled client-facing messages.
@@ -64,49 +66,27 @@ class client_response {
      * @return array
      */
     public static function send_message_error(api_exception $exception): array {
-        debugging(
-            'Tutor send_message failed: ' . $exception->get_error_code() . ' ' . $exception->getMessage(),
-            DEBUG_DEVELOPER
-        );
-
         return [
             'completed' => false,
             'jobid' => '',
             'status' => 'failed',
             'progress' => 0,
-            'errormessage' => self::generic_error_message(),
+            'errormessage' => self::error_message($exception),
             'errorcode' => 'api_error',
         ];
     }
 
     /**
-     * Sanitize get_job_status payload (success or error).
+     * Shape a job status for the browser.
      *
-     * @param array $payload Job status array.
+     * A known API error code keeps its translated local_dixeo message; any other failure shows the
+     * tutor's generic error. The provider's own error text never reaches the browser.
+     *
+     * @param job_status $status Job status from local_dixeo.
      * @return array
      */
-    public static function sanitize_job_status(array $payload): array {
-        unset($payload['namespace']);
-
-        if (!empty($payload['error']) && is_array($payload['error'])) {
-            $type = (string) ($payload['error']['type'] ?? '');
-            $detail = (string) ($payload['error']['detail'] ?? '');
-            $title = (string) ($payload['error']['title'] ?? '');
-            debugging(
-                'Tutor get_job_status error: type=' . $type . ' title=' . $title . ' detail=' . $detail,
-                DEBUG_DEVELOPER
-            );
-
-            $generic = self::generic_error_message();
-            $payload['error'] = [
-                'type' => 'api_error',
-                'title' => $generic,
-                'status' => (int) ($payload['error']['status'] ?? 500),
-                'detail' => $generic,
-            ];
-        }
-
-        return $payload;
+    public static function sanitize_job_status(job_status $status): array {
+        return response_factory::client_job_status($status, 'error_apierror', 'block_dixeo_tutor');
     }
 
     /**
@@ -117,14 +97,7 @@ class client_response {
      * @return array
      */
     public static function job_status_error(string $jobid, api_exception $exception): array {
-        debugging(
-            'Tutor get_job_status failed: job=' . $jobid
-                . ' code=' . $exception->get_error_code()
-                . ' ' . $exception->getMessage(),
-            DEBUG_DEVELOPER
-        );
-
-        $generic = self::generic_error_message();
+        $message = self::error_message($exception);
 
         return [
             'jobid' => $jobid,
@@ -134,9 +107,9 @@ class client_response {
             'createdat' => 0,
             'error' => [
                 'type' => 'api_error',
-                'title' => $generic,
+                'title' => $message,
                 'status' => 500,
-                'detail' => $generic,
+                'detail' => $message,
             ],
         ];
     }
@@ -158,14 +131,9 @@ class client_response {
      * @return array
      */
     public static function finalize_practice_quiz_error(api_exception $exception): array {
-        debugging(
-            'Tutor finalize_practice_quiz failed: ' . $exception->get_error_code() . ' ' . $exception->getMessage(),
-            DEBUG_DEVELOPER
-        );
-
         return [
             'success' => false,
-            'error' => self::generic_error_message(),
+            'error' => self::error_message($exception),
             'title' => '',
             'introhtml' => '',
             'questions' => '[]',
@@ -179,14 +147,9 @@ class client_response {
      * @return array
      */
     public static function finalize_teach_lesson_error(api_exception $exception): array {
-        debugging(
-            'Tutor finalize_teach_lesson failed: ' . $exception->get_error_code() . ' ' . $exception->getMessage(),
-            DEBUG_DEVELOPER
-        );
-
         return [
             'success' => false,
-            'error' => self::generic_error_message(),
+            'error' => self::error_message($exception),
             'title' => '',
             'introhtml' => '',
             'contenthtml' => '',
@@ -202,20 +165,28 @@ class client_response {
      * @return array
      */
     public static function cancellation_result(string $jobid, bool $success, ?api_exception $exception = null): array {
-        if ($exception !== null) {
-            debugging(
-                'Tutor cancel_generation_job failed: job=' . $jobid
-                    . ' code=' . $exception->get_error_code()
-                    . ' ' . $exception->getMessage(),
-                DEBUG_DEVELOPER
-            );
+        $message = '';
+        if (!$success) {
+            $message = $exception !== null ? self::error_message($exception) : self::generic_error_message();
         }
 
         return [
             'success' => $success,
             'jobid' => $jobid,
-            'message' => $success ? '' : self::generic_error_message(),
+            'message' => $message,
             'errorcode' => $success ? '' : 'api_error',
         ];
+    }
+
+    /**
+     * Client-safe message for an API failure: the local_dixeo string of a known code, else the tutor's generic error.
+     *
+     * The failure detail is written to the developer log by {@see response_factory::safe_message()}.
+     *
+     * @param api_exception $exception Exception from local_dixeo.
+     * @return string
+     */
+    private static function error_message(api_exception $exception): string {
+        return response_factory::safe_message($exception, 'error_apierror', 'block_dixeo_tutor');
     }
 }

@@ -92,7 +92,7 @@ class get_job_status extends external_api {
                 $status->status
             );
 
-            return client_response::sanitize_job_status($status->to_array());
+            return client_response::sanitize_job_status($status);
         } catch (api_exception $e) {
             return client_response::job_status_error($params['jobid'], $e);
         }
