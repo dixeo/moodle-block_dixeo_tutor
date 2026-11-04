@@ -39,31 +39,6 @@ class job_ownership {
     public const TTL_SECONDS = 15 * MINSECS;
 
     /**
-     * Whether the string is a UUID (versions 1–5).
-     *
-     * @param string $jobid Candidate job identifier.
-     * @return bool
-     */
-    public static function is_valid_jobid(string $jobid): bool {
-        return (bool) preg_match(
-            '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i',
-            $jobid
-        );
-    }
-
-    /**
-     * Validate jobid format or throw.
-     *
-     * @param string $jobid Candidate job identifier.
-     * @throws \invalid_parameter_exception
-     */
-    public static function require_valid_jobid(string $jobid): void {
-        if (!self::is_valid_jobid($jobid)) {
-            throw new \invalid_parameter_exception('Invalid job ID format');
-        }
-    }
-
-    /**
      * Remember a jobid issued to the current user for a course.
      *
      * @param int $userid Moodle user id.
@@ -71,7 +46,7 @@ class job_ownership {
      * @param string $jobid Job UUID from the API.
      */
     public static function register(int $userid, int $courseid, string $jobid): void {
-        if ($userid < 1 || $courseid < 1 || $jobid === '' || !self::is_valid_jobid($jobid)) {
+        if ($userid < 1 || $courseid < 1 || $jobid === '' || !\local_dixeo\api\job_id::is_valid($jobid)) {
             return;
         }
 

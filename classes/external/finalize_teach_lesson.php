@@ -75,7 +75,7 @@ class finalize_teach_lesson extends external_api {
         tutor_access::require_usable($context, (int) $USER->id);
         tutor_mode_policy::require_teach_mode(tutor_mode_policy::is_quiz_runtime_available(), (int) $params['courseid']);
 
-        job_ownership::require_valid_jobid($params['jobid']);
+        \local_dixeo\api\job_id::require_valid($params['jobid']);
         job_ownership::require_owned((int) $USER->id, (int) $params['courseid'], $params['jobid']);
 
         try {

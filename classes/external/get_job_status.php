@@ -73,7 +73,7 @@ class get_job_status extends external_api {
         tutor_access::require_usable($context, (int) $USER->id);
 
         // Harden jobid and bind it to the session that issued it (defense-in-depth vs IDOR).
-        job_ownership::require_valid_jobid($params['jobid']);
+        \local_dixeo\api\job_id::require_valid($params['jobid']);
         job_ownership::require_owned((int) $USER->id, (int) $params['courseid'], $params['jobid']);
 
         try {

@@ -70,7 +70,7 @@ class cancel_generation_job extends external_api {
         require_capability('block/dixeo_tutor:talktotutor', $context);
         tutor_access::require_usable($context, (int) $USER->id);
 
-        job_ownership::require_valid_jobid($params['jobid']);
+        \local_dixeo\api\job_id::require_valid($params['jobid']);
         job_ownership::require_owned((int) $USER->id, (int) $params['courseid'], $params['jobid']);
 
         try {
