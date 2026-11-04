@@ -93,23 +93,7 @@ final class tutor_access_test extends \advanced_testcase {
         $this->fail("Expected a moodle_exception with code {$errorcode}");
     }
 
-    /**
-     * Teach generation service that must never be reached.
-     */
-    private function forbid_teach_generation(): void {
-        $service = $this->createMock(teach_lesson_service::class);
-        $service->expects($this->never())->method('submit_from_setup');
-        service_factory::set_test_teach_lesson_service($service);
-    }
 
-    /**
-     * Quiz generation service that must never be reached.
-     */
-    private function forbid_quiz_generation(): void {
-        $service = $this->createMock(practice_quiz_service::class);
-        $service->expects($this->never())->method('submit_from_setup');
-        service_factory::set_test_practice_quiz_service($service);
-    }
 
     /**
      * Tutor service whose remote calls must never be reached.
@@ -205,10 +189,14 @@ final class tutor_access_test extends \advanced_testcase {
         );
     }
 
+    /**
+     * Oversized setup values are refused by the local_dixeo generation services before any remote call.
+     */
     public function test_oversized_learner_request_and_topic_are_refused(): void {
         [$course, $student] = $this->course_and_student();
-        $this->forbid_teach_generation();
-        $this->forbid_quiz_generation();
+        $client = $this->createMock(\local_dixeo\api\client::class);
+        $client->expects($this->never())->method('post');
+        service_factory::set_test_client($client);
 
         $this->setUser($student);
         $calls = [

@@ -140,7 +140,7 @@ final class teach_lesson_context_service_test extends \advanced_testcase {
 
     public function test_build_lesson_context_refuses_oversized_title_or_content(): void {
         $this->assertNull($this->service->build_lesson_context([
-            'title' => str_repeat('t', teach_lesson_context_service::MAX_TITLE_BYTES + 1),
+            'title' => str_repeat('t', \local_dixeo\util\input_limits::MAX_TITLE_BYTES + 1),
             'contenthtml' => '<p>Core</p>',
         ]));
         $this->assertNull($this->service->build_lesson_context([

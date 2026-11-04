@@ -29,6 +29,7 @@ use local_dixeo\dto\operation_result;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\simplequiz2_question_transformer;
 use local_dixeo\service\tutor_context_cleaner;
+use local_dixeo\util\input_limits;
 use local_dixeo\dto\tutor_message;
 
 /**
@@ -46,9 +47,6 @@ class practice_quiz_context_service {
 
     /** @var int Maximum bytes of one string field inside the decoded payload. */
     public const MAX_STRING_BYTES = 32000;
-
-    /** @var int Largest quiz title accepted, in bytes. */
-    public const MAX_TITLE_BYTES = 255;
 
     /**
      * Submit a practice quiz review to the tutor.
@@ -116,23 +114,21 @@ class practice_quiz_context_service {
             strlen($questionsjson) > self::MAX_INPUT_JSON_BYTES
                 || strlen($bestjson) > self::MAX_INPUT_JSON_BYTES
                 || strlen($introhtml) > self::MAX_INPUT_JSON_BYTES
-                || strlen($title) > self::MAX_TITLE_BYTES
+                || strlen($title) > input_limits::MAX_TITLE_BYTES
         ) {
             return null;
         }
 
-        $questions = json_decode($questionsjson, true, self::MAX_JSON_DEPTH);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($questions) || $questions === []) {
+        $questions = input_limits::decode_json_array($questionsjson, self::MAX_INPUT_JSON_BYTES, self::MAX_JSON_DEPTH);
+        if ($questions === null || $questions === []) {
             return null;
         }
 
-        if ($bestjson === '') {
-            $bestattempt = [];
-        } else {
-            $bestattempt = json_decode($bestjson, true, self::MAX_JSON_DEPTH);
-            if (json_last_error() !== JSON_ERROR_NONE || !is_array($bestattempt)) {
-                return null;
-            }
+        $bestattempt = $bestjson === ''
+            ? []
+            : input_limits::decode_json_array($bestjson, self::MAX_INPUT_JSON_BYTES, self::MAX_JSON_DEPTH);
+        if ($bestattempt === null) {
+            return null;
         }
 
         if (!$this->review_structure_is_bounded($questions, $bestattempt)) {
@@ -185,39 +181,8 @@ class practice_quiz_context_service {
             }
         }
 
-        if (!$this->value_is_bounded($questions, 0) || !$this->value_is_bounded($bestattempt, 0)) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * Whether a decoded value stays within array length, string size, and depth.
-     *
-     * @param mixed $value Decoded JSON value.
-     * @param int $depth Current nesting depth.
-     * @return bool
-     */
-    private function value_is_bounded($value, int $depth): bool {
-        if ($depth > self::MAX_JSON_DEPTH) {
-            return false;
-        }
-        if (is_string($value)) {
-            return strlen($value) <= self::MAX_STRING_BYTES;
-        }
-        if (!is_array($value)) {
-            return true;
-        }
-        if (count($value) > self::MAX_QUESTIONS) {
-            return false;
-        }
-        foreach ($value as $item) {
-            if (!$this->value_is_bounded($item, $depth + 1)) {
-                return false;
-            }
-        }
-        return true;
+        return input_limits::is_bounded($questions, self::MAX_QUESTIONS, self::MAX_STRING_BYTES, self::MAX_JSON_DEPTH)
+            && input_limits::is_bounded($bestattempt, self::MAX_QUESTIONS, self::MAX_STRING_BYTES, self::MAX_JSON_DEPTH);
     }
 
     /**

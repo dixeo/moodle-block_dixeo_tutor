@@ -386,7 +386,7 @@ final class practice_quiz_review_builder_test extends \advanced_testcase {
         $this->assertStringNotContainsString('<script', $context['questions'][0]['feedbackHtml']);
         $this->assertStringContainsString('Well done', $context['questions'][0]['feedbackHtml']);
 
-        $payload['title'] = str_repeat('t', practice_quiz_context_service::MAX_TITLE_BYTES + 1);
+        $payload['title'] = str_repeat('t', \local_dixeo\util\input_limits::MAX_TITLE_BYTES + 1);
         $this->assertNull($service->build_review_context($payload, (int) $course->id));
     }
 }

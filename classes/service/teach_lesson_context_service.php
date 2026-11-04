@@ -29,14 +29,12 @@ use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\tutor_context_cleaner;
+use local_dixeo\util\input_limits;
 
 /**
  * Builds and submits custom lesson context to the tutor API.
  */
 class teach_lesson_context_service {
-    /** @var int Largest lesson title accepted, in bytes. */
-    public const MAX_TITLE_BYTES = 255;
-
     /**
      * Submit a completed custom lesson to the tutor conversation.
      *
@@ -96,7 +94,7 @@ class teach_lesson_context_service {
         $rawintro = (string) ($payload['introhtml'] ?? '');
         $rawcontent = (string) ($payload['contenthtml'] ?? '');
         if (
-            strlen($rawtitle) > self::MAX_TITLE_BYTES
+            strlen($rawtitle) > input_limits::MAX_TITLE_BYTES
             || strlen($rawcontent) > tutor_context_size_helper::MAX_CONTEXT_JSON_LENGTH
         ) {
             return null;
