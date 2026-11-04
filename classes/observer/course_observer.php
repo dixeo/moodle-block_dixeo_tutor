@@ -40,19 +40,10 @@ class course_observer {
             return;
         }
 
-        $config = \local_dixeo\external\service_factory::get_settings_config();
-        $context = \context_course::instance($courseid);
-        if (!$config->enabled_for($context)) {
-            return;
-        }
-
-        $default = $config->get('block_dixeo_tutor', 'tutor_enabled_default', \context_system::instance())->get_value();
-        $config->set(
+        \local_dixeo\external\service_factory::get_settings_config()->apply_new_course_default(
             'block_dixeo_tutor',
             'tutor_enabled',
-            $context,
-            $default === '1' ? '1' : '0',
-            false
+            \context_course::instance($courseid)
         );
     }
 }
