@@ -24,7 +24,6 @@
 
 namespace block_dixeo_tutor\service;
 
-use block_dixeo_tutor\remote_state;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
@@ -62,7 +61,6 @@ class teach_lesson_context_service {
             $title = get_string('teach_lesson_default_title', 'local_dixeo');
         }
 
-        remote_state::record_transfer();
         try {
             return service_factory::get_tutor_service()->submit(
                 $courseid,

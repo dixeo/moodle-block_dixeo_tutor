@@ -45,17 +45,15 @@ $observers = [
         'internal' => true,
         'priority' => 0,
     ],
-    // Conversations outlive the course they belong to unless the API is told to drop them.
-    // Internal: the observer only queues a task, so it belongs in the deletion transaction
-    // and must be rolled back with it. The remote call happens later, from the task.
+    // Local tutor rows of a deleted course have no context left for the privacy API to find them by.
+    // Internal: the clean-up belongs in the deletion transaction and is rolled back with it.
     [
         'eventname' => '\core\event\course_deleted',
         'callback' => '\block_dixeo_tutor\observer\conversation_cleanup_observer::course_deleted',
         'internal' => true,
     ],
-    // A user deleted outside a GDPR request never reaches the privacy provider, so
-    // nothing else would tell the API to drop their conversations.
-    // Internal: same reason as above, the observer only queues a task.
+    // A user deleted outside a GDPR request never reaches the privacy provider.
+    // Internal: same reason as above.
     [
         'eventname' => '\core\event\user_deleted',
         'callback' => '\block_dixeo_tutor\observer\conversation_cleanup_observer::user_deleted',

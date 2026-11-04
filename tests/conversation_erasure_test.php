@@ -15,7 +15,7 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Tests for the durable erasure of tutor conversations (DIXEO-TUTOR-PRIV-001).
+ * Tests for the erasure task kept for earlier queues and for the local clean-up on deletion.
  *
  * @package    block_dixeo_tutor
  * @category   test
@@ -28,12 +28,11 @@ namespace block_dixeo_tutor;
 use block_dixeo_tutor\privacy\provider;
 use block_dixeo_tutor\service\tutor_proactive_context_service;
 use block_dixeo_tutor\task\erase_conversations;
-use local_dixeo\api\exception\api_exception;
 use local_dixeo\external\service_factory;
 use local_dixeo\service\tutor_service;
 
 /**
- * An erasure Moodle cannot retry is an erasure that may never happen.
+ * Earlier queued erasures still run, and deleting a course or user removes this block's local rows.
  *
  * @covers \block_dixeo_tutor\task\erase_conversations
  * @covers \block_dixeo_tutor\observer\conversation_cleanup_observer
@@ -43,7 +42,7 @@ final class conversation_erasure_test extends \advanced_testcase {
         parent::setUp();
         $this->resetAfterTest();
 
-        // Queueing is inert on an unconfigured site, so every other test needs a key.
+        // A configured site, so a queued erasure can run.
         set_config('api_key', 'phpunit-api-key', 'local_dixeo');
     }
 
@@ -94,6 +93,9 @@ final class conversation_erasure_test extends \advanced_testcase {
         return $task;
     }
 
+    /**
+     * A task queued under this block's name runs the shared erasure.
+     */
     public function test_execute_erases_the_queued_scope(): void {
         $this->mock_tutor_service()
             ->expects($this->once())
@@ -106,80 +108,11 @@ final class conversation_erasure_test extends \advanced_testcase {
         $this->assertStringContainsString('erased 3 conversation(s)', $trace);
     }
 
-    public function test_execute_erases_a_whole_course_when_no_user_is_queued(): void {
-        $this->mock_tutor_service()
-            ->expects($this->once())
-            ->method('delete_conversations')
-            ->with(42, null)
-            ->willReturn(9);
-
-        $this->execute_task($this->task_for(42, null));
-    }
-
-    public function test_execute_erases_a_user_everywhere_when_no_course_is_queued(): void {
-        $this->mock_tutor_service()
-            ->expects($this->once())
-            ->method('delete_conversations')
-            ->with(null, 7)
-            ->willReturn(2);
-
-        $this->execute_task($this->task_for(null, 7));
-    }
-
-    public function test_execute_lets_api_failures_propagate_so_the_runner_retries(): void {
-        $this->mock_tutor_service()
-            ->method('delete_conversations')
-            ->willThrowException(new api_exception('connection_error', 'Failed to connect to Dixeo API', 0));
-
-        $this->expectException(api_exception::class);
-        $this->execute_task($this->task_for(42, 7));
-    }
-
-    public function test_queue_stores_the_scope_as_custom_data(): void {
-        erase_conversations::queue(42, 7);
-
-        $tasks = \core\task\manager::get_adhoc_tasks(erase_conversations::class);
-        $this->assertCount(1, $tasks);
-
-        $task = reset($tasks);
-        $data = $task->get_custom_data();
-        $this->assertSame(42, (int) $data->courseid);
-        $this->assertSame(7, (int) $data->userid);
-
-        // The default budget of 12 attempts gives up after ~2.4 days of outage.
-        $this->assertSame(30, $task->get_attempts_available());
-    }
-
-    public function test_queue_is_inert_without_an_api_key(): void {
-        set_config('api_key', '', 'local_dixeo');
-
-        erase_conversations::queue(42, 7);
-        erase_conversations::queue(42, null);
-
-        $this->assertEmpty(\core\task\manager::get_adhoc_tasks(erase_conversations::class));
-    }
-
-    public function test_course_deletion_queues_nothing_without_an_api_key(): void {
-        $this->setAdminUser();
-        set_config('api_key', '', 'local_dixeo');
-        $course = $this->getDataGenerator()->create_course();
-
-        delete_course($course, false);
-
-        // Otherwise every course deletion on an unpaired site leaves a task that can
-        // only fail its way through the whole retry budget.
-        $this->assertEmpty(\core\task\manager::get_adhoc_tasks(erase_conversations::class));
-    }
-
-    public function test_queue_does_not_pile_up_duplicates_for_the_same_scope(): void {
-        erase_conversations::queue(42, null);
-        erase_conversations::queue(42, null);
-        erase_conversations::queue(42, 7);
-
-        $this->assertCount(2, \core\task\manager::get_adhoc_tasks(erase_conversations::class));
-    }
-
+    /**
+     * The task keeps this block's name.
+     */
     public function test_the_task_is_named_from_a_language_string(): void {
+        $this->assertInstanceOf(\local_dixeo\task\erase_tutor_conversations::class, new erase_conversations());
         $this->assertSame(
             get_string('task_erase_conversations', 'block_dixeo_tutor'),
             (new erase_conversations())->get_name()
@@ -187,91 +120,24 @@ final class conversation_erasure_test extends \advanced_testcase {
         $this->assertStringNotContainsString('[[', (new erase_conversations())->get_name());
     }
 
-    public function test_course_deletion_queues_the_erasure_of_the_whole_course(): void {
+    /**
+     * Deleting a course or a user leaves the remote erasure to local_dixeo and queues nothing under this block.
+     */
+    public function test_deletion_queues_no_block_task(): void {
         $this->setAdminUser();
         $course = $this->getDataGenerator()->create_course();
-
-        // Course deletion must not wait on the API: the observer only queues.
+        $user = $this->getDataGenerator()->create_user();
         $this->mock_tutor_service()->expects($this->never())->method('delete_conversations');
 
         delete_course($course, false);
-
-        $tasks = \core\task\manager::get_adhoc_tasks(erase_conversations::class);
-        $this->assertCount(1, $tasks);
-
-        $data = reset($tasks)->get_custom_data();
-        $this->assertSame((int) $course->id, (int) $data->courseid);
-        $this->assertNull($data->userid);
-    }
-
-    public function test_user_deletion_queues_the_erasure_of_that_user_everywhere(): void {
-        $this->setAdminUser();
-        $user = $this->getDataGenerator()->create_user();
-
-        // User deletion must not wait on the API: the observer only queues.
-        $this->mock_tutor_service()->expects($this->never())->method('delete_conversations');
-
-        delete_user($user);
-
-        $tasks = \core\task\manager::get_adhoc_tasks(erase_conversations::class);
-        $this->assertCount(1, $tasks);
-
-        $data = reset($tasks)->get_custom_data();
-        $this->assertNull($data->courseid);
-        $this->assertSame((int) $user->id, (int) $data->userid);
-    }
-
-    public function test_user_deletion_queues_nothing_without_an_api_key(): void {
-        $this->setAdminUser();
-        set_config('api_key', '', 'local_dixeo');
-        $user = $this->getDataGenerator()->create_user();
-
         delete_user($user);
 
         $this->assertEmpty(\core\task\manager::get_adhoc_tasks(erase_conversations::class));
     }
-    public function test_a_missing_key_after_a_transfer_keeps_the_erasure_queued(): void {
-        set_config(remote_state::CONFIG_TRANSFERRED, time(), 'block_dixeo_tutor');
-        set_config('api_key', '', 'local_dixeo');
-        $this->mock_tutor_service()->expects($this->never())->method('delete_conversations');
 
-        erase_conversations::queue(7, 9);
-        $tasks = \core\task\manager::get_adhoc_tasks(erase_conversations::class);
-        $this->assertCount(1, $tasks);
-
-        $this->expectException(api_exception::class);
-        $this->execute_task(reset($tasks));
-    }
-
-    public function test_the_last_failed_attempt_notifies_administrators(): void {
-        $this->mock_tutor_service()->method('delete_conversations')->willThrowException(
-            new api_exception('connection_error', 'Failed to connect to Dixeo API', 0)
-        );
-        $sink = $this->redirectMessages();
-
-        $task = $this->task_for(3, null);
-        $task->set_attempts_available(2);
-        try {
-            $this->execute_task($task);
-        } catch (api_exception $e) {
-            $this->assertSame([], $sink->get_messages());
-        }
-
-        $task->set_attempts_available(1);
-        try {
-            $this->execute_task($task);
-            $this->fail('The failure must propagate');
-        } catch (api_exception $e) {
-            $this->assertDebuggingCalled();
-            $messages = array_filter($sink->get_messages(), static fn($m) => $m->eventtype === 'privacyfailure');
-            $this->assertNotEmpty($messages);
-            $this->assertStringContainsString(
-                get_string('privacyfailure_body_erasure_abandoned', 'block_dixeo_tutor', get_string('unknownuser')),
-                reset($messages)->fullmessage
-            );
-        }
-    }
-
+    /**
+     * Deleting a course removes its queued prompts and course preferences.
+     */
     public function test_course_deletion_removes_local_rows_and_preferences(): void {
         global $DB;
 
@@ -296,6 +162,9 @@ final class conversation_erasure_test extends \advanced_testcase {
         }
     }
 
+    /**
+     * Deleting a user removes their queued prompts.
+     */
     public function test_user_deletion_removes_local_rows(): void {
         global $DB;
 

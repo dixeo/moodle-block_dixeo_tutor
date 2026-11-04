@@ -15,9 +15,9 @@
 // along with Moodle.  If not, see <http://www.gnu.org/licenses/>.
 
 /**
- * Event fired when a privacy request cannot reach the Dixeo API.
+ * Event recorded by earlier releases when a privacy request could not reach the Dixeo API.
  *
- * Site scoped rather than course scoped: the request may fail before any course is
+ * Site scoped rather than course scoped: the request could fail before any course was
  * known, and the audience is the site administrator, not a course teacher.
  *
  * @package    block_dixeo_tutor
@@ -29,11 +29,11 @@
 namespace block_dixeo_tutor\event;
 
 /**
- * Fired when the Dixeo API is unreachable while serving a privacy request.
+ * Privacy request failure recorded by earlier releases of this block.
  *
- * Core marks a privacy request complete even when a provider fails, so this event is
- * the only durable trace that the answer given to the subject was incomplete. Payload
- * is limited to the subject and the API error code: no message content is logged.
+ * No longer triggered: local_dixeo reports these failures with its own event. The class is
+ * kept so log entries from earlier releases still display. Payload is limited to the subject
+ * and the API error code: no message content was logged.
  */
 class privacy_request_failed extends \core\event\base {
     /**

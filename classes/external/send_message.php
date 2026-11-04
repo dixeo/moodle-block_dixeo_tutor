@@ -29,7 +29,6 @@ use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\event\message_sent;
 use block_dixeo_tutor\job_ownership;
 use block_dixeo_tutor\page_context;
-use block_dixeo_tutor\remote_state;
 use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_mode_service;
 use block_dixeo_tutor\service\tutor_notice_service;
@@ -130,7 +129,6 @@ class send_message extends external_api {
                 }
             }
 
-            remote_state::record_transfer();
             $service = service_factory::get_tutor_service();
             $result = $service->submit(
                 $params['courseid'],
