@@ -185,7 +185,9 @@ class block_dixeo_tutor extends block_base {
         }
 
         // A course can turn the tutor off on its own. Editing mode says so; otherwise the block stays empty.
-        if ($this->dixeo_page_context()->contextlevel === CONTEXT_COURSE && !$this->tutor_is_enabled()) {
+        $config = \local_dixeo\external\service_factory::get_settings_config();
+        $pagecontext = $config->context_for_course((int) ($this->page->course->id ?? 0));
+        if ($pagecontext->contextlevel === CONTEXT_COURSE && !$this->tutor_is_enabled()) {
             if ($this->page->user_is_editing()) {
                 $this->content->text = get_string('disabled_tutor_course', 'block_dixeo_tutor');
             }
@@ -307,7 +309,8 @@ class block_dixeo_tutor extends block_base {
      * @return bool
      */
     private function dixeo_is_enabled(): bool {
-        return \local_dixeo\external\service_factory::get_settings_config()->enabled_for($this->dixeo_page_context());
+        return \local_dixeo\external\service_factory::get_settings_config()
+            ->enabled_for_course((int) ($this->page->course->id ?? 0));
     }
 
     /**
@@ -316,9 +319,9 @@ class block_dixeo_tutor extends block_base {
      * @return bool
      */
     private function tutor_is_enabled(): bool {
-        return \local_dixeo\external\service_factory::get_settings_config()
-            ->get('block_dixeo_tutor', 'tutor_enabled', $this->dixeo_page_context())
-            ->get_value() === '1';
+        $config = \local_dixeo\external\service_factory::get_settings_config();
+        $context = $config->context_for_course((int) ($this->page->course->id ?? 0));
+        return $config->get('block_dixeo_tutor', 'tutor_enabled', $context)->get_value() === '1';
     }
 
     /**
@@ -327,19 +330,8 @@ class block_dixeo_tutor extends block_base {
      * @return string
      */
     private function disabled_block_text(): string {
-        return \local_dixeo\external\service_factory::get_settings_config()->disabled_block_text($this->dixeo_page_context());
-    }
-
-    /**
-     * Course context for a page inside a course, otherwise the Dixeo layer.
-     *
-     * @return \context
-     */
-    private function dixeo_page_context(): \context {
-        $courseid = (int) ($this->page->course->id ?? 0);
-        return $courseid > SITEID
-            ? \context_course::instance($courseid)
-            : \context_system::instance();
+        $config = \local_dixeo\external\service_factory::get_settings_config();
+        return $config->disabled_block_text($config->context_for_course((int) ($this->page->course->id ?? 0)));
     }
 
     /**
