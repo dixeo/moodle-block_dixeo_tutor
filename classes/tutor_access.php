@@ -70,36 +70,26 @@ class tutor_access {
         if (!self::is_usable($context)) {
             throw new \moodle_exception('disabled_tutor_course', 'block_dixeo_tutor');
         }
-        if ((new consent_service())->gate_required($userid, $context)) {
-            throw new \moodle_exception('consentrequired', 'block_dixeo_tutor');
-        }
+        (new consent_service())->require_accepted($userid, $context, 'consentrequired', 'block_dixeo_tutor');
     }
 
     /**
      * Whether data about this learner may be sent to Dixeo from a background path (observer or task).
      *
-     * Requires an existing course with the tutor on, the tutor capability, and acceptance of
-     * the current Terms of Use. Guests never qualify: no acceptance can be stored for them.
+     * The local_dixeo consent rule comes first (real user, existing course with Dixeo on, current
+     * Terms of Use accepted), so guests and missing courses stop there. The tutor then adds its own
+     * rules: the tutor is on for the course and the learner has the tutor capability.
      *
      * @param int $userid Learner.
      * @param int $courseid Course.
      * @return bool
      */
     public static function may_send_for(int $userid, int $courseid): bool {
-        if ($userid <= 0 || $courseid <= SITEID || isguestuser($userid)) {
+        if (!(new consent_service())->may_process_for($userid, $courseid)) {
             return false;
         }
-        $context = \context_course::instance($courseid, IGNORE_MISSING);
-        if (!$context instanceof \context_course) {
-            return false;
-        }
-        if (!self::is_usable($context)) {
-            return false;
-        }
-        if (!has_capability('block/dixeo_tutor:talktotutor', $context, $userid)) {
-            return false;
-        }
-        return (new consent_service())->terms_current($userid);
+        $context = \context_course::instance($courseid);
+        return self::is_usable($context) && has_capability('block/dixeo_tutor:talktotutor', $context, $userid);
     }
 
     /**
