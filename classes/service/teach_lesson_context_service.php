@@ -28,6 +28,7 @@ use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
 use local_dixeo\dto\tutor_message;
 use local_dixeo\external\service_factory;
+use local_dixeo\service\tutor_context_cleaner;
 
 /**
  * Builds and submits custom lesson context to the tutor API.
@@ -105,24 +106,22 @@ class teach_lesson_context_service {
         }
 
         $title = trim($rawtitle);
-        $introhtml = trim(clean_text($rawintro, FORMAT_HTML));
-        $contenthtml = trim(clean_text($rawcontent, FORMAT_HTML));
-
-        if ($contenthtml === '') {
-            return null;
-        }
-
         if ($title === '') {
             $title = get_string('teach_lesson_default_title', 'local_dixeo');
         }
 
-        $context = [
+        $context = tutor_context_cleaner::clean([
             'schema' => tutor_context_schema::SCHEMA_CUSTOM_LESSON,
             'version' => 1,
             'title' => $title,
-            'introhtml' => $introhtml,
-            'contenthtml' => $contenthtml,
-        ];
+            'introhtml' => trim($rawintro),
+            'contenthtml' => trim($rawcontent),
+        ]);
+        $context['introhtml'] = trim($context['introhtml']);
+        $context['contenthtml'] = trim($context['contenthtml']);
+        if ($context['contenthtml'] === '') {
+            return null;
+        }
 
         return $this->shrink_lesson_context($context);
     }

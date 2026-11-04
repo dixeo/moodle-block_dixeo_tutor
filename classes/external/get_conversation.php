@@ -26,7 +26,6 @@
 namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\event\conversation_viewed;
-use block_dixeo_tutor\service\tutor_context_schema;
 use block_dixeo_tutor\service\tutor_message_read_mapper;
 use block_dixeo_tutor\service\tutor_message_format_service;
 use block_dixeo_tutor\service\tutor_read_state_service;
@@ -102,7 +101,7 @@ class get_conversation extends external_api {
 
             foreach ($messages as $i => $msg) {
                 if (isset($msg['context']) && is_array($msg['context'])) {
-                    $messages[$i]['context'] = json_encode(tutor_context_schema::clean_html_fields($msg['context']));
+                    $messages[$i]['context'] = json_encode($msg['context']);
                 }
             }
 

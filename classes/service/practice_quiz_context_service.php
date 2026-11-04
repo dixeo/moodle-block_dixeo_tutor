@@ -27,6 +27,7 @@ namespace block_dixeo_tutor\service;
 use local_dixeo\api\exception\api_exception;
 use local_dixeo\dto\operation_result;
 use local_dixeo\external\service_factory;
+use local_dixeo\service\tutor_context_cleaner;
 use local_dixeo\dto\tutor_message;
 
 /**
@@ -228,10 +229,10 @@ class practice_quiz_context_service {
             $title,
             $context,
             $questionsjson,
-            trim(clean_text($introhtml, FORMAT_HTML))
+            trim($introhtml)
         );
 
-        return $this->shrink_review_context($review);
+        return $this->shrink_review_context(tutor_context_cleaner::clean($review));
     }
 
     /**
