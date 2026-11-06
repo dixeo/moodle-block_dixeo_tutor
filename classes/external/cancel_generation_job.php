@@ -26,7 +26,6 @@ namespace block_dixeo_tutor\external;
 
 use block_dixeo_tutor\client_response;
 use block_dixeo_tutor\job_ownership;
-use block_dixeo_tutor\tutor_access;
 use core_external\external_api;
 use core_external\external_function_parameters;
 use core_external\external_single_structure;
@@ -68,7 +67,7 @@ class cancel_generation_job extends external_api {
         $context = \context_course::instance($params['courseid']);
         self::validate_context($context);
         require_capability('block/dixeo_tutor:talktotutor', $context);
-        tutor_access::require_usable($context, (int) $USER->id);
+        // Stops or reads status, so it works while Dixeo is off and without the current Terms of Use.
 
         \local_dixeo\api\job_id::require_valid($params['jobid']);
         job_ownership::require_owned((int) $USER->id, (int) $params['courseid'], $params['jobid']);

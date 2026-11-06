@@ -49,8 +49,9 @@ class tutor_access {
     /**
      * Stop a web service call when the tutor must not run for this user in this course.
      *
-     * Call it right after require_capability(). Erasing a conversation is deliberately not gated:
-     * a learner must always be able to delete their data.
+     * Call it right after require_capability(). Erasing a conversation, cancelling a job and
+     * reading a job's status are deliberately not gated: a learner must always be able to delete
+     * their data and stop or check work already sent.
      *
      * @param \context_course $context Course context.
      * @param int $userid Acting user.
