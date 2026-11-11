@@ -357,9 +357,9 @@ class block_dixeo_tutor extends block_base {
     }
 
     /**
-     * Indicate that this block has a configuration page.
+     * The block has no admin page. Its settings are edited in the Dixeo settings modal.
      *
-     * @return bool True to enable the settings link in the admin panel.
+     * @return bool
      */
     public function has_config(): bool {
         return true;

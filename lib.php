@@ -58,6 +58,7 @@ function block_dixeo_tutor_dixeo_settings(): array {
             'sensitive' => false,
             'retain' => true,
             'retainparent' => 'tutor_enabled_default',
+            'courseform' => true,
         ],
         [
             'key' => 'displaymode',
