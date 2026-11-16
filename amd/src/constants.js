@@ -32,8 +32,6 @@ define([], function() {
         // Network Configuration
         network: Object.freeze({
             AJAX_TIMEOUT: 90000, // 90 seconds
-            MAX_RETRIES: 3,
-            RETRY_DELAY: 1000,
         }),
 
         // Accessibility

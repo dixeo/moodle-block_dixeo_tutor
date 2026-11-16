@@ -1,10 +1,16 @@
 define([
+    'local_dixeo/network',
+    'block_dixeo_tutor/chat_api',
     'block_dixeo_tutor/constants',
-], function(constants) {
+], function(Network, ChatAPI, constants) {
     'use strict';
 
     /**
      * Poll a generation job until completed, failed, cancelled, or timeout.
+     *
+     * One status read runs at a time. Connection failures are retried at the normal interval
+     * within the retry window; past it, the last connection error is thrown so the flow shows
+     * its network message.
      *
      * @param {Object} options
      * @param {Object} options.api API with pollJobStatus(courseid, jobId)
@@ -20,17 +26,36 @@ define([
         const isCancelled = function() {
             return options.generationToken !== options.getGenerationToken();
         };
+        const retryWindow = Network.createRetryWindow();
+        const wait = function() {
+            return new Promise(function(resolve) {
+                setTimeout(resolve, constants.polling.REPLY_INTERVAL_MS);
+            });
+        };
 
         while (Date.now() < deadline) {
             if (isCancelled()) {
                 return;
             }
 
-            const status = await options.api.pollJobStatus(options.courseid, options.jobId);
+            let status;
+            try {
+                status = await options.api.pollJobStatus(options.courseid, options.jobId);
+            } catch (failure) {
+                if (isCancelled()) {
+                    return;
+                }
+                if (ChatAPI.isConnectionFailure(failure) && retryWindow.shouldRetry(Network.connectionError(failure))) {
+                    await wait();
+                    continue;
+                }
+                throw failure;
+            }
 
             if (isCancelled()) {
                 return;
             }
+            retryWindow.succeeded();
 
             if (status.status === 'completed') {
                 await options.onCompleted(status);
@@ -40,9 +65,7 @@ define([
                 throw new Error(status.status === 'cancelled' ? 'Cancelled' : 'Job failed');
             }
 
-            await new Promise(function(resolve) {
-                setTimeout(resolve, constants.polling.REPLY_INTERVAL_MS);
-            });
+            await wait();
         }
 
         if (isCancelled()) {

@@ -1,9 +1,12 @@
 define([
+    'core/str',
+    'local_dixeo/network',
+    'block_dixeo_tutor/chat_api',
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/system_message_display',
     'block_dixeo_tutor/practice_quiz_review',
     'block_dixeo_tutor/custom_lesson_panel',
-], function(constants, systemMessageDisplay, practiceQuizReview, customLessonPanel) {
+], function(str, Network, ChatAPI, constants, systemMessageDisplay, practiceQuizReview, customLessonPanel) {
     'use strict';
 
     /**
@@ -11,6 +14,8 @@ define([
      *
      * Each submitted context event gets its own poll loop. Loops are independent and
      * are not cancelled when the quiz UI closes — only on explicit cancel() (page unload).
+     * Each loop runs one status read at a time. Connection failures are retried within the
+     * loop's retry window; past it, the loop stops and the network message is shown.
      *
      * @param {Object} deps
      * @param {Object} deps.api quiz_api
@@ -20,7 +25,7 @@ define([
      * @return {{poll: Function, cancel: Function}}
      */
     const createBackgroundPoller = function(deps) {
-        /** @type {Map<string, {timeoutId: number|null, silent: boolean}>} */
+        /** @type {Map<string, {timeoutId: number|null, silent: boolean, retryWindow: Object}>} */
         const activeJobs = new Map();
         let appendChain = Promise.resolve();
 
@@ -134,7 +139,7 @@ define([
             }
 
             const opts = options || {};
-            activeJobs.set(jobId, {timeoutId: null, silent: !!opts.silent});
+            activeJobs.set(jobId, {timeoutId: null, silent: !!opts.silent, retryWindow: Network.createRetryWindow()});
             syncPendingIndicator();
 
             const tick = async function() {
@@ -144,6 +149,10 @@ define([
 
                 try {
                     const status = await deps.api.pollJobStatus(deps.courseid, jobId);
+                    const current = activeJobs.get(jobId);
+                    if (current) {
+                        current.retryWindow.succeeded();
+                    }
                     if (status.status === 'completed') {
                         await appendReplies();
                         stopJob(jobId);
@@ -160,9 +169,22 @@ define([
                     }
                 } catch (e) {
                     const record = activeJobs.get(jobId);
-                    if (record) {
-                        record.timeoutId = setTimeout(tick, constants.polling.REPLY_INTERVAL_MS * 2);
+                    if (!record) {
+                        return;
                     }
+                    if (ChatAPI.isConnectionFailure(e)) {
+                        if (record.retryWindow.shouldRetry(Network.connectionError(e))) {
+                            record.timeoutId = setTimeout(tick, constants.polling.REPLY_INTERVAL_MS);
+                            return;
+                        }
+                        stopJob(jobId);
+                        const message = await str.get_string('error_network', 'block_dixeo_tutor').catch(() => '');
+                        if (message) {
+                            deps.ui.appendErrorMessage(message);
+                        }
+                        return;
+                    }
+                    record.timeoutId = setTimeout(tick, constants.polling.REPLY_INTERVAL_MS * 2);
                 }
             };
 

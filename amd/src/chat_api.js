@@ -1,89 +1,89 @@
 define([
-    'core/ajax',
+    'core/str',
+    'local_dixeo/network',
     'block_dixeo_tutor/errors',
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/logger'
-], function(ajax, errors, constants, Logger) {
+], function(str, Network, errors, constants, Logger) {
     'use strict';
 
     const log = Logger.namespace('ChatAPI');
 
     /**
-     * Enhanced AJAX helper with error handling and retry logic.
-     * @param {string} methodname The API method to call.
-     * @param {object} args The arguments for the API method.
-     * @param {object} options Additional options for the AJAX call.
+     * Call a web service once and map its failure onto the tutor error classes.
+     *
+     * Never resends. A lost connection becomes a TimeoutError (no answer in time) or a
+     * NetworkError, both carrying the localised network message; a server error becomes an
+     * APIError carrying the server message and errorcode.
+     *
+     * @param {string} methodname Full web service name.
+     * @param {object} args Arguments.
+     * @param {number} [timeout] Milliseconds; defaults to constants.network.AJAX_TIMEOUT.
+     * @returns {Promise<*>}
+     * @throws {NetworkError|TimeoutError|APIError}
      */
-    const callAjax = async(methodname, args, options = {}) => {
-        const defaultOptions = {
-            timeout: constants.network.AJAX_TIMEOUT,
-            retries: 0,
-            maxRetries: constants.network.MAX_RETRIES,
-            retryDelay: constants.network.RETRY_DELAY,
-        };
-
-        const finalOptions = {...defaultOptions, ...options};
-        const {retries, maxRetries, retryDelay, ...ajaxOptions} = finalOptions;
-
+    const callService = async(methodname, args, timeout = constants.network.AJAX_TIMEOUT) => {
         try {
-            const request = {
-                methodname: `block_dixeo_tutor_${methodname}`,
-                args: args,
-                ...ajaxOptions
-            };
-
-            const result = await ajax.call([request])[0];
-
-            if (result && result.error) {
-                throw new errors.APIError(
-                    result.message || 'API request failed',
-                    result.errorcode || 'UNKNOWN',
-                    {methodname, args}
-                );
+            return await Network.call({methodname: methodname, args: args}, {timeout: timeout});
+        } catch (failure) {
+            if (failure instanceof errors.TutorError) {
+                throw failure;
             }
-
-            return result;
-
-        } catch (error) {
-            if (error.name === 'NetworkError' && retries < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, retryDelay));
-                return callAjax(methodname, args, {
-                    ...options,
-                    retries: retries + 1,
-                    retryDelay: retryDelay * 2 // Exponential backoff.
-                });
+            const details = {originalError: failure, methodname};
+            if (Network.isConnectionError(failure)) {
+                const message = await str.get_string('error_network', 'block_dixeo_tutor').catch(() => '');
+                if (failure.reason === 'timeout') {
+                    throw new errors.TimeoutError(message, timeout, details);
+                }
+                throw new errors.NetworkError(message, details);
             }
-
-            if (error.name === 'TimeoutError') {
-                throw new errors.TimeoutError(
-                    `Request timed out after ${ajaxOptions.timeout}ms`,
-                    ajaxOptions.timeout,
-                    {methodname, args}
-                );
-            }
-
-            if (error instanceof errors.TutorError) {
-                throw error;
-            }
-
-            throw new errors.NetworkError(
-                error.message || 'Unknown network error',
-                {originalError: error, methodname, args}
-            );
+            const apiError = new errors.APIError(failure.message || '', failure.errorcode || 'UNKNOWN', details);
+            apiError.errorcode = failure.errorcode;
+            throw apiError;
         }
     };
 
-    return class ChatAPI {
+    /**
+     * Whether a tutor error comes from the connection rather than from the server.
+     *
+     * @param {*} failure
+     * @returns {boolean}
+     */
+    const isConnectionFailure = (failure) => failure instanceof errors.NetworkError ||
+        failure instanceof errors.TimeoutError;
+
+    /**
+     * Call a tutor web service.
+     *
+     * @param {string} methodname The method name without the block_dixeo_tutor_ prefix.
+     * @param {object} args The arguments for the API method.
+     * @param {number} [timeout] Milliseconds; defaults to constants.network.AJAX_TIMEOUT.
+     * @returns {Promise<*>}
+     */
+    const callAjax = async(methodname, args, timeout = constants.network.AJAX_TIMEOUT) => {
+        const result = await callService(`block_dixeo_tutor_${methodname}`, args, timeout);
+        if (result && result.error) {
+            throw new errors.APIError(
+                result.message || 'API request failed',
+                result.errorcode || 'UNKNOWN',
+                {methodname, args}
+            );
+        }
+        return result;
+    };
+
+    const ChatAPI = class {
 
         /**
          * Loads conversation history.
          * @param {number} courseid The ID of the course.
          * @param {string|null} sinceid Optional message ID cursor for newer messages.
          * @param {number|null} offset Optional offset for loading older message pages.
+         * @param {boolean} [status=false] True when the read polls or probes the connection.
          * @returns {Promise<object>} Conversation data.
          * @throws {NetworkError|APIError|ValidationError}
          */
-        async loadConversation(courseid, sinceid = null, offset = null) {
+        async loadConversation(courseid, sinceid = null, offset = null, status = false) {
             if (!courseid || courseid <= 0) {
                 throw new errors.ValidationError(
                     'Invalid course ID',
@@ -109,7 +109,11 @@ define([
             }
 
             try {
-                const result = await callAjax('get_conversation', args);
+                const result = await callAjax(
+                    'get_conversation',
+                    args,
+                    status ? Network.TIMEOUT_STATUS_MS : constants.network.AJAX_TIMEOUT
+                );
 
                 if (!result || !Array.isArray(result.messages)) {
                     throw new errors.APIError(
@@ -202,7 +206,7 @@ define([
             }
 
             try {
-                return await callAjax('get_job_status', {courseid: courseid, jobid: jobId});
+                return await callAjax('get_job_status', {courseid: courseid, jobid: jobId}, Network.TIMEOUT_STATUS_MS);
             } catch (error) {
                 log.error('Failed to poll job status', {
                     error: error.message,
@@ -214,6 +218,9 @@ define([
 
         /**
          * Flushes queued proactive context for this course (if any).
+         *
+         * Submits a paid reply job when context is queued, so it is sent once and never retried.
+         *
          * @param {number} courseid The ID of the course.
          * @param {string} pageurl The current page URL for context.
          * @param {number} [cmid=0] Course module id when on an activity page.
@@ -229,10 +236,12 @@ define([
             }
 
             try {
+                // The handler waits for the course file sync before it submits the reply job: sent once,
+                // no client timeout.
                 const result = await callAjax(
                     'flush_pending_context',
                     {courseid, pageurl, cmid: cmid || 0},
-                    {timeout: constants.network.AJAX_TIMEOUT}
+                    Network.TIMEOUT_NONE
                 );
 
                 if (!result || typeof result.flushed === 'undefined') {
@@ -292,11 +301,9 @@ define([
                     args.guidetitle = guideSession.title;
                     args.guidedescription = guideSession.description;
                 }
-                const result = await callAjax(
-                    'send_message',
-                    args,
-                    {timeout: constants.network.AJAX_TIMEOUT}
-                );
+                // The handler waits for the course file sync before it submits the job: sent once, no client
+                // timeout. A lost send is followed through the conversation, never resent.
+                const result = await callAjax('send_message', args, Network.TIMEOUT_NONE);
 
                 // Validate response — new API returns {completed, job_id, status}.
                 if (!result || typeof result.completed === 'undefined') {
@@ -334,7 +341,12 @@ define([
                 args.lastincomingtime = lastIncomingTime;
             }
 
-            return callAjax('mark_messages_read', args);
+            return callAjax('mark_messages_read', args, Network.TIMEOUT_STATUS_MS);
         }
     };
+
+    ChatAPI.callService = callService;
+    ChatAPI.isConnectionFailure = isConnectionFailure;
+
+    return ChatAPI;
 });

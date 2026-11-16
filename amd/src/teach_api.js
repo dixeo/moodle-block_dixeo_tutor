@@ -1,6 +1,7 @@
 define([
+    'local_dixeo/network',
     'block_dixeo_tutor/generation_api',
-], function(generationApi) {
+], function(Network, generationApi) {
     'use strict';
 
     return Object.assign({}, generationApi, {
@@ -17,9 +18,11 @@ define([
         },
 
         submitTeachLessonContext: function(courseid, params) {
+            // The handler waits for the course file sync before it submits the job: sent once, no client timeout.
             return generationApi.callAjax(
                 'block_dixeo_tutor_submit_teach_lesson_context',
-                Object.assign({courseid: courseid}, params)
+                Object.assign({courseid: courseid}, params),
+                Network.TIMEOUT_NONE
             );
         },
     });

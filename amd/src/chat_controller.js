@@ -1,13 +1,37 @@
 define([
     'core/str',
+    'local_dixeo/network',
     'block_dixeo_tutor/constants',
     'block_dixeo_tutor/errors',
     'block_dixeo_tutor/reconciliation_service',
     'block_dixeo_tutor/system_message_display',
     'block_dixeo_tutor/guide_session_context',
     'block_dixeo_tutor/text_utils',
-], function(str, constants, errors, ReconciliationService, systemMessageDisplay, guideSessionContext, textUtils) {
+], function(str, Network, constants, errors, ReconciliationService, systemMessageDisplay, guideSessionContext, textUtils) {
     'use strict';
+
+    /**
+     * Whether a tutor error comes from the connection rather than from the server.
+     *
+     * @param {*} failure
+     * @returns {boolean}
+     */
+    const isConnectionFailure = (failure) => failure instanceof errors.NetworkError ||
+        failure instanceof errors.TimeoutError;
+
+    /**
+     * The message of a server error, or a fallback lang string of the tutor.
+     *
+     * @param {*} failure
+     * @param {string} fallbackKey
+     * @returns {Promise<string>}
+     */
+    const serverMessage = (failure, fallbackKey) => {
+        if (failure instanceof errors.APIError && failure.message) {
+            return Promise.resolve(failure.message);
+        }
+        return str.get_string(fallbackKey, 'block_dixeo_tutor');
+    };
 
     return class ChatController {
         /**
@@ -32,6 +56,10 @@ define([
             this.connectionRetryDelay = 1000;
             this.maxConnectionRetryDelay = 30000;
             this.isConnectionLost = false;
+            // Connection failures of reply polling, retried silently within the grace window.
+            this.replyRetryWindow = Network.createRetryWindow();
+            // Text of a message whose send was lost, offered again if it never reached the server.
+            this.lostSendMessage = null;
             this._loadingOlder = false;
             this._ensuringVisible = false;
             this._loadingAllOlder = false;
@@ -77,10 +105,10 @@ define([
                 this._syncPendingUi();
                 this._showNotices();
             } catch (e) {
-                if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
+                if (isConnectionFailure(e)) {
                     this._handleConnectionLoss();
                 } else {
-                    this.ui.appendErrorMessage('Failed to initialize chat.');
+                    this.ui.appendErrorMessage(await serverMessage(e, 'unknownerror'));
                 }
             }
         }
@@ -315,6 +343,7 @@ define([
                     this.isConnectionLost = false;
                     this.ui.hideConnectionLost();
                     this.connectionRetryDelay = 1000;
+                    this.replyRetryWindow.succeeded();
 
                     // Resume reply polling if we were waiting for a response.
                     if (this.state.isPending()) {
@@ -410,10 +439,10 @@ define([
                 const conversationData = await this.api.loadConversation(this.state.getCourseId());
                 await this._handleInitialState(conversationData);
             } catch (e) {
-                if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
+                if (isConnectionFailure(e)) {
                     this._handleConnectionLoss();
                 } else {
-                    this.ui.appendErrorMessage('Failed to initialize chat.');
+                    this.ui.appendErrorMessage(await serverMessage(e, 'unknownerror'));
                 }
             }
         }
@@ -559,10 +588,10 @@ define([
                 this.state.setHasMoreOlder(rawBatch.length === constants.ui.MESSAGE_PAGE_SIZE);
                 this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             } catch (e) {
-                if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
+                if (isConnectionFailure(e)) {
                     this.ui.appendErrorMessage(await str.get_string('error_network', 'block_dixeo_tutor'));
                 } else {
-                    this.ui.appendErrorMessage(await str.get_string('unknownerror', 'block_dixeo_tutor'));
+                    this.ui.appendErrorMessage(await serverMessage(e, 'unknownerror'));
                 }
                 this.ui.syncLoadOlderControl(this.state.getHasMoreOlder());
             } finally {
@@ -735,14 +764,17 @@ define([
                 this._pollForJobCompletion(jobId);
 
             } catch (err) {
-                let errorMsg;
-                if (err instanceof errors.TimeoutError) {
-                    errorMsg = await str.get_string('error_timeout', 'block_dixeo_tutor');
-                } else if (err instanceof errors.NetworkError) {
-                    errorMsg = await str.get_string('error_network', 'block_dixeo_tutor');
-                } else {
-                    errorMsg = await str.get_string('errorsendmessage', 'block_dixeo_tutor');
+                if (isConnectionFailure(err)) {
+                    // The message may have reached the server: never resend it, follow the
+                    // conversation instead, as after a reload with a pending message.
+                    this.lostSendMessage = message;
+                    this.replyRetryWindow.succeeded();
+                    this.replyRetryWindow.shouldRetry(Network.connectionError(err));
+                    this.state.savePollState({isPending: true, jobId: null, timestamp: Date.now()});
+                    this._pollForReply();
+                    return;
                 }
+                const errorMsg = await serverMessage(err, 'errorsendmessage');
 
                 // Remove optimistic bubble since send failed.
                 if (this.pendingTempId) {
@@ -786,8 +818,7 @@ define([
             if (pollState && pollState.timestamp) {
                 const pollAge = Date.now() - pollState.timestamp;
                 if (pollAge >= constants.polling.TIMEOUT_MS) {
-                    this.state.clearPollState();
-                    this._handlePollingTimeout();
+                    this._giveUpReplyPolling();
                     return;
                 }
             }
@@ -800,6 +831,7 @@ define([
 
                 try {
                     const jobStatus = await this.api.pollJobStatus(jobId, this.state.getCourseId());
+                    this.replyRetryWindow.succeeded();
 
                     if (jobStatus.status === 'completed') {
                         const pollState = this.state.getPollState();
@@ -807,7 +839,9 @@ define([
 
                         const delta = await this.api.loadConversation(
                             this.state.getCourseId(),
-                            this.state.getLastRenderedId()
+                            this.state.getLastRenderedId(),
+                            null,
+                            true
                         );
                         const rawDelta = Array.isArray(delta.messages) ? delta.messages : [];
                         const deltaMessages = this._messagesForDisplay(rawDelta);
@@ -825,6 +859,7 @@ define([
                             }));
                         }
                         this._stopPolling();
+                        this.lostSendMessage = null;
                         this.state.clearDraft();
                         this.state.clearPollState();
                         this.state.setPending(false);
@@ -855,8 +890,12 @@ define([
                     }
 
                 } catch (e) {
-                    if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
-                        setTimeout(() => this._pollForJobCompletion(jobId), constants.polling.REPLY_INTERVAL_MS * 2);
+                    if (isConnectionFailure(e)) {
+                        if (this.replyRetryWindow.shouldRetry(Network.connectionError(e))) {
+                            this._pollForJobCompletion(jobId);
+                        } else {
+                            this._giveUpReplyPolling();
+                        }
                     } else {
                         this.state.clearPollState();
                         this.state.setPending(false);
@@ -887,8 +926,7 @@ define([
             if (pollState && pollState.timestamp) {
                 const pollAge = Date.now() - pollState.timestamp;
                 if (pollAge >= constants.polling.TIMEOUT_MS) {
-                    this.state.clearPollState();
-                    this._handlePollingTimeout();
+                    this._giveUpReplyPolling();
                     return;
                 }
             }
@@ -902,8 +940,11 @@ define([
                 try {
                     const data = await this.api.loadConversation(
                         this.state.getCourseId(),
-                        this.state.getLastRenderedId()
+                        this.state.getLastRenderedId(),
+                        null,
+                        true
                     );
+                    this.replyRetryWindow.succeeded();
 
                     const rawMessages = Array.isArray(data.messages) ? data.messages : [];
                     const visibleMessages = this._messagesForDisplay(rawMessages);
@@ -914,6 +955,7 @@ define([
                         const lastMessage = visibleMessages[visibleMessages.length - 1];
                         if (lastMessage.role === 'assistant') {
                             this._dispatchAssistantRepliedForMessages(data);
+                            this.lostSendMessage = null;
                             this._stopPolling();
                             this.state.clearPollState();
                             this.state.clearDraft();
@@ -943,8 +985,12 @@ define([
                     this._pollForReply();
 
                 } catch (e) {
-                    if (e instanceof errors.NetworkError || e instanceof errors.TimeoutError) {
-                        setTimeout(() => this._pollForReply(), constants.polling.REPLY_INTERVAL_MS * 2);
+                    if (isConnectionFailure(e)) {
+                        if (this.replyRetryWindow.shouldRetry(Network.connectionError(e))) {
+                            this._pollForReply();
+                        } else {
+                            this._giveUpReplyPolling();
+                        }
                     } else {
                         this.state.clearPollState();
                         this.state.setPending(false);
@@ -958,6 +1004,35 @@ define([
                     }
                 }
             }, constants.polling.REPLY_INTERVAL_MS);
+        }
+
+        /**
+         * Ends reply polling that ran out of time or connection.
+         *
+         * A message that reached the server shows the timeout notice, since the assistant may
+         * still be working. A message that never reached it is removed and offered again
+         * through the retry button.
+         * @private
+         */
+        async _giveUpReplyPolling() {
+            const pollState = this.state.getPollState();
+            const reachedServer = !!(pollState && pollState.jobId) || !this.pendingTempId;
+            const lostMessage = this.lostSendMessage || this.state.getDraft();
+            this._stopPolling();
+            this.state.clearPollState();
+            this.lostSendMessage = null;
+            if (reachedServer || !lostMessage) {
+                this._handlePollingTimeout();
+                return;
+            }
+            this.ui.removeMessage(this.pendingTempId);
+            this.pendingTempId = null;
+            this.state.clearDraft();
+            this.state.setPending(false);
+            this.ui.hidePendingIndicator();
+            this.ui.enableInput();
+            const errorMsg = await str.get_string('error_network', 'block_dixeo_tutor');
+            this.ui.appendErrorWithRetry(lostMessage, errorMsg);
         }
 
         /**
@@ -1151,11 +1226,12 @@ define([
 
                 try {
                     // Use loadConversation as a connectivity probe.
-                    await this.api.loadConversation(this.state.getCourseId());
+                    await this.api.loadConversation(this.state.getCourseId(), null, null, true);
 
                     this.isConnectionLost = false;
                     this.ui.hideConnectionLost();
                     this.connectionRetryDelay = 1000;
+                    this.replyRetryWindow.succeeded();
 
                     // Resume reply polling if needed.
                     if (this.state.isPending()) {
@@ -1167,6 +1243,15 @@ define([
                         }
                     }
                 } catch (error) {
+                    if (!isConnectionFailure(error)) {
+                        // The server answered with an error (session expired, consent revoked,
+                        // Dixeo off): probing again cannot help.
+                        this.isConnectionLost = false;
+                        this.ui.hideConnectionLost();
+                        this.connectionRetryDelay = 1000;
+                        this.ui.appendErrorMessage(await serverMessage(error, 'unknownerror'));
+                        return;
+                    }
                     this.connectionRetryDelay = Math.min(
                         this.connectionRetryDelay * constants.polling.BACKOFF_FACTOR,
                         this.maxConnectionRetryDelay

@@ -1,6 +1,6 @@
 define([
-    'core/ajax',
-], function(ajax) {
+    'local_dixeo/network',
+], function(Network) {
     'use strict';
 
     const MODES = {
@@ -355,15 +355,15 @@ define([
         const mode = this._latestMode;
         this._dispatchedMode = mode;
         this._persistInFlight = true;
-        ajax.call([{
+        Network.call({
             methodname: 'block_dixeo_tutor_set_tutor_mode',
             args: {
                 courseid: this.courseid,
                 mode: mode,
             },
-        }])[0].fail(function() {
+        }, {timeout: Network.TIMEOUT_ACTION_MS}).catch(function() {
             // Preference sync failure is non-fatal; client mode still applies this session.
-        }).always(() => {
+        }).finally(() => {
             if (this._latestMode !== this._dispatchedMode) {
                 this._dispatchPersistedMode();
             } else {

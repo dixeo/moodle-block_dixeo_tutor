@@ -76,6 +76,10 @@ define([
                 {key: 'aria_message_copied', component: 'block_dixeo_tutor'},
                 {key: 'guide_completion_exit', component: 'block_dixeo_tutor'},
                 {key: 'guide_completion_restart', component: 'block_dixeo_tutor'},
+                // Loaded now so connection failures can be reported while offline.
+                {key: 'error_network', component: 'block_dixeo_tutor'},
+                {key: 'error_timeout', component: 'block_dixeo_tutor'},
+                {key: 'timeout_message', component: 'block_dixeo_tutor'},
             ]).then(([
                 senderYou, senderAssistant, connLost, yourMsg, assistantMsg,
                 tooLong, loadOlder, ariaLoadOlder, readMsg, stopReading, copyMsg, copiedMsg,
