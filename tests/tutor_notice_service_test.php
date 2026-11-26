@@ -46,16 +46,15 @@ final class tutor_notice_service_test extends \advanced_testcase {
     }
 
     /**
-     * Plain text of every variant of one notice key.
+     * Plain text of every variant of one notice key (notice_<key>_1, _2… as long as they exist).
      *
      * @param string $key Notice key, e.g. firstvisit or quizgraded_high.
-     * @param int $count
      * @param array $a Placeholder values.
      * @return string[]
      */
-    private function variants(string $key, int $count, array $a): array {
+    private function variants(string $key, array $a): array {
         $strings = [];
-        for ($i = 1; $i <= $count; $i++) {
+        for ($i = 1; get_string_manager()->string_exists('notice_' . $key . '_' . $i, 'block_dixeo_tutor'); $i++) {
             $strings[] = get_string('notice_' . $key . '_' . $i, 'block_dixeo_tutor', (object) $a);
         }
         return $strings;
@@ -96,7 +95,7 @@ final class tutor_notice_service_test extends \advanced_testcase {
         $notices = $this->service->take_notices((int) $user->id, (int) $course->id);
 
         $this->assertCount(1, $notices);
-        $this->assertContains($notices[0]['content'], $this->variants('firstvisit', 3, ['name' => 'Alice']));
+        $this->assertContains($notices[0]['content'], $this->variants('firstvisit', ['name' => 'Alice']));
         $this->assertStringStartsWith('<p>', $notices[0]['contenthtml']);
     }
 
@@ -125,7 +124,7 @@ final class tutor_notice_service_test extends \advanced_testcase {
         tutor_notice_service::record_learner_message((int) $user->id, (int) $course->id);
         $notices = $this->service->take_notices((int) $user->id, (int) $course->id);
         $this->assertCount(1, $notices);
-        $this->assertContains($notices[0]['content'], $this->variants('returnvisit', 4, ['name' => 'Bob']));
+        $this->assertContains($notices[0]['content'], $this->variants('returnvisit', ['name' => 'Bob']));
     }
 
     public function test_a_silent_learner_is_not_greeted_again(): void {
@@ -154,7 +153,7 @@ final class tutor_notice_service_test extends \advanced_testcase {
 
         $text = $this->service->text(['type' => 'course_completed', 'time' => 1], (int) $user->id, (int) $course->id);
 
-        $this->assertContains($text, $this->variants('coursecompleted', 3, ['name' => 'Cleo', 'course' => 'BIO101']));
+        $this->assertContains($text, $this->variants('coursecompleted', ['name' => 'Cleo', 'course' => 'BIO101']));
     }
 
     /**
@@ -187,7 +186,7 @@ final class tutor_notice_service_test extends \advanced_testcase {
 
         $text = $this->service->text($event, (int) $user->id, (int) $course->id);
 
-        $this->assertContains($text, $this->variants($key, 3, [
+        $this->assertContains($text, $this->variants($key, [
             'name' => 'Dan', 'quiz' => 'Q1', 'grade' => format_float($grade, 2, true, true), 'maxgrade' => '10',
         ]));
     }
