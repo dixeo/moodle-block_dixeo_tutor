@@ -52,7 +52,7 @@ class tutor_notice_service {
         'coursecompleted' => 3,
         'quizgraded_high' => 3,
         'quizgraded_mid' => 3,
-        'quizgraded_low' => 3,
+        'quizgraded_low' => 1,
     ];
 
     /**
@@ -60,7 +60,7 @@ class tutor_notice_service {
      *
      * @param int $userid
      * @param int $courseid
-     * @return array[] List of {content: string, contenthtml: string}.
+     * @return array[] List of {content: string, contenthtml: string, time: int}.
      */
     public function take_notices(int $userid, int $courseid): array {
         $greeting = $this->take_greeting($userid, $courseid);
@@ -75,6 +75,7 @@ class tutor_notice_service {
         return [[
             'content' => $content,
             'contenthtml' => \html_writer::tag('p', $html),
+            'time' => $greeting['time'],
         ]];
     }
 

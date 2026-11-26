@@ -97,13 +97,13 @@ define([
          */
         async _initSequence() {
             try {
-                await this._checkInitialState();
+                const history = await this._checkInitialState();
                 this._flushPendingContext().catch(() => {
                     // A failed proactive flush must not leave the tutor unusable.
                 });
                 this._restoreSession();
                 this._syncPendingUi();
-                this._showNotices();
+                this._showNotices(history);
             } catch (e) {
                 if (isConnectionFailure(e)) {
                     this._handleConnectionLoss();
@@ -116,31 +116,39 @@ define([
         /**
          * Notices rendered by the server for this page view, shown once the history is loaded.
          *
-         * @param {Array<{content: string, contenthtml: string}>} notices
+         * @param {Array<{content: string, contenthtml: string, time: number}>} notices
          */
         setNotices(notices) {
             this._notices = Array.isArray(notices) ? notices : [];
         }
 
         /**
-         * Add the local notices below the history. They are never sent to the API nor stored, and are
-         * skipped while a reply is still on its way so they cannot land between a question and its answer.
+         * Add the local notices below the history, skipped while a reply is still on its way so they
+         * cannot land between a question and its answer. The server also stores each notice (post_notice
+         * task): a copy already in the history replaces the local bubble, and a copy arriving later takes
+         * over the bubble's temporary id in the reconciler.
+         * @param {Array<object>} history Messages rendered by the initial load.
          * @private
          */
-        _showNotices() {
+        _showNotices(history) {
             const notices = this._notices;
             this._notices = [];
             if (!notices.length || this.state.isPending()) {
                 return;
             }
-            const time = Math.floor(Date.now() / 1000);
             notices.forEach((notice) => {
+                if (history.some((msg) => this.reconciler.isNoticeCopy(msg, notice))) {
+                    return;
+                }
+                const tempId = --this.tempIdCounter;
                 this.ui.appendMessage({
+                    id: tempId,
                     role: 'assistant',
                     content: notice.content,
                     contenthtml: notice.contenthtml,
-                    time: time,
+                    time: notice.time,
                 });
+                this.reconciler.trackLocalNotice(tempId, notice);
             });
             window.dispatchEvent(new CustomEvent(constants.events.NOTICES_SHOWN));
         }
@@ -427,29 +435,32 @@ define([
 
         /**
          * Fetches the initial state from the server.
+         * @returns {Promise<Array<object>>} Messages rendered, empty when the load failed.
          * @private
          */
         async _checkInitialState() {
             if (!navigator.onLine) {
                 this._handleConnectionLoss();
-                return;
+                return [];
             }
 
             try {
                 const conversationData = await this.api.loadConversation(this.state.getCourseId());
-                await this._handleInitialState(conversationData);
+                return await this._handleInitialState(conversationData);
             } catch (e) {
                 if (isConnectionFailure(e)) {
                     this._handleConnectionLoss();
                 } else {
                     this.ui.appendErrorMessage(await serverMessage(e, 'unknownerror'));
                 }
+                return [];
             }
         }
 
         /**
          * Processes the server state and renders the conversation history.
          * @param {object} conversationData The response from loadConversation.
+         * @returns {Promise<Array<object>>} Messages rendered.
          * @private
          */
         async _handleInitialState(conversationData) {
@@ -480,6 +491,7 @@ define([
                 }
                 this.ui.enableInput();
             }
+            return messages;
         }
 
         /**

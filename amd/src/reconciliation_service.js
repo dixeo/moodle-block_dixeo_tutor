@@ -4,6 +4,9 @@ define([
 ], function(constants, systemMessageDisplay) {
     'use strict';
 
+    /** @type {number} Seconds of clock difference tolerated between Moodle and the API. */
+    const NOTICE_CLOCK_SKEW = 300;
+
     /**
      * ReconciliationService manages message reconciliation between optimistic UI updates and server state.
      * This service handles the complex logic of merging new messages from the server with the UI,
@@ -19,6 +22,31 @@ define([
         constructor(ui, state) {
             this.ui = ui;
             this.state = state;
+            // Local notice bubbles awaiting their stored copy: temporary id → notice.
+            this.localNotices = new Map();
+        }
+
+        /**
+         * Remember a notice shown locally, so its stored copy takes over the bubble instead of showing twice.
+         * @param {number} tempId Temporary (negative) id of the bubble.
+         * @param {{content: string, time: number}} notice Notice as rendered by the server.
+         */
+        trackLocalNotice(tempId, notice) {
+            this.localNotices.set(tempId, notice);
+        }
+
+        /**
+         * Whether a server message is the stored copy of a notice: same text, stored after it was shown.
+         * The previous identical greeting is at least a day older, so a few minutes absorb any clock
+         * difference between Moodle and the API.
+         * @param {object} msg Message from the server.
+         * @param {{content: string, time: number}} notice
+         * @returns {boolean}
+         */
+        isNoticeCopy(msg, notice) {
+            return msg.role === 'assistant'
+                && String(msg.content || '').trim() === String(notice.content).trim()
+                && (parseInt(msg.time, 10) || 0) >= notice.time - NOTICE_CLOCK_SKEW;
         }
 
         /**
@@ -36,6 +64,9 @@ define([
                 const optimisticResult = this._processOptimisticMessage(msg, updatedPendingTempId);
                 if (optimisticResult.wasOptimistic) {
                     updatedPendingTempId = optimisticResult.updatedTempId;
+                    return;
+                }
+                if (this._adoptLocalNotice(msg)) {
                     return;
                 }
                 this._appendNewMessage(msg);
@@ -65,6 +96,25 @@ define([
             }
 
             return {wasOptimistic: false, updatedTempId: pendingTempId};
+        }
+
+        /**
+         * Give a local notice bubble the id of its stored copy, which then is not rendered again.
+         * @private
+         * @param {object} msg Message from the server.
+         * @returns {boolean} True when the message was a local notice's stored copy.
+         */
+        _adoptLocalNotice(msg) {
+            const entry = [...this.localNotices].find(([, notice]) => this.isNoticeCopy(msg, notice));
+            if (!entry) {
+                return false;
+            }
+            this.localNotices.delete(entry[0]);
+            if (!this.ui.updateMessageId(entry[0], msg)) {
+                return false;
+            }
+            this.state.setLastRenderedId(msg.id);
+            return true;
         }
 
         /**

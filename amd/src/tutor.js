@@ -199,7 +199,7 @@ define([
          * @param {boolean} [guidemodeavailable] Whether guide mode is policy-available.
          * @param {boolean} [teachmodeavailable] Whether teach mode is policy-available.
          * @param {number} [lastModeActivity] Unix seconds of last special-mode message/activity.
-         * @param {Array<{content: string, contenthtml: string}>} [notices] Local notices for this page view.
+         * @param {Array<{content: string, contenthtml: string, time: number}>} [notices] Local notices for this page view.
          */
         init: function(
             courseid,
